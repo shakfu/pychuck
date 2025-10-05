@@ -17,6 +17,11 @@ from ._pychuck import (
     PARAM_WORKING_DIRECTORY,
     PARAM_CHUGIN_ENABLE,
     PARAM_USER_CHUGINS,
+    # Real-time audio functions
+    start_audio,
+    stop_audio,
+    shutdown_audio,
+    audio_info,
 )
 
 __all__ = [
@@ -36,4 +41,8 @@ __all__ = [
     "PARAM_WORKING_DIRECTORY",
     "PARAM_CHUGIN_ENABLE",
     "PARAM_USER_CHUGINS",
+    "start_audio",
+    "stop_audio",
+    "shutdown_audio",
+    "audio_info",
 ]

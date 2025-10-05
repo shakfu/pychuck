@@ -20,12 +20,25 @@ nanobind_add_module(
 
   # Source code goes here
   ${CMAKE_SOURCE_DIR}/src/_pychuck.cpp
+  ${CMAKE_SOURCE_DIR}/thirdparty/chuck/host/chuck_audio.cpp
+  ${CMAKE_SOURCE_DIR}/thirdparty/chuck/host/RtAudio/RtAudio.cpp
+)
+
+# Define platform-specific RtAudio macros
+target_compile_definitions(_pychuck
+    PRIVATE
+    $<$<PLATFORM_ID:Darwin>:__MACOSX_CORE__>
+    $<$<PLATFORM_ID:Windows>:__PLATFORM_WIN32__>
+    $<$<PLATFORM_ID:Windows>:__WINDOWS_DS__>
+    HAVE_CONFIG_H
 )
 
 target_include_directories(_pychuck
     PRIVATE
     ${CMAKE_SOURCE_DIR}/thirdparty/chuck/core
     ${CMAKE_SOURCE_DIR}/thirdparty/chuck/host
+    ${CMAKE_SOURCE_DIR}/thirdparty/chuck/host/RtAudio
+    ${CMAKE_SOURCE_DIR}/thirdparty/chuck/host/RtAudio/include
 )
 
 target_link_libraries(_pychuck

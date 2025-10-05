@@ -6,9 +6,21 @@
 #include <nanobind/ndarray.h>
 
 #include "chuck.h"
+#include "chuck_audio.h"
 
 namespace nb = nanobind;
 using namespace nb::literals;
+
+// Global ChucK instance for audio callback
+static ChucK* g_chuck_for_audio = nullptr;
+
+// Audio callback function (must be a regular function, not a lambda)
+static void audio_callback_func(SAMPLE* input, SAMPLE* output, t_CKUINT numFrames,
+                                t_CKUINT numInChans, t_CKUINT numOutChans, void* userData) {
+    if (g_chuck_for_audio) {
+        g_chuck_for_audio->run(input, output, numFrames);
+    }
+}
 
 NB_MODULE(_pychuck, m) {
     m.doc() = "Python bindings for ChucK audio programming language";
@@ -144,4 +156,52 @@ NB_MODULE(_pychuck, m) {
 
     // Version function
     m.def("version", &ChucK::version, "Get ChucK version");
+
+    // Helper function to start real-time audio
+    m.def("start_audio",
+        [](ChucK& chuck, t_CKUINT sample_rate, t_CKUINT num_dac_channels,
+           t_CKUINT num_adc_channels, t_CKUINT dac_device, t_CKUINT adc_device,
+           t_CKUINT buffer_size, t_CKUINT num_buffers) {
+            g_chuck_for_audio = &chuck;
+
+            bool success = ChuckAudio::initialize(
+                dac_device, adc_device, num_dac_channels, num_adc_channels,
+                sample_rate, buffer_size, num_buffers, audio_callback_func,
+                &chuck, false, nullptr
+            );
+            if (success) {
+                success = ChuckAudio::start();
+            }
+            return success;
+        },
+        "chuck"_a, "sample_rate"_a = 44100, "num_dac_channels"_a = 2,
+        "num_adc_channels"_a = 0, "dac_device"_a = 0, "adc_device"_a = 0,
+        "buffer_size"_a = 512, "num_buffers"_a = 8,
+        "Start real-time audio playback with ChucK instance");
+
+    m.def("stop_audio",
+        []() {
+            ChuckAudio::stop();
+            return true;
+        },
+        "Stop real-time audio playback");
+
+    m.def("shutdown_audio",
+        [](t_CKUINT msWait) {
+            ChuckAudio::shutdown(msWait);
+            g_chuck_for_audio = nullptr;
+        },
+        "msWait"_a = 0,
+        "Shutdown audio system");
+
+    m.def("audio_info",
+        []() {
+            nb::dict info;
+            info["sample_rate"] = ChuckAudio::srate();
+            info["num_channels_out"] = ChuckAudio::num_channels_out();
+            info["num_channels_in"] = ChuckAudio::num_channels_in();
+            info["buffer_size"] = ChuckAudio::buffer_size();
+            return info;
+        },
+        "Get current audio system info");
 }
