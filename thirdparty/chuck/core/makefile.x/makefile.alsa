@@ -1,0 +1,5 @@
+# compiler flags
+CFLAGS+=-D__LINUX_ALSA__ -fno-strict-aliasing -D__CK_SNDFILE_NATIVE__
+
+# linker / library flags
+LDFLAGS+=-lasound -lstdc++ -ldl -lm -lsndfile -lpthread
