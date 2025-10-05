@@ -4,21 +4,21 @@ Python bindings for the [ChucK](https://chuck.stanford.edu) audio programming la
 
 ## Highlights
 
-🎵 **Real-Time Audio** - Play ChucK code through your speakers with asynchronous RtAudio playback
-📁 **File Support** - Load and run `.ck` files directly
-🔌 **Plugin System** - Use chugins to extend ChucK with effects and instruments
-⚡ **Two Modes** - Real-time playback or offline rendering to numpy arrays
-🎹 **Complete ChucK** - Full access to ChucK's powerful synthesis and sound processing
-📚 **Examples Included** - 50+ ChucK examples and pre-built chugins ready to use
+- **Real-Time Audio** - Play ChucK code through your speakers with asynchronous RtAudio playback
+- **File Support** - Load and run `.ck` files directly
+- **Plugin System** - Use chugins to extend ChucK with effects and instruments
+- **Two Modes** - Real-time playback or offline rendering to `numpy` arrays
+- **Complete ChucK** - Full access to ChucK's powerful synthesis and sound processing
+- **Examples Included** - 50+ ChucK examples and pre-built chugins ready to use
 
 ## Overview
 
 `pychuck` provides a high-performance Python wrapper for ChucK, allowing you to:
 
 - Run ChucK code from Python (both inline code and `.ck` files)
-- **Real-time audio playback** using RtAudio (cross-platform, asynchronous)
-- **Offline audio processing** for rendering audio to numpy arrays
-- **Chugin support** - Load and use ChucK plugins (effects, instruments, etc.)
+- Real-time audio playback using RtAudio (cross-platform, asynchronous)
+- Offline audio processing for rendering audio to numpy arrays
+- Chugin support - Load and use ChucK plugins (effects, instruments, etc.)
 - Process audio using ChucK's powerful synthesis and sound processing
 - Control ChucK VM parameters and manage running shreds
 - Run multiple concurrent ChucK programs (shreds)
