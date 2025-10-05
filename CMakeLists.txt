@@ -10,7 +10,7 @@ if(CMAKE_HOST_WIN32)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
 endif()
 
-project(pychuck_project)
+project(pychuck_project LANGUAGES CXX)
 
 if (CMAKE_VERSION VERSION_LESS 3.18)
   set(DEV_MODULE Development)
@@ -69,5 +69,30 @@ find_package(Python 3.8 COMPONENTS Interpreter ${DEV_MODULE} REQUIRED)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/nanobind)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/chuck)
 
+
+# We are now ready to compile the actual extension module
+nanobind_add_module(
+  # Name of the extension
+  _pychuck
+
+  # Target the stable ABI for Python 3.12+, which reduces
+  # the number of binary wheels that must be built. This
+  # does nothing on older Python versions
+  STABLE_ABI
+
+  # Build libnanobind statically and merge it into the
+  # extension (which itself remains a shared library)
+  #
+  # If your project builds multiple extensions, you can
+  # replace this flag by NB_SHARED to conserve space by
+  # reusing a shared libnanobind across libraries
+  NB_STATIC
+
+  # Source code goes here
+  src/pychuck.cpp
+)
+
+# Install directive for scikit-build-core
+install(TARGETS _pychuck LIBRARY DESTINATION pychuck_install)
 
 
