@@ -13,6 +13,132 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ---
 
+## [0.1.1]
+
+### Added
+
+- Comprehensive architecture documentation in `ARCHITECTURE.md`
+  - System architecture diagrams and data flow
+  - Component details and responsibilities
+  - Current limitations and future improvements
+  - Thread safety analysis
+  - Performance characteristics
+  - Security considerations
+
+- **Extensive error handling test suite** (`tests/test_error_handling.py`):
+  - **30 new comprehensive tests** covering all error paths
+  - **Parameter validation tests** (4 tests):
+    - Empty code/file path rejection
+    - Zero count validation
+  - **Initialization state tests** (4 tests):
+    - Compilation requires initialization
+    - Audio processing requires initialization
+    - Start audio requires initialization
+  - **Buffer validation tests** (10 tests):
+    - Negative/zero frame validation
+    - Input/output buffer size mismatch detection
+    - Wrong dtype handling (float64 vs float32)
+    - Multidimensional array rejection
+    - Zero input channels with input data
+    - Large buffer stress test (10 seconds of audio)
+  - **Audio system validation tests** (3 tests):
+    - Zero sample rate rejection
+    - Zero channels validation
+    - Zero buffer size rejection
+  - **Compilation error tests** (4 tests):
+    - Invalid ChucK syntax (returns False, not crash)
+    - Non-existent file handling
+    - Undefined class detection
+    - Type mismatch errors
+  - **Edge cases and boundary conditions** (5 tests):
+    - Multiple shred compilation (count > 1)
+    - Multiple init calls handling (returns 0 when already initialized)
+    - Sequential compile and remove cycles
+    - Audio stop/shutdown without start (safe, no crash)
+  - **Test coverage**: 45 total tests (15 original + 30 new), 100% pass rate
+  - All tests validate descriptive error messages and proper exception types
+
+- **Python example scripts** (`examples/python/` - 9 comprehensive examples):
+  - **01_basic_sine.py**: Real-time sine wave playback (basic setup)
+  - **02_offline_render.py**: Offline rendering to numpy arrays with frequency sweep, optional plotting/WAV export
+  - **03_load_chuck_file.py**: Loading external .ck files from `examples/basic/`
+  - **04_multiple_shreds.py**: Running multiple concurrent shreds, harmonic series, dynamic management
+  - **05_bitcrusher_chugin.py**: Using Bitcrusher effect plugin with parameter sweeping
+  - **06_reverb_chugin.py**: Using GVerb reverb plugin for spatial effects
+  - **07_parameter_control.py**: ChucK VM configuration and parameter inspection
+  - **08_advanced_synthesis.py**: FM synthesis with filtering, envelopes, and melodic sequences
+  - **09_sequenced_shreds.py**: Time-sequenced shred playback, building composition layer by layer with rhythmic patterns
+  - **README.md**: Comprehensive guide with usage patterns, troubleshooting, and learning path
+  - All examples include detailed docstrings and comments
+  - Progressive learning path from basic to advanced techniques
+  - Demonstrates both real-time and offline processing
+  - Shows chugin integration and file loading
+
+### Changed
+
+- **Type stub file (`_pychuck.pyi`)** completely rewritten to match actual implementation
+  - Fixed incorrect method signatures (module functions vs class methods)
+  - Added all parameter constants
+  - Added comprehensive docstrings
+  - Proper static type checking support
+- **License classifier** corrected from invalid `GPL3 License` to `GNU General Public License v2 (GPLv2)`
+- Added development status classifier: `Development Status :: 3 - Alpha`
+- Added Python version classifiers (3.8-3.12)
+
+### Fixed
+
+#### Critical Fixes
+
+- **Input validation and error handling** throughout C++ bindings:
+  - Added `validate_audio_buffer()` template function for numpy array validation
+  - Validates array dimensions, sizes, and types before passing to ChucK
+  - `compile_code()` now validates non-empty code, count > 0, and initialization state
+  - `compile_file()` now validates non-empty path, count > 0, and initialization state
+  - `run()` now validates initialization, num_frames > 0, and correct buffer sizes
+  - All validation errors throw descriptive Python exceptions
+
+- **Audio callback architecture** improved for safety:
+  - Replaced global `g_chuck_for_audio` pointer with `userData` parameter mechanism
+  - ChucK instance passed directly to audio callback via `userData`
+  - Added mutex protection for audio state (`g_audio_mutex`)
+  - Eliminated dangling pointer risks
+
+- **RAII resource management** for audio system:
+  - Created `AudioContext` class with automatic cleanup
+  - Destructor ensures cleanup on all paths (success/failure/exception)
+  - Deleted copy/move constructors for single ownership semantics
+  - Global audio context managed via `std::unique_ptr`
+  - `start_audio()` now performs cleanup on initialization/start failures
+  - `stop_audio()` and `shutdown_audio()` properly manage lifecycle
+
+- **Test suite bug** caught by new validation:
+  - Fixed `test_chuck_now` using wrong dtype (float64 → float32)
+  - Fixed `test_chuck_now` missing channel configuration
+  - All 15 tests now pass
+
+### Security
+
+- Input validation prevents buffer overruns and segmentation faults
+- Array dimension and size checks before native code access
+- Initialization state checked before operations
+- Thread-safe audio operations with mutex protection
+
+### Technical Details
+
+- Simplified `validate_audio_buffer()` using template parameters instead of runtime dtype checks
+- Type safety enforced at compile-time via nanobind's typed ndarrays
+- Writable vs read-only buffers enforced by nanobind template parameters
+- Mutex: `std::mutex` for audio state protection
+- Smart pointers: `std::unique_ptr<AudioContext>` for resource ownership
+
+### Design Decisions
+
+- **Single global audio context**: Only one ChucK instance can have real-time audio active at a time
+  - This is **intentional and appropriate** - ChucK VM handles concurrency via shreds
+  - Multiple audio streams should use multiple shreds within one ChucK instance
+  - Running multiple ChucK instances is inefficient and unnecessary
+  - Documented in `docs/ARCHITECTURE.md` with rationale and correct usage patterns
+
 ## [0.1.0]
 
 ### Added

@@ -93,6 +93,8 @@ def test_chuck_now():
     """Test getting current ChucK time"""
     chuck = pychuck.ChucK()
     chuck.set_param(pychuck.PARAM_SAMPLE_RATE, 44100)
+    chuck.set_param(pychuck.PARAM_INPUT_CHANNELS, 0)
+    chuck.set_param(pychuck.PARAM_OUTPUT_CHANNELS, 2)
     chuck.init()
 
     # Initially should be at or near 0
@@ -100,8 +102,8 @@ def test_chuck_now():
     assert now >= 0
 
     # After processing, time should advance
-    input_buffer = np.zeros(0, dtype=np.float64)
-    output_buffer = np.zeros(512 * 2, dtype=np.float64)
+    input_buffer = np.zeros(0, dtype=np.float32)  # 0 input channels
+    output_buffer = np.zeros(512 * 2, dtype=np.float32)  # 512 frames * 2 channels
     chuck.run(input_buffer, output_buffer, 512)
 
     now_after = chuck.now()

@@ -440,3 +440,4 @@ ChucK is licensed under the GNU General Public License v2.0.
 
 - **ChucK**: Ge Wang, Perry Cook, and the ChucK team
 - **nanobind**: Wenzel Jakob and contributors
+- **claude-code**: Anthropic
