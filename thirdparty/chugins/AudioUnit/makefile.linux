@@ -1,0 +1,3 @@
+# AudioUnit is macOS-only, but we provide a stub makefile for consistency
+FLAGS+=-I$(CK_SRC_PATH) -fPIC
+LDFLAGS+=-shared

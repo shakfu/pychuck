@@ -69,7 +69,9 @@ find_package(Python 3.8
   REQUIRED COMPONENTS Interpreter Development.Module
   OPTIONAL_COMPONENTS Development.SABIModule)
 
+include(${CMAKE_SOURCE_DIR}/scripts/cmake/fn_add_chugin.cmake)
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/nanobind)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/chuck)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/chugins)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src)
