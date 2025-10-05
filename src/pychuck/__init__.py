@@ -1,1 +1,39 @@
-from ._pychuck import add, __doc__
+from ._pychuck import (
+    ChucK,
+    version,
+    __doc__,
+    # Parameter constants
+    PARAM_VERSION,
+    PARAM_SAMPLE_RATE,
+    PARAM_INPUT_CHANNELS,
+    PARAM_OUTPUT_CHANNELS,
+    PARAM_VM_ADAPTIVE,
+    PARAM_VM_HALT,
+    PARAM_OTF_ENABLE,
+    PARAM_OTF_PORT,
+    PARAM_DUMP_INSTRUCTIONS,
+    PARAM_AUTO_DEPEND,
+    PARAM_DEPRECATE_LEVEL,
+    PARAM_WORKING_DIRECTORY,
+    PARAM_CHUGIN_ENABLE,
+    PARAM_USER_CHUGINS,
+)
+
+__all__ = [
+    "ChucK",
+    "version",
+    "PARAM_VERSION",
+    "PARAM_SAMPLE_RATE",
+    "PARAM_INPUT_CHANNELS",
+    "PARAM_OUTPUT_CHANNELS",
+    "PARAM_VM_ADAPTIVE",
+    "PARAM_VM_HALT",
+    "PARAM_OTF_ENABLE",
+    "PARAM_OTF_PORT",
+    "PARAM_DUMP_INSTRUCTIONS",
+    "PARAM_AUTO_DEPEND",
+    "PARAM_DEPRECATE_LEVEL",
+    "PARAM_WORKING_DIRECTORY",
+    "PARAM_CHUGIN_ENABLE",
+    "PARAM_USER_CHUGINS",
+]
