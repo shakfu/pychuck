@@ -73,13 +73,14 @@ def test_chuck_audio_processing():
     SinOsc s => dac;
     440 => s.freq;
     0.5 => s.gain;
+    while(true) { 1::samp => now; }
     '''
     success, _ = chuck.compile_code(code)
     assert success
 
-    # Process audio
-    input_buffer = np.zeros(num_frames * 0, dtype=np.float64)  # No input channels
-    output_buffer = np.zeros(num_frames * num_channels, dtype=np.float64)
+    # Process audio (ChucK uses float32 for SAMPLE type by default)
+    input_buffer = np.zeros(num_frames * 0, dtype=np.float32)  # No input channels
+    output_buffer = np.zeros(num_frames * num_channels, dtype=np.float32)
 
     chuck.run(input_buffer, output_buffer, num_frames)
 

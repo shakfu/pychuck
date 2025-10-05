@@ -49,4 +49,4 @@ clean:
 	rm -rf build
 
 test:
-	pytest tests/
+	PYTHONPATH=$(ROOT)/src pytest tests/ -v
