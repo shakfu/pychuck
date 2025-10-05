@@ -3,6 +3,7 @@
 # pychuck
 
 examples/chugins/*.chug
+*.chug
 
 
 # Byte-compiled / optimized / DLL files

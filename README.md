@@ -1,15 +1,27 @@
 # pychuck
 
-Python bindings for the ChucK audio programming language using nanobind.
+Python bindings for the [ChucK](https://chuck.stanford.edu) audio programming language using [nanobind](https://github.com/wjakob/nanobind).
+
+## Highlights
+
+🎵 **Real-Time Audio** - Play ChucK code through your speakers with asynchronous RtAudio playback
+📁 **File Support** - Load and run `.ck` files directly
+🔌 **Plugin System** - Use chugins to extend ChucK with effects and instruments
+⚡ **Two Modes** - Real-time playback or offline rendering to numpy arrays
+🎹 **Complete ChucK** - Full access to ChucK's powerful synthesis and sound processing
+📚 **Examples Included** - 50+ ChucK examples and pre-built chugins ready to use
 
 ## Overview
 
 `pychuck` provides a high-performance Python wrapper for ChucK, allowing you to:
-- Run ChucK code from Python
+
+- Run ChucK code from Python (both inline code and `.ck` files)
 - **Real-time audio playback** using RtAudio (cross-platform, asynchronous)
 - **Offline audio processing** for rendering audio to numpy arrays
-- Process audio using ChucK's synthesis and sound processing capabilities
+- **Chugin support** - Load and use ChucK plugins (effects, instruments, etc.)
+- Process audio using ChucK's powerful synthesis and sound processing
 - Control ChucK VM parameters and manage running shreds
+- Run multiple concurrent ChucK programs (shreds)
 
 ## Installation
 
@@ -166,12 +178,14 @@ chuck.run(np.zeros(0, dtype=np.float32), output, frames)
 ### Parameter Constants
 
 #### Core Parameters
+
 - `PARAM_VERSION` - ChucK version
 - `PARAM_SAMPLE_RATE` - Sample rate (default: 44100)
 - `PARAM_INPUT_CHANNELS` - Number of input channels
 - `PARAM_OUTPUT_CHANNELS` - Number of output channels
 
 #### VM Configuration
+
 - `PARAM_VM_ADAPTIVE` - Adaptive VM mode
 - `PARAM_VM_HALT` - VM halt on errors
 - `PARAM_OTF_ENABLE` - On-the-fly programming enable
@@ -181,6 +195,7 @@ chuck.run(np.zeros(0, dtype=np.float32), output, frames)
 - `PARAM_DEPRECATE_LEVEL` - Deprecation warning level
 
 #### Paths
+
 - `PARAM_WORKING_DIRECTORY` - Working directory path
 - `PARAM_CHUGIN_ENABLE` - Enable chugins (plugins)
 - `PARAM_USER_CHUGINS` - User chugin paths
@@ -206,6 +221,7 @@ output_buffer = np.zeros(num_frames * channels, dtype=np.float64)
 ### Buffer Layout
 
 Audio buffers are **interleaved**:
+
 - For stereo output: `[L0, R0, L1, R1, L2, R2, ...]`
 - Buffer size = `num_frames * num_channels`
 
@@ -313,19 +329,95 @@ print(f"Spawned shreds: {ids}")  # [1, 2, 3]
 chuck.remove_all_shreds()
 ```
 
+### Loading ChucK Files
+
+```python
+import pychuck
+
+chuck = pychuck.ChucK()
+chuck.set_param(pychuck.PARAM_SAMPLE_RATE, 44100)
+chuck.set_param(pychuck.PARAM_OUTPUT_CHANNELS, 2)
+chuck.init()
+
+# Compile from file
+success, shred_ids = chuck.compile_file("examples/basic/blit2.ck")
+
+# Start playback
+pychuck.start_audio(chuck)
+import time; time.sleep(2)
+pychuck.stop_audio()
+pychuck.shutdown_audio()
+```
+
+### Using Chugins (Plugins)
+
+```python
+import pychuck
+
+chuck = pychuck.ChucK()
+chuck.set_param(pychuck.PARAM_SAMPLE_RATE, 44100)
+chuck.set_param(pychuck.PARAM_OUTPUT_CHANNELS, 2)
+
+# Enable chugins and set search path
+chuck.set_param(pychuck.PARAM_CHUGIN_ENABLE, 1)
+chuck.set_param_string(pychuck.PARAM_USER_CHUGINS, "./examples/chugins")
+
+chuck.init()
+
+# Use a chugin in code
+code = '''
+SinOsc s => Bitcrusher bc => dac;
+440 => s.freq;
+8 => bc.bits;
+while(true) { 1::samp => now; }
+'''
+chuck.compile_code(code)
+```
+
 ## Architecture
 
 - **Core**: ChucK virtual machine and compiler (C++)
 - **Bindings**: nanobind for efficient Python/C++ interop
 - **Build**: CMake + scikit-build-core for modern Python packaging
-- **Audio**: Float32 sample processing, interleaved buffer format
+- **Audio**:
+  - Real-time: RtAudio (CoreAudio on macOS, DirectSound/WASAPI on Windows, ALSA/JACK on Linux)
+  - Offline: Float32 sample processing, interleaved buffer format
+- **Plugins**: Chugin support for extending ChucK functionality
+
+## Features
+
+### Complete ChucK Integration
+
+- Full ChucK VM and compiler access
+- Compile from strings or files
+- Parameter configuration and introspection
+- Shred (thread) management
+
+### Two Audio Modes
+
+- **Real-time**: Asynchronous playback through system audio
+- **Offline**: Synchronous rendering to numpy arrays
+
+### Plugin Support
+
+- Load chugins (ChucK plugins)
+- Configurable search paths
+- Examples included in `examples/chugins/`
+
+### Examples Included
+
+- Basic synthesis examples in `examples/basic/`
+- Effect examples in `examples/effects/`
+- Pre-built chugins in `examples/chugins/`
+- Comprehensive test suite
 
 ## Requirements
 
-- Python 3.12+
+- Python 3.8+
 - CMake 3.15+
 - C++17 compatible compiler
 - macOS: Xcode with CoreAudio/CoreMIDI frameworks
+- numpy (for audio processing)
 
 ## Development
 
