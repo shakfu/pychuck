@@ -1,6 +1,6 @@
 [project]
 name = "pychuck"
-version = "0.0.1"
+version = "0.1.0"
 description = "A minimal python binding chuck using nanobind"
 readme = "README.md"
 requires-python = ">=3.8"
