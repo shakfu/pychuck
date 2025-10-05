@@ -1,6 +1,6 @@
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
-set(CHUCK_DIR ${CMAKE_SOURCE_DIR}/source/projects/chuck~)
+set(CHUCK_DIR ${CMAKE_SOURCE_DIR}/thirdparty/chuck)
 
 set(CXX_HOST
 	chuck_main.cpp

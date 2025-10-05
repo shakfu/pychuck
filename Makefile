@@ -26,7 +26,7 @@ EXTRA_OPTIONS += -DCM_MACOS_UNIVERSAL=ON
 endif
 else
 OS = "windows"
-endif
+GENERATOR ?= ""
 endif
 
 DIST_NAME = $(PROJECT_NAME)-$(VERSION)-$(OS)-$(ARCH)
@@ -34,13 +34,19 @@ DMG = $(DIST_NAME).dmg
 ZIP = $(DIST_NAME).zip
 
 
-.PHONY: all build clean
+.PHONY: all build clean test
 
 all: build
 
-build: 
+build:
 	@mkdir -p build && \
 		cd build && \
 		cmake $(GENERATOR) .. $(EXTRA_OPTIONS) && \
 		cmake --build . --config '$(CONFIG)' && \
 		cmake --install . --config '$(CONFIG)'
+
+clean:
+	rm -rf build
+
+test:
+	pytest tests/

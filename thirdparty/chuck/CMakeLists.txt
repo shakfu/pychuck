@@ -8,6 +8,6 @@ include_directories(
 
 add_subdirectory(core)
 add_subdirectory(host)
-if(CM_HOST_EMBED_EXAMPLE)
-    add_subdirectory(host_embed)
-endif()
+# if(CM_HOST_EMBED_EXAMPLE)
+#     add_subdirectory(host_embed)
+# endif()

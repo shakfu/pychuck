@@ -9,14 +9,30 @@ execute_process(
 )
 endif()
 
-set(C_CORE
-	$<$<PLATFORM_ID:Darwin>:chuck.tab.c>
-	$<$<PLATFORM_ID:Darwin>:chuck.yy.c>
-	$<$<PLATFORM_ID:Windows>:chuck_yacc.c>
-	util_network.c
-	util_raw.c
-	util_xforms.c
-)
+if(APPLE)
+	set(C_CORE
+		chuck.tab.c
+		chuck.yy.c
+		util_network.c
+		util_raw.c
+		util_xforms.c
+	)
+elseif(WIN32)
+	set(C_CORE
+		chuck_yacc.c
+		util_network.c
+		util_raw.c
+		util_xforms.c
+	)
+else()
+	set(C_CORE
+		util_network.c
+		util_raw.c
+		util_xforms.c
+	)
+endif()
+
+message(STATUS "C_CORE files: ${C_CORE}")
 
 set(CXX_CORE
 	chuck.cpp
@@ -68,29 +84,53 @@ set(CXX_CORE
 	util_thread.cpp
 )
 
-set(LO_C_CORE
-	lo/address.c
-	lo/blob.c
-	lo/bundle.c
-	lo/message.c
-	lo/method.c
-	lo/pattern_match.c
-	lo/send.c
-	lo/server.c
-	$<$<PLATFORM_ID:Darwin>:lo/server_thread.c>
-	lo/timetag.c
-)
+if(APPLE)
+	set(LO_C_CORE
+		lo/address.c
+		lo/blob.c
+		lo/bundle.c
+		lo/message.c
+		lo/method.c
+		lo/pattern_match.c
+		lo/send.c
+		lo/server.c
+		lo/server_thread.c
+		lo/timetag.c
+	)
+else()
+	set(LO_C_CORE
+		lo/address.c
+		lo/blob.c
+		lo/bundle.c
+		lo/message.c
+		lo/method.c
+		lo/pattern_match.c
+		lo/send.c
+		lo/server.c
+		lo/timetag.c
+	)
+endif()
 
 
-add_library(chuck_lib
-	STATIC
+add_library(chuck_lib STATIC)
+
+target_sources(chuck_lib PRIVATE
 	util_sndfile.c
 	${C_CORE}
-	${CXX_CORE}
 	${LO_C_CORE}
+	${CXX_CORE}
 )
 
-if (CMAKE_HOST_APPLE AND CM_SKIP_WARNINGS)
+# Explicitly mark .c files as C language
+set_source_files_properties(
+	util_sndfile.c
+	${C_CORE}
+	${LO_C_CORE}
+	PROPERTIES
+	LANGUAGE C
+)
+
+if (CMAKE_HOST_APPLE)
 	set_source_files_properties(
 		util_sndfile.c
 		util_hid.cpp
