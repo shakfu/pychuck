@@ -15,6 +15,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- **ChucK Language Module** (`src/pychuck/chuck_lang.py`):
+  - Single source of truth for all ChucK language elements
+  - Complete sets: KEYWORDS, TYPES, OPERATORS, TIME_UNITS, UGENS, STD_CLASSES
+  - 80+ UGens including oscillators, filters, reverbs, STK instruments, chugins
+  - Standard library: MATH_FUNCTIONS, STD_FUNCTIONS
+  - REPL_COMMANDS for command completion
+  - Helper functions: `is_keyword()`, `is_type()`, `is_ugen()`, `is_builtin()`, `get_category()`
+  - Comprehensive documentation of ChucK language specification
+
+- **ChucK Code Completion in REPL**:
+  - Tab completion for ChucK keywords (if, while, for, class, fun, etc.)
+  - Tab completion for ChucK types (int, float, time, dur, etc.)
+  - Tab completion for UGens (SinOsc, LPF, JCRev, ADSR, etc.)
+  - Tab completion for standard library (Math, Std, FileIO, MidiIn, etc.)
+  - Visual distinction with 'ChucK' metadata in completion menu
+  - Context-aware: completes word under cursor
+  - REPL commands retain first priority
+  - Updates help text to document code completion
+
+### Changed
+
+- **ChucK Lexer Refactoring**:
+  - Now uses `chuck_lang` module as source of truth
+  - Dynamically builds patterns from KEYWORDS, TYPES, UGENS, STD_CLASSES, TIME_UNITS
+  - Removed hardcoded language element lists
+  - Moved `dac`, `adc`, `blackhole` from keywords to UGens for correct highlighting
+
+- **REPL Command Completion**:
+  - Now uses `chuck_lang.REPL_COMMANDS` instead of hardcoded list
+  - Ensures consistency across all components
+
+### Technical Details
+
+- All 76 tests pass
+- ChucK lexer tests verify correct categorization of language elements
+- Completion system preserves REPL command priority
+- `chuck_lang` module provides forward compatibility for language specification updates
+
 ## [0.1.3]
 
 ### Added
