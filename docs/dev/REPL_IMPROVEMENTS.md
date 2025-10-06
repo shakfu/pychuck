@@ -96,7 +96,7 @@ chuck> @sine
 ✓ sporked snippet @sine -> shred 1
 ```
 
-- Loads from `~/.chuck_snippets/`
+- Loads from `~/.pychuck/snippets/`
 - Auto-creates directory
 - Lists available snippets
 - Tab completion for snippet names
@@ -120,7 +120,7 @@ chuck> @sine
 | `edit` | Open $EDITOR for multiline code |
 | `ml` | Enter inline multiline mode |
 | `watch` | Monitor VM state in real-time |
-| `@<name>` | Load snippet from ~/.chuck_snippets/ |
+| `@<name>` | Load snippet from ~/.pychuck/snippets/ |
 
 ---
 
@@ -163,8 +163,8 @@ chuck> @sine
 - `REPL_IMPROVEMENTS.md` - This summary
 
 ### User Assets:
-- `~/.chuck_snippets/sine.ck` - Example sine wave
-- `~/.chuck_snippets/noise.ck` - Example noise generator
+- `~/.pychuck/snippets/sine.ck` - Example sine wave
+- `~/.pychuck/snippets/noise.ck` - Example noise generator
 
 ---
 
@@ -269,7 +269,7 @@ These were identified but not implemented in this pass:
 ## Notes for Developers
 
 ### Adding New Snippets
-1. Create `.ck` file in `~/.chuck_snippets/`
+1. Create `.ck` file in `~/.pychuck/snippets/`
 2. Use with `@<filename>` (no extension)
 3. Auto-completion will discover it
 

@@ -7,6 +7,7 @@ from .. import (
 from .parser import CommandParser
 from .session import REPLSession
 from .commands import CommandExecutor
+from .paths import get_history_file, ensure_pychuck_directories
 
 class ChuckREPL:
     def __init__(self):
@@ -25,7 +26,15 @@ class ChuckREPL:
             from prompt_toolkit.lexers import PygmentsLexer
             from prompt_toolkit.styles import Style
             from prompt_toolkit.document import Document
-            from pygments.lexers.c_cpp import CLexer
+            from prompt_toolkit.formatted_text import HTML
+
+            # Try to import ChucK lexer, fall back to C lexer
+            try:
+                from .chuck_lexer import ChuckLexer
+                lexer_class = ChuckLexer
+            except ImportError:
+                from pygments.lexers.c_cpp import CLexer
+                lexer_class = CLexer
 
             # Context-aware completer
             class ChuckCompleter(Completer):
@@ -37,7 +46,7 @@ class ChuckREPL:
                     )
                     self.commands = [
                         '+', '-', '~', '?', '?g', '?a',
-                        'clear', 'reset', '>', '||', 'X', '.',
+                        'clear', 'reset', 'cls', '>', '||', 'X', '.',
                         'all', '$', ':', '!', 'help', 'quit', 'exit', 'edit', 'ml', 'watch'
                     ]
 
@@ -136,9 +145,11 @@ class ChuckREPL:
                 except:
                     return "Audio: -- | Now: -- | Shreds: --"
 
-            # Custom style for syntax highlighting
+            # Custom style for syntax highlighting and prompt
             repl_style = Style.from_dict({
                 'bottom-toolbar': '#ffffff bg:#333333',
+                'prompt-bracket': '#ff8800',  # orange for brackets
+                'prompt-chuck': '#00ff00',     # green for =>
             })
 
             # Key bindings for enhanced history search
@@ -149,11 +160,14 @@ class ChuckREPL:
                 """Forward history search with Ctrl+S"""
                 event.current_buffer.history_forward()
 
+            # Ensure pychuck directories exist
+            ensure_pychuck_directories()
+
             self.prompt_session = PromptSession(
-                history=FileHistory('.chuck_repl_history'),
+                history=FileHistory(str(get_history_file())),
                 auto_suggest=AutoSuggestFromHistory(),
                 completer=chuck_completer,
-                lexer=PygmentsLexer(CLexer),  # Syntax highlighting (C-like for ChucK)
+                lexer=PygmentsLexer(lexer_class),  # Syntax highlighting (ChucK or C-like)
                 multiline=False,
                 complete_while_typing=False,  # Only complete on Tab
                 enable_history_search=True,
@@ -162,6 +176,7 @@ class ChuckREPL:
                 key_bindings=kb,
             )
             self.use_prompt_toolkit = True
+            self.prompt_html = HTML  # Store HTML class for later use
         except ImportError:
             self.use_prompt_toolkit = False
             # Fall back to readline for basic history support
@@ -179,8 +194,11 @@ class ChuckREPL:
                 except:
                     pass  # May not be supported on all platforms
 
+                # Ensure pychuck directories exist
+                ensure_pychuck_directories()
+
                 # Set up history file
-                histfile = os.path.expanduser('~/.chuck_repl_history')
+                histfile = str(get_history_file())
                 try:
                     readline.read_history_file(histfile)
                     # Default history length
@@ -197,7 +215,7 @@ class ChuckREPL:
                     """Tab completion for ChucK commands and .ck files"""
                     # Commands
                     commands = ['+', '-', '~', '?', '?g', '?a',
-                               'clear', 'reset', '>', '||', 'X', '.',
+                               'clear', 'reset', 'cls', '>', '||', 'X', '.',
                                'all', '$', ':', '!', 'help', 'quit', 'exit']
 
                     # Get matches from commands
@@ -262,6 +280,10 @@ class ChuckREPL:
         try:
             self.setup()
 
+            # Clear screen
+            sys.stdout.write('\033[2J\033[H')  # Clear screen and move cursor to home
+            sys.stdout.flush()
+
             # Disable terminal mouse tracking and other escape sequences
             # that might be left over from previous programs
             sys.stdout.write('\033[?1000l')  # Disable mouse tracking
@@ -270,15 +292,20 @@ class ChuckREPL:
             sys.stdout.flush()
 
             mode = "prompt-toolkit" if self.use_prompt_toolkit else ("readline" if hasattr(self, 'use_readline') and self.use_readline else "basic")
-            print(f"ChucK REPL v0.1.0 (vanilla mode - {mode})")
+            print(f"PyChucK REPL v0.1.1 (mode - {mode})")
             print("Type 'help' for commands, 'quit' to exit\n")
 
             while True:
                 try:
                     if self.use_prompt_toolkit:
-                        text = self.prompt_session.prompt('chuck> ')
+                        # For prompt_toolkit, use HTML-like formatting with custom styles
+                        prompt_html = self.prompt_html('<prompt-bracket>[</prompt-bracket><prompt-chuck>=></prompt-chuck><prompt-bracket>]</prompt-bracket> ')
+                        text = self.prompt_session.prompt(prompt_html)
                     else:
-                        text = input('chuck> ')
+                        # For basic input, use ANSI color codes
+                        # ANSI colors: \033[38;5;208m = orange, \033[32m = green, \033[0m = reset
+                        colored_prompt = '\033[38;5;208m[\033[32m=>\033[38;5;208m]\033[0m '
+                        text = input(colored_prompt)
 
                     text = text.strip()
 
@@ -396,6 +423,9 @@ VM:
   clear                 Clear VM
   reset                 Reset shred ID
 
+Screen:
+  cls                   Clear screen
+
 Other:
   : <file>              Compile only
   ! "<code>"            Execute immediately
@@ -403,7 +433,7 @@ Other:
   edit                  Open $EDITOR for code
   ml                    Enter multiline mode
   watch                 Monitor VM state
-  @<name>               Load snippet from ~/.chuck_snippets/
+  @<name>               Load snippet from ~/.pychuck/snippets/
   help                  Show this help
   quit                  Exit
 

@@ -4,7 +4,9 @@
 
 examples/chugins/*.chug
 *.chug
-.chuck_repl_history
+
+# User data directory (history, snippets, sessions, etc.)
+.pychuck/
 
 
 # Byte-compiled / optimized / DLL files

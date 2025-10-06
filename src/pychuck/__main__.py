@@ -34,11 +34,11 @@ def main():
         tui_main()
     elif args.command == 'version':
         from . import version
-        print(f"pychuck version: 0.1.0")
+        print(f"pychuck version: 0.1.1")
         print(f"ChucK version: {version()}")
     elif args.command == 'info':
         from . import ChucK, version
-        print(f"pychuck: 0.1.0")
+        print(f"pychuck: 0.1.1")
         print(f"ChucK: {version()}")
         print(f"ChucK int size: {ChucK.int_size()} bits")
         print(f"Active VMs: {ChucK.num_vms()}")

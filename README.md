@@ -56,7 +56,7 @@ pychuck includes an interactive REPL:
 python -m pychuck tui
 ```
 
-The REPL uses `prompt_toolkit` or `readline` for tab completion of commands and `.ck` files. Features command history, auto-suggest, and case-insensitive completion.
+The REPL uses `prompt_toolkit` or `readline` for tab completion of commands and `.ck` files. Features command history, auto-suggest, case-insensitive completion, and ChucK syntax highlighting (when Pygments is installed).
 
 Supports ChucK REPL commands for shred management, audio control, global variables, and events. Type `help` in the REPL for command reference.
 

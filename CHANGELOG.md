@@ -15,6 +15,61 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ## [Unreleased]
 
+## [0.1.3]
+
+### Added
+
+- **ChucK Pygments Lexer** (`src/pychuck/cli/chuck_lexer.py`):
+  - Complete syntax highlighting for ChucK language
+  - Recognizes ChucK operators (`=>`, `+=>`, `@=>`, etc.)
+  - Time duration literals (`100::ms`, `1::second`, etc.)
+  - 80+ built-in UGens (SinOsc, LPF, ADSR, JCRev, dac, etc.)
+  - Keywords, types, standard library (Math, Std, Machine)
+  - Comments, strings, numbers (int, float, hex)
+  - Integrated into REPL for syntax-highlighted input
+  - 16 comprehensive tests in `tests/test_chuck_lexer.py`
+  - Documentation: `docs/CHUCK_LEXER.md`
+
+- **Centralized Path Management** (`src/pychuck/cli/paths.py`):
+  - `get_pychuck_home()` - Returns `~/.pychuck`
+  - `get_snippets_dir()` - Returns `~/.pychuck/snippets`
+  - `get_history_file()` - Returns `~/.pychuck/history`
+  - `get_sessions_dir()`, `get_logs_dir()`, `get_projects_dir()`, `get_config_file()` - Future directories
+  - `ensure_pychuck_directories()` - Creates directory structure
+  - `list_snippets()`, `get_snippet_path()` - Snippet utilities
+
+- **REPL Enhancements**:
+  - `cls` command - Clear screen without affecting VM state
+  - Colored prompt `[=>]` with orange brackets and green chuck operator
+  - Screen clears on REPL startup for clean interface
+  - Prompt updated to `[=>]` matching ChucK logo
+
+- **Documentation**:
+  - `docs/PYCHUCK_HOME.md` - Complete guide to `~/.pychuck/` directory structure
+  - `docs/CHUCK_LEXER.md` - ChucK lexer usage and implementation guide
+
+### Changed
+
+- **Directory Structure Migration**:
+  - `~/.chuck_repl_history` → `~/.pychuck/history`
+  - `~/.chuck_snippets/` → `~/.pychuck/snippets/`
+  - REPL now creates full `~/.pychuck/` directory structure on startup
+  - Updated all code to use new path utilities from `paths.py`
+  - Updated `.gitignore` to ignore `~/.pychuck/` instead of individual files
+
+- **REPL Improvements**:
+  - REPL version display updated to show "PyChucK REPL v0.1.1"
+  - Help text updated with `cls` command under "Screen:" section
+  - Tab completion includes `cls` command
+  - README.md mentions ChucK syntax highlighting feature
+
+- **Command-line interface simplified**:
+  - `python -m pychuck tui` now launches vanilla REPL directly (no flags)
+  - Removed `--rich`, `--simple`, `--basic` command-line flags
+  - `tui.py` simplified to only launch vanilla REPL
+  - Updated README.md to reflect vanilla REPL as sole interface
+  - Vanilla REPL uses `prompt_toolkit` or `readline` for tab completion
+
 ### Removed
 
 - **Textual/Rich TUI implementation removed**:
@@ -28,20 +83,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
     - `docs/dev/RICH_TUI_IMPROVEMENTS.md`
     - `docs/dev/TUI_README.md`
 
-### Changed
-
-- **Command-line interface simplified**:
-  - `python -m pychuck tui` now launches vanilla REPL directly (no flags)
-  - Removed `--rich`, `--simple`, `--basic` command-line flags
-  - `tui.py` simplified to only launch vanilla REPL
-  - Updated README.md to reflect vanilla REPL as sole interface
-  - Vanilla REPL uses `prompt_toolkit` or `readline` for tab completion
+- **Old Path Structure**:
+  - Removed references to `~/.chuck_snippets/`
+  - Removed references to `~/.chuck_repl_history`
 
 ### Technical Details
 
-- Retained vanilla REPL implementation in `cli/repl.py`
-- All 60 tests continue to pass
-- No changes to core pychuck bindings or ChucK functionality
+- All 76 tests pass (60 original + 16 lexer tests)
+- ChucK lexer follows Pygments best practices (RegexLexer)
+- Colored prompt uses HTML formatting for prompt_toolkit, ANSI codes for basic mode
+- Path management provides forward compatibility for sessions, logs, projects, config
+- Migration guide included in `docs/PYCHUCK_HOME.md`
 
 ---
 

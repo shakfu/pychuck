@@ -195,6 +195,11 @@ class CommandExecutor:
         self.chuck.reset_shred_id()
         print("shred ID reset")
 
+    def _cmd_clear_screen(self, args):
+        import sys
+        sys.stdout.write('\033[2J\033[H')  # Clear screen and move cursor to home
+        sys.stdout.flush()
+
     def _cmd_compile_file(self, args):
         # Compile with count=0 (don't run)
         success, _ = self.chuck.compile_file(args['path'], count=0)
@@ -275,19 +280,19 @@ class CommandExecutor:
             print("\n")
 
     def _cmd_load_snippet(self, args):
-        """Load and spork a code snippet from ~/.chuck_snippets/"""
+        """Load and spork a code snippet from ~/.pychuck/snippets/"""
         import os
-        from pathlib import Path
+        from .paths import get_snippet_path, get_snippets_dir, ensure_pychuck_directories, list_snippets
 
         name = args['name']
-        snippets_dir = Path.home() / '.chuck_snippets'
-        snippet_path = snippets_dir / f'{name}.ck'
+        snippet_path = get_snippet_path(name)
 
         if not snippet_path.exists():
             # Try to create snippets directory if it doesn't exist
+            snippets_dir = get_snippets_dir()
             if not snippets_dir.exists():
                 try:
-                    snippets_dir.mkdir(parents=True)
+                    ensure_pychuck_directories()
                     print(f"Created snippets directory: {snippets_dir}")
                     print(f"Add .ck files to this directory to use @<name> syntax")
                 except Exception as e:
@@ -296,13 +301,12 @@ class CommandExecutor:
 
             print(f"✗ snippet '{name}' not found at {snippet_path}")
             print(f"Available snippets in {snippets_dir}:")
-            if snippets_dir.exists():
-                snippets = sorted(snippets_dir.glob('*.ck'))
-                if snippets:
-                    for s in snippets:
-                        print(f"  @{s.stem}")
-                else:
-                    print("  (none)")
+            snippets = list_snippets()
+            if snippets:
+                for s in snippets:
+                    print(f"  @{s}")
+            else:
+                print("  (none)")
             return
 
         # Spork the snippet

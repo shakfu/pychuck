@@ -42,6 +42,9 @@ class CommandParser:
             (r'^clear$', self._clear_vm),
             (r'^reset$', self._reset_id),
 
+            # Screen
+            (r'^cls$', self._clear_screen),
+
             # Other
             (r'^:\s+(.+\.ck)$', self._compile_file),
             (r'^!\s+"([^"]+)"$', self._exec_code),
@@ -125,6 +128,9 @@ class CommandParser:
 
     def _reset_id(self, m):
         return Command('reset_id', {})
+
+    def _clear_screen(self, m):
+        return Command('clear_screen', {})
 
     def _compile_file(self, m):
         return Command('compile_file', {'path': m.group(1)})

@@ -121,15 +121,15 @@ def _cmd_watch(self, args):
 ### 7. **Code Snippets/Macros**
 ```python
 # Store reusable ChucK snippets:
-# ~/.chuck_snippets/sine.ck
-# ~/.chuck_snippets/drums.ck
+# ~/.pychuck/snippets/sine.ck
+# ~/.pychuck/snippets/drums.ck
 
 # parser.py:
 (r'^@(\w+)$', self._load_snippet),  # @sine → load snippet
 
 def _load_snippet(self, m):
     name = m.group(1)
-    path = Path.home() / '.chuck_snippets' / f'{name}.ck'
+    path = Path.home() / '.pychuck/snippets' / f'{name}.ck'
     return Command('spork_file', {'path': str(path)})
 ```
 
@@ -272,7 +272,7 @@ chuck> edit                      # Opens $EDITOR with template
 ✓ Sporked /tmp/chuck_XXXXX.ck → shred 2
 
 chuck> @drums                    # Load snippet
-✓ Sporked ~/.chuck_snippets/drums.ck → shred 3
+✓ Sporked ~/.pychuck/snippets/drums.ck → shred 3
 ```
 
 ## Conclusion
@@ -381,7 +381,7 @@ chuck> @sine
 ```
 
 ### Features:
-- Loads ChucK files from `~/.chuck_snippets/`
+- Loads ChucK files from `~/.pychuck/snippets/`
 - Auto-creates directory on first use
 - Lists available snippets if not found
 - Example snippets created:
@@ -389,7 +389,7 @@ chuck> @sine
   - `@noise` - White noise generator
 
 ### Usage:
-1. Create `.ck` files in `~/.chuck_snippets/`
+1. Create `.ck` files in `~/.pychuck/snippets/`
 2. Reference with `@<filename>` (without .ck extension)
 3. Auto-completion works for snippet names
 
@@ -462,7 +462,7 @@ Shred 2:
 - `src/pychuck/cli/parser.py` - Patterns for `watch` and `@<name>`
 
 ### User Experience:
-- Created example snippets in `~/.chuck_snippets/`
+- Created example snippets in `~/.pychuck/snippets/`
 - Updated help text with new features
 - Added keyboard shortcuts documentation
 
