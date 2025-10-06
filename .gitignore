@@ -4,6 +4,7 @@
 
 examples/chugins/*.chug
 *.chug
+.chuck_repl_history
 
 
 # Byte-compiled / optimized / DLL files

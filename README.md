@@ -2,7 +2,7 @@
 
 Python bindings for the [ChucK](https://chuck.stanford.edu) audio programming language using [nanobind](https://github.com/wjakob/nanobind).
 
-The pychuck library now complete interactive control over ChucK, enabling sophisticated live coding workflows, bidirectional Python/ChucK communication, and comprehensive VM introspection—all while maintaining the existing real-time and offline audio capabilities.
+The pychuck library provides interactive control over ChucK, enabling live coding workflows, bidirectional Python/ChucK communication, and comprehensive VM introspection—all while maintaining the existing real-time and offline audio capabilities.
 
 ## Highlights
 
