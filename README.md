@@ -2,12 +2,16 @@
 
 Python bindings for the [ChucK](https://chuck.stanford.edu) audio programming language using [nanobind](https://github.com/wjakob/nanobind).
 
+The pychuck library now complete interactive control over ChucK, enabling sophisticated live coding workflows, bidirectional Python/ChucK communication, and comprehensive VM introspection—all while maintaining the existing real-time and offline audio capabilities.
+
 ## Highlights
 
 - **Real-Time Audio** - Play ChucK code through your speakers with asynchronous RtAudio playback
 - **File Support** - Load and run `.ck` files directly
 - **Plugin System** - Use chugins to extend ChucK with effects and instruments
 - **Two Modes** - Real-time playback or offline rendering to `numpy` arrays
+- **Interactive Control** - Bidirectional communication via global variables and events
+- **Live Coding** - Hot-swap running code, manage shreds, introspect VM state
 - **Complete ChucK** - Full access to ChucK's powerful synthesis and sound processing
 - **Examples Included** - 50+ ChucK examples and pre-built chugins ready to use
 
@@ -18,6 +22,8 @@ Python bindings for the [ChucK](https://chuck.stanford.edu) audio programming la
 - Run ChucK code from Python (both inline code and `.ck` files)
 - Real-time audio playback using RtAudio (cross-platform, asynchronous)
 - Offline audio processing for rendering audio to numpy arrays
+- **Interactive communication** - Set/get global variables, signal events, register callbacks
+- **Live coding support** - Replace running shreds, introspect VM state, manage shred lifecycle
 - Chugin support - Load and use ChucK plugins (effects, instruments, etc.)
 - Process audio using ChucK's powerful synthesis and sound processing
 - Control ChucK VM parameters and manage running shreds
@@ -158,9 +164,48 @@ chuck.run(np.zeros(0, dtype=np.float32), output, frames)
   - Get current audio system information
   - Returns dict with keys: `sample_rate`, `num_channels_out`, `num_channels_in`, `buffer_size`
 
+#### Global Variable Management
+
+- **`set_global_int(name: str, value: int)`** - Set a global int variable
+- **`set_global_float(name: str, value: float)`** - Set a global float variable
+- **`set_global_string(name: str, value: str)`** - Set a global string variable
+- **`get_global_int(name: str, callback: Callable[[int], None])`** - Get a global int (async via callback)
+- **`get_global_float(name: str, callback: Callable[[float], None])`** - Get a global float (async via callback)
+- **`get_global_string(name: str, callback: Callable[[str], None])`** - Get a global string (async via callback)
+- **`set_global_int_array(name: str, values: list[int])`** - Set a global int array
+- **`set_global_float_array(name: str, values: list[float])`** - Set a global float array
+- **`set_global_int_array_value(name: str, index: int, value: int)`** - Set array element by index
+- **`set_global_float_array_value(name: str, index: int, value: float)`** - Set array element by index
+- **`set_global_associative_int_array_value(name: str, key: str, value: int)`** - Set map value by key
+- **`set_global_associative_float_array_value(name: str, key: str, value: float)`** - Set map value by key
+- **`get_global_int_array(name: str, callback: Callable[[list[int]], None])`** - Get int array (async)
+- **`get_global_float_array(name: str, callback: Callable[[list[float]], None])`** - Get float array (async)
+- **`get_all_globals() -> list[tuple[str, str]]`** - Get list of all globals as (type, name) pairs
+
+#### Global Event Management
+
+- **`signal_global_event(name: str)`** - Signal a global event (wakes one waiting shred)
+- **`broadcast_global_event(name: str)`** - Broadcast a global event (wakes all waiting shreds)
+- **`listen_for_global_event(name: str, callback: Callable[[], None], listen_forever: bool = True) -> int`** - Listen for event, returns listener ID
+- **`stop_listening_for_global_event(name: str, callback_id: int)`** - Stop listening using listener ID
+
 #### Shred Management
 
+- **`remove_shred(shred_id: int)`** - Remove a shred by ID
 - **`remove_all_shreds()`** - Remove all running shreds from VM
+- **`get_all_shred_ids() -> list[int]`** - Get IDs of all running shreds
+- **`get_ready_shred_ids() -> list[int]`** - Get IDs of ready (not blocked) shreds
+- **`get_blocked_shred_ids() -> list[int]`** - Get IDs of blocked shreds
+- **`get_last_shred_id() -> int`** - Get ID of last sporked shred
+- **`get_next_shred_id() -> int`** - Get what the next shred ID will be
+- **`get_shred_info(shred_id: int) -> dict`** - Get shred info (id, name, is_running, is_done)
+
+#### VM Control
+
+- **`clear_vm()`** - Clear the VM (remove all shreds)
+- **`clear_globals()`** - Clear global variables without clearing the VM
+- **`reset_shred_id()`** - Reset the shred ID counter
+- **`replace_shred(shred_id: int, code: str, args: str = "") -> int`** - Replace running shred with new code
 
 #### Status and Utility
 
@@ -168,12 +213,24 @@ chuck.run(np.zeros(0, dtype=np.float32), output, frames)
 - **`vm_running() -> bool`** - Check if VM is running
 - **`now() -> float`** - Get current ChucK time in samples
 
+#### Console Output Control
+
+- **`set_chout_callback(callback: Callable[[str], None]) -> bool`** - Capture ChucK console output
+- **`set_cherr_callback(callback: Callable[[str], None]) -> bool`** - Capture ChucK error output
+- **`toggle_global_color_textoutput(onOff: bool)`** - Enable/disable color output
+- **`probe_chugins()`** - Print info on all loaded chugins
+
 #### Static Methods
 
 - **`version() -> str`** - Get ChucK version string
 - **`int_size() -> int`** - Get ChucK integer size in bits
 - **`num_vms() -> int`** - Get number of active ChucK VMs
 - **`set_log_level(level: int)`** - Set global log level
+- **`get_log_level() -> int`** - Get global log level
+- **`poop()`** - ChucK poop compatibility
+- **`set_stdout_callback(callback: Callable[[str], None]) -> bool`** - Set global stdout callback (static)
+- **`set_stderr_callback(callback: Callable[[str], None]) -> bool`** - Set global stderr callback (static)
+- **`global_cleanup()`** - Global cleanup for all ChucK instances
 
 ### Parameter Constants
 
@@ -199,6 +256,17 @@ chuck.run(np.zeros(0, dtype=np.float32), output, frames)
 - `PARAM_WORKING_DIRECTORY` - Working directory path
 - `PARAM_CHUGIN_ENABLE` - Enable chugins (plugins)
 - `PARAM_USER_CHUGINS` - User chugin paths
+- `PARAM_IMPORT_PATH_SYSTEM` - System import search paths
+- `PARAM_IMPORT_PATH_PACKAGES` - Package import search paths
+- `PARAM_IMPORT_PATH_USER` - User import search paths
+
+#### Display & Debugging
+
+- `PARAM_OTF_PRINT_WARNINGS` - Print on-the-fly compiler warnings
+- `PARAM_IS_REALTIME_AUDIO_HINT` - Hint for real-time audio mode
+- `PARAM_COMPILER_HIGHLIGHT_ON_ERROR` - Syntax highlighting in error messages
+- `PARAM_TTY_COLOR` - Enable color output in terminal
+- `PARAM_TTY_WIDTH_HINT` - Terminal width hint for formatting
 
 ### Module Functions
 
@@ -374,6 +442,215 @@ while(true) { 1::samp => now; }
 chuck.compile_code(code)
 ```
 
+### Global Variables (Python/ChucK Communication)
+
+```python
+import pychuck
+import numpy as np
+
+chuck = pychuck.ChucK()
+chuck.set_param(pychuck.PARAM_SAMPLE_RATE, 44100)
+chuck.set_param(pychuck.PARAM_INPUT_CHANNELS, 2)
+chuck.set_param(pychuck.PARAM_OUTPUT_CHANNELS, 2)
+chuck.init()
+chuck.start()
+
+# Define global variables in ChucK
+chuck.compile_code('''
+    global int tempo;
+    global float frequency;
+    global string mode;
+
+    SinOsc s => dac;
+
+    while(true) {
+        frequency => s.freq;
+        1::samp => now;
+    }
+''')
+
+# Helper to run audio cycles (VM processes messages during audio)
+def run_cycles(count=5):
+    buf_in = np.zeros(512 * 2, dtype=np.float32)
+    buf_out = np.zeros(512 * 2, dtype=np.float32)
+    for _ in range(count):
+        chuck.run(buf_in, buf_out, 512)
+
+# Set globals from Python
+chuck.set_global_int("tempo", 120)
+chuck.set_global_float("frequency", 440.0)
+chuck.set_global_string("mode", "major")
+run_cycles()
+
+# Get globals via callback
+result = []
+chuck.get_global_float("frequency", lambda val: result.append(val))
+run_cycles()
+print(f"Current frequency: {result[0]} Hz")
+
+# List all globals
+globals_list = chuck.get_all_globals()
+print(f"Globals: {globals_list}")
+```
+
+### Global Events (Event-Driven Communication)
+
+```python
+import pychuck
+import numpy as np
+
+chuck = pychuck.ChucK()
+chuck.set_param(pychuck.PARAM_SAMPLE_RATE, 44100)
+chuck.set_param(pychuck.PARAM_INPUT_CHANNELS, 2)
+chuck.set_param(pychuck.PARAM_OUTPUT_CHANNELS, 2)
+chuck.init()
+chuck.start()
+
+# ChucK code with global events
+chuck.compile_code('''
+    global Event trigger;
+    global Event response;
+    global int noteValue;
+
+    SinOsc s => dac;
+
+    fun void player() {
+        while(true) {
+            trigger => now;
+            Std.mtof(noteValue) => s.freq;
+            100::ms => now;
+            response.broadcast();
+        }
+    }
+
+    spork ~ player();
+''')
+
+def run_cycles(count=5):
+    buf_in = np.zeros(512 * 2, dtype=np.float32)
+    buf_out = np.zeros(512 * 2, dtype=np.float32)
+    for _ in range(count):
+        chuck.run(buf_in, buf_out, 512)
+
+# Listen for response from ChucK
+response_count = []
+def on_response():
+    response_count.append(1)
+    print(f"Response received! Total: {len(response_count)}")
+
+listener_id = chuck.listen_for_global_event("response", on_response, listen_forever=True)
+
+# Trigger notes from Python
+for note in [60, 64, 67, 72]:  # C major chord
+    chuck.set_global_int("noteValue", note)
+    chuck.signal_global_event("trigger")
+    run_cycles(10)
+
+# Stop listening
+chuck.stop_listening_for_global_event("response", listener_id)
+```
+
+### Shred Management & Introspection
+
+```python
+import pychuck
+import numpy as np
+
+chuck = pychuck.ChucK()
+chuck.set_param(pychuck.PARAM_SAMPLE_RATE, 44100)
+chuck.set_param(pychuck.PARAM_INPUT_CHANNELS, 2)
+chuck.set_param(pychuck.PARAM_OUTPUT_CHANNELS, 2)
+chuck.init()
+chuck.start()
+
+# Spork multiple shreds
+code = "while(true) { 100::ms => now; }"
+success1, ids1 = chuck.compile_code(code)
+success2, ids2 = chuck.compile_code(code)
+success3, ids3 = chuck.compile_code(code)
+
+# Introspect running shreds
+all_ids = chuck.get_all_shred_ids()
+print(f"Running shreds: {all_ids}")
+
+for shred_id in all_ids:
+    info = chuck.get_shred_info(shred_id)
+    print(f"Shred {info['id']}: {info['name']}, running={info['is_running']}")
+
+# Remove specific shred
+chuck.remove_shred(ids1[0])
+print(f"After removal: {chuck.get_all_shred_ids()}")
+
+# Get next shred ID
+next_id = chuck.get_next_shred_id()
+print(f"Next shred ID will be: {next_id}")
+
+# Clear all
+chuck.clear_vm()
+print(f"After clear_vm: {chuck.get_all_shred_ids()}")
+```
+
+### Live Coding with replace_shred()
+
+```python
+import pychuck
+import numpy as np
+
+chuck = pychuck.ChucK()
+chuck.set_param(pychuck.PARAM_SAMPLE_RATE, 44100)
+chuck.set_param(pychuck.PARAM_INPUT_CHANNELS, 2)
+chuck.set_param(pychuck.PARAM_OUTPUT_CHANNELS, 2)
+chuck.init()
+chuck.start()
+
+# Start with one sound
+code_v1 = '''
+SinOsc s => dac;
+440 => s.freq;
+while(true) { 1::samp => now; }
+'''
+success, ids = chuck.compile_code(code_v1)
+original_id = ids[0]
+
+# ... play for a while ...
+
+# Hot-swap to different sound
+code_v2 = '''
+TriOsc t => dac;
+330 => t.freq;
+0.5 => t.gain;
+while(true) { 1::samp => now; }
+'''
+new_id = chuck.replace_shred(original_id, code_v2)
+print(f"Replaced shred {original_id} with {new_id}")
+```
+
+### Capturing ChucK Console Output
+
+```python
+import pychuck
+
+chuck = pychuck.ChucK()
+chuck.init()
+
+# Capture chout (console output)
+output_log = []
+chuck.set_chout_callback(lambda msg: output_log.append(msg))
+
+# Capture cherr (error output)
+error_log = []
+chuck.set_cherr_callback(lambda msg: error_log.append(msg))
+
+# Run code that prints
+chuck.compile_code('''
+    <<< "Hello from ChucK!" >>>;
+    <<< "Value:", 42 >>>;
+''')
+
+# Check captured output
+print("ChucK output:", output_log)
+```
+
 ## Architecture
 
 - **Core**: ChucK virtual machine and compiler (C++)
@@ -391,7 +668,26 @@ chuck.compile_code(code)
 - Full ChucK VM and compiler access
 - Compile from strings or files
 - Parameter configuration and introspection
-- Shred (thread) management
+- Advanced shred (thread) management and introspection
+
+### Interactive Python/ChucK Communication
+
+- **Global Variables**: Bidirectional data exchange between Python and ChucK
+  - Set/get primitives (int, float, string)
+  - Set/get arrays (indexed and associative)
+  - Async callbacks for getting values
+- **Global Events**: Event-driven communication
+  - Signal/broadcast events from Python to ChucK
+  - Listen for events from ChucK in Python
+  - Persistent or one-shot event listeners
+- **Console Capture**: Redirect ChucK output to Python callbacks
+
+### Live Coding Support
+
+- **Shred Introspection**: List, query, and monitor running shreds
+- **Shred Control**: Remove individual shreds or clear entire VM
+- **Hot Swapping**: Replace running shred code without stopping audio
+- **VM Management**: Clear globals, reset IDs, fine-grained control
 
 ### Two Audio Modes
 
