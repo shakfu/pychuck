@@ -4,7 +4,7 @@ from .. import (
     ChucK, start_audio, stop_audio, shutdown_audio,
     PARAM_SAMPLE_RATE, PARAM_OUTPUT_CHANNELS, PARAM_INPUT_CHANNELS
 )
-from ..chuck_lang import REPL_COMMANDS
+from ..chuck_lang import REPL_COMMANDS, ALL_IDENTIFIERS
 from .parser import CommandParser
 from .session import REPLSession
 from .commands import CommandExecutor
@@ -50,6 +50,9 @@ class ChuckREPL:
 
             def get_completions(self, document, complete_event):
                 text = document.text.strip()
+
+                # Get the word before cursor for ChucK code completion
+                word_before_cursor = document.get_word_before_cursor(WORD=True)
 
                 # After '+', suggest .ck files
                 if text.startswith('+ ') and len(text) > 2:
@@ -125,11 +128,27 @@ class ChuckREPL:
                     for completion in self.path_completer.get_completions(path_doc, complete_event):
                         yield completion
 
-                # Default: suggest commands
+                # Default: suggest REPL commands or ChucK identifiers
                 else:
+                    # First priority: REPL commands (if text matches command patterns)
+                    repl_command_matched = False
                     for cmd in self.commands:
                         if cmd.startswith(text):
                             yield Completion(cmd, start_position=-len(text))
+                            repl_command_matched = True
+
+                    # Second priority: ChucK language identifiers (keywords, types, UGens, etc.)
+                    # Only suggest ChucK completions if:
+                    # 1. No REPL commands matched, OR
+                    # 2. We're completing a word within ChucK code (word_before_cursor exists)
+                    if not repl_command_matched or word_before_cursor:
+                        for identifier in sorted(ALL_IDENTIFIERS):
+                            if identifier.startswith(word_before_cursor):
+                                yield Completion(
+                                    identifier,
+                                    start_position=-len(word_before_cursor),
+                                    display_meta='ChucK'
+                                )
 
         chuck_completer = ChuckCompleter(self)
 
@@ -387,7 +406,7 @@ Keyboard Shortcuts:
   Ctrl+R                Reverse history search
   Ctrl+S                Forward history search
   Ctrl+C                Cancel/interrupt
-  Tab                   Auto-complete
+  Tab                   Auto-complete (REPL commands, file paths, ChucK code)
 
 CLI Options:
   --start-audio         Start audio automatically on REPL startup
