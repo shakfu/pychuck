@@ -4,6 +4,7 @@ from .. import (
     ChucK, start_audio, stop_audio, shutdown_audio,
     PARAM_SAMPLE_RATE, PARAM_OUTPUT_CHANNELS, PARAM_INPUT_CHANNELS
 )
+from ..chuck_lang import REPL_COMMANDS
 from .parser import CommandParser
 from .session import REPLSession
 from .commands import CommandExecutor
@@ -44,11 +45,8 @@ class ChuckREPL:
                     file_filter=lambda filename: filename.endswith('.ck') or os.path.isdir(filename),
                     expanduser=True
                 )
-                self.commands = [
-                    '+', '-', '~', '?', '?g', '?a',
-                    'clear', 'reset', 'cls', '>', '||', 'X', '.',
-                    'all', '$', ':', '!', 'help', 'quit', 'exit', 'edit', 'watch'
-                ]
+                # Use REPL_COMMANDS from chuck_lang as source of truth
+                self.commands = sorted(REPL_COMMANDS)
 
             def get_completions(self, document, complete_event):
                 text = document.text.strip()
