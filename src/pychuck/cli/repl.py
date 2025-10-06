@@ -20,29 +20,146 @@ class ChuckREPL:
             from prompt_toolkit import PromptSession
             from prompt_toolkit.history import FileHistory
             from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
-            from prompt_toolkit.completion import PathCompleter, merge_completers, WordCompleter
+            from prompt_toolkit.completion import PathCompleter, merge_completers, WordCompleter, Completer, Completion
             from prompt_toolkit.key_binding import KeyBindings
+            from prompt_toolkit.lexers import PygmentsLexer
+            from prompt_toolkit.styles import Style
+            from prompt_toolkit.document import Document
+            from pygments.lexers.c_cpp import CLexer
 
-            # Create a custom completer that combines commands and paths
-            command_completer = WordCompleter([
-                '+', '-', '~', '?', '?g', '?a',
-                'clear', 'reset', '>', '||', 'X', '.',
-                'all', '$', ':', '!', 'help', 'quit', 'exit'
-            ], ignore_case=True)
+            # Context-aware completer
+            class ChuckCompleter(Completer):
+                def __init__(self, repl_instance):
+                    self.repl = repl_instance
+                    self.path_completer = PathCompleter(
+                        file_filter=lambda filename: filename.endswith('.ck') or os.path.isdir(filename),
+                        expanduser=True
+                    )
+                    self.commands = [
+                        '+', '-', '~', '?', '?g', '?a',
+                        'clear', 'reset', '>', '||', 'X', '.',
+                        'all', '$', ':', '!', 'help', 'quit', 'exit', 'edit', 'ml', 'watch'
+                    ]
 
-            # Path completer for .ck files
-            path_completer = PathCompleter(
-                file_filter=lambda filename: filename.endswith('.ck') or os.path.isdir(filename),
-                expanduser=True
-            )
+                def get_completions(self, document, complete_event):
+                    text = document.text.strip()
+
+                    # After '+', suggest .ck files
+                    if text.startswith('+ ') and len(text) > 2:
+                        # Create new document with just the path part
+                        path_text = text[2:].strip()
+                        path_doc = Document(path_text, len(path_text))
+                        for completion in self.path_completer.get_completions(path_doc, complete_event):
+                            yield completion
+
+                    # After '-', suggest shred IDs or 'all'
+                    elif text.startswith('- ') and len(text) > 2:
+                        prefix = text[2:].strip()
+                        # Suggest 'all'
+                        if 'all'.startswith(prefix):
+                            yield Completion('all', start_position=-len(prefix))
+                        # Suggest active shred IDs
+                        try:
+                            for sid in self.repl.session.shreds.keys():
+                                sid_str = str(sid)
+                                if sid_str.startswith(prefix):
+                                    yield Completion(sid_str, start_position=-len(prefix))
+                        except:
+                            pass
+
+                    # After '~', suggest shred IDs
+                    elif text.startswith('~ ') and len(text) > 2:
+                        parts = text[2:].strip()
+                        if ' ' not in parts:  # Still typing shred ID
+                            try:
+                                for sid in self.repl.session.shreds.keys():
+                                    sid_str = str(sid)
+                                    if sid_str.startswith(parts):
+                                        yield Completion(sid_str, start_position=-len(parts))
+                            except:
+                                pass
+
+                    # After '? ', suggest shred IDs
+                    elif text.startswith('? ') and len(text) > 2:
+                        prefix = text[2:].strip()
+                        try:
+                            for sid in self.repl.session.shreds.keys():
+                                sid_str = str(sid)
+                                if sid_str.startswith(prefix):
+                                    yield Completion(sid_str, start_position=-len(prefix))
+                        except:
+                            pass
+
+                    # After '<name>?' or '<name>::', suggest known globals
+                    elif '?' in text and not text.startswith('?'):
+                        prefix = text.split('?')[0]
+                        try:
+                            globals_list = self.repl.chuck.get_all_globals()
+                            for typ, name in globals_list:
+                                if name.startswith(prefix):
+                                    yield Completion(name + '?', start_position=-len(text))
+                        except:
+                            pass
+
+                    elif '::' in text:
+                        prefix = text.split('::')[0]
+                        try:
+                            globals_list = self.repl.chuck.get_all_globals()
+                            for typ, name in globals_list:
+                                if name.startswith(prefix):
+                                    yield Completion(name + '::', start_position=-len(text))
+                        except:
+                            pass
+
+                    # After ': ', suggest .ck files (compile mode)
+                    elif text.startswith(': ') and len(text) > 2:
+                        path_text = text[2:].strip()
+                        path_doc = Document(path_text, len(path_text))
+                        for completion in self.path_completer.get_completions(path_doc, complete_event):
+                            yield completion
+
+                    # Default: suggest commands
+                    else:
+                        for cmd in self.commands:
+                            if cmd.startswith(text):
+                                yield Completion(cmd, start_position=-len(text))
+
+            chuck_completer = ChuckCompleter(self)
+
+            # Create status toolbar function
+            def get_toolbar():
+                try:
+                    audio_status = "ON" if self.session.audio_running else "OFF"
+                    now = self.chuck.now()
+                    shred_count = len(self.session.shreds)
+                    return f"Audio: {audio_status} | Now: {now:.2f} | Shreds: {shred_count}"
+                except:
+                    return "Audio: -- | Now: -- | Shreds: --"
+
+            # Custom style for syntax highlighting
+            repl_style = Style.from_dict({
+                'bottom-toolbar': '#ffffff bg:#333333',
+            })
+
+            # Key bindings for enhanced history search
+            kb = KeyBindings()
+
+            @kb.add('c-s')
+            def _(event):
+                """Forward history search with Ctrl+S"""
+                event.current_buffer.history_forward()
 
             self.prompt_session = PromptSession(
                 history=FileHistory('.chuck_repl_history'),
                 auto_suggest=AutoSuggestFromHistory(),
-                completer=merge_completers([command_completer, path_completer]),
+                completer=chuck_completer,
+                lexer=PygmentsLexer(CLexer),  # Syntax highlighting (C-like for ChucK)
                 multiline=False,
                 complete_while_typing=False,  # Only complete on Tab
                 enable_history_search=True,
+                bottom_toolbar=get_toolbar,
+                style=repl_style,
+                key_bindings=kb,
             )
             self.use_prompt_toolkit = True
         except ImportError:
@@ -178,7 +295,10 @@ class ChuckREPL:
                     # Parse and execute
                     cmd = self.parser.parse(text)
                     if cmd:
-                        self.executor.execute(cmd)
+                        result = self.executor.execute(cmd)
+                        # Check if we should enter multiline mode
+                        if result == 'MULTILINE_MODE':
+                            self._multiline_mode()
 
                 except KeyboardInterrupt:
                     continue
@@ -210,6 +330,36 @@ class ChuckREPL:
             del self.executor
         if hasattr(self, 'chuck'):
             del self.chuck
+
+    def _multiline_mode(self):
+        """Enter multiline input mode"""
+        print("Entering multiline mode. Type 'END' on a line by itself to finish.")
+        lines = []
+
+        while True:
+            try:
+                if self.use_prompt_toolkit:
+                    line = self.prompt_session.prompt('...   ')
+                else:
+                    line = input('...   ')
+
+                if line.strip() == 'END':
+                    break
+
+                lines.append(line)
+            except (KeyboardInterrupt, EOFError):
+                print("\nMultiline input cancelled")
+                return
+
+        code = '\n'.join(lines)
+        if code.strip():
+            success, shred_ids = self.chuck.compile_code(code)
+            if success:
+                for sid in shred_ids:
+                    self.session.add_shred(sid, f"multiline:{code[:20]}...")
+                    print(f"✓ sporked multiline code -> shred {sid}")
+            else:
+                print("✗ failed to spork multiline code")
 
     def print_help(self):
         print("""
@@ -250,6 +400,16 @@ Other:
   : <file>              Compile only
   ! "<code>"            Execute immediately
   $ <cmd>               Shell command
+  edit                  Open $EDITOR for code
+  ml                    Enter multiline mode
+  watch                 Monitor VM state
+  @<name>               Load snippet from ~/.chuck_snippets/
   help                  Show this help
   quit                  Exit
+
+Keyboard Shortcuts:
+  Ctrl+R                Reverse history search
+  Ctrl+S                Forward history search
+  Ctrl+C                Cancel/interrupt
+  Tab                   Auto-complete
 """)

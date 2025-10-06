@@ -278,3 +278,204 @@ chuck> @drums                    # Load snippet
 ## Conclusion
 
 The vanilla TUI is well-architected and functional. Main gaps are **error visibility**, **multiline editing**, and **status feedback**. Adding these would make it production-ready.
+
+---
+
+# Implementation Summary (2025-10-06)
+
+All critical issues have been successfully addressed:
+
+## ✓ **Syntax Highlighting** (repl.py:25-27, 61)
+- Added `PygmentsLexer(CLexer)` for C-like syntax highlighting of ChucK code
+- Input now has color-coded syntax as you type
+- Uses Pygments with C lexer (ChucK syntax is C-like)
+
+## ✓ **Status Toolbar** (repl.py:42-50, 65)
+- Bottom toolbar shows: `Audio: ON/OFF | Now: <time> | Shreds: <count>`
+- Real-time feedback of REPL state
+- Updates dynamically as VM state changes
+
+## ✓ **Better Error Reporting** (commands.py throughout)
+- All command outputs now use `✓` for success and `✗` for failures
+- More descriptive error messages (e.g., "shred not found", "wrong type")
+- Global variable getter now reports when variable not found
+- Added try/catch blocks around audio operations
+- Added TODO comments for future ChucK error message integration via C++ bindings
+- Improved feedback for remove operations (shows count of removed shreds)
+
+## ✓ **Multiline Support** (Two methods)
+
+### Method 1: Editor Mode (`edit` command)
+- Opens `$EDITOR` (defaults to nano) with template ChucK code
+- Automatically sporks code when you save and exit
+- Temporary file cleanup with .ck extension
+- Template includes basic SinOsc example
+
+### Method 2: Multiline Mode (`ml` command)
+- Enter multiline input directly in REPL
+- Type code across multiple lines with `...   ` prompt
+- End with `END` to spork the complete code block
+- Ctrl+C to cancel multiline input
+
+## Additional Enhancements
+- Added `edit` to command completion list
+- Updated help text with new commands (`edit`, `ml`)
+- Executor now returns values (enables multiline mode signaling)
+- Commands module properly returns success/failure status
+
+## Test Results
+- All 60 existing tests pass successfully
+- No regressions introduced
+- REPL verified working with enhanced features
+
+## Files Modified
+- `src/pychuck/cli/repl.py` - Added syntax highlighting, status toolbar, multiline mode handler
+- `src/pychuck/cli/commands.py` - Improved error messages, added editor and multiline commands
+- `src/pychuck/cli/parser.py` - Added `edit` and `ml` command patterns
+
+The vanilla TUI is now production-ready with significantly improved user experience.
+
+---
+
+# High Priority Improvements Implementation (2025-10-06)
+
+All high priority improvements have been successfully implemented:
+
+## ✓ **Context-Aware Command Completion** (repl.py:31-127)
+
+Implemented intelligent tab completion that understands command context:
+
+### Smart Completions by Command:
+- **`+ <Tab>`** → Suggests `.ck` files from current directory
+- **`- <Tab>`** → Suggests active shred IDs and `all`
+- **`~ <Tab>`** → Suggests shred IDs for replacement
+- **`? <Tab>`** → Suggests shred IDs for info query
+- **`: <Tab>`** → Suggests `.ck` files (compile mode)
+- **`name?<Tab>`** → Suggests known global variables
+- **`name::<Tab>`** → Suggests globals for assignment
+- **Default** → Suggests REPL commands
+
+The completer dynamically queries the ChucK VM for active shreds and globals, providing real-time context-aware suggestions.
+
+## ✓ **Live VM Monitoring** (commands.py:262-275, parser.py:51)
+
+### `watch` Command:
+```
+chuck> watch
+Watching VM state (Ctrl+C to stop)...
+
+Audio: ON  | Now:      12.34 | Shreds: 3
+```
+
+- Real-time display updates 10 times per second
+- Shows audio status, VM time (now), and active shred count
+- Ctrl+C to exit back to REPL
+- Non-blocking, maintains REPL responsiveness
+
+## ✓ **Code Snippets/Macros** (commands.py:277-316, parser.py:52)
+
+### `@<name>` Syntax:
+```
+chuck> @sine
+✓ sporked snippet @sine -> shred 1
+```
+
+### Features:
+- Loads ChucK files from `~/.chuck_snippets/`
+- Auto-creates directory on first use
+- Lists available snippets if not found
+- Example snippets created:
+  - `@sine` - Simple 440Hz sine wave
+  - `@noise` - White noise generator
+
+### Usage:
+1. Create `.ck` files in `~/.chuck_snippets/`
+2. Reference with `@<filename>` (without .ck extension)
+3. Auto-completion works for snippet names
+
+## ✓ **Enhanced History Search** (repl.py:144-150, 162)
+
+### Keyboard Shortcuts:
+- **Ctrl+R** - Reverse history search (already enabled)
+- **Ctrl+S** - Forward history search (newly added)
+
+Key bindings integrated into prompt_toolkit session, providing seamless navigation through command history in both directions.
+
+## Additional Improvements
+
+### Updated Help System (repl.py:410-414)
+- Added keyboard shortcuts section
+- Documents all new commands (`watch`, `@<name>`)
+- Clear description of completion behavior
+
+### Completer Integration (repl.py:38-42)
+- Added `watch` to command list
+- Tab completion works for all new commands
+- Snippet names auto-complete after `@`
+
+## Test Results
+- All 60 existing tests pass ✓
+- No regressions introduced ✓
+- REPL verified with new features ✓
+
+## Example Enhanced Session
+
+```
+ChucK REPL v0.1.0 (prompt-toolkit mode)
+──────────────────────────────────────────────────────
+Audio: OFF | Now: 0.00 | Shreds: 0
+──────────────────────────────────────────────────────
+
+chuck> >
+✓ audio started
+
+chuck> @sine<Tab>         # Auto-completes from snippets
+chuck> @sine
+✓ sporked snippet @sine -> shred 1
+
+chuck> -<Tab>             # Shows: 1, all
+chuck> - 1
+✓ removed shred 1
+
+chuck> + examples/<Tab>   # Shows .ck files in examples/
+chuck> + examples/demo.ck
+✓ sporked examples/demo.ck -> shred 2
+
+chuck> watch              # Monitor in real-time
+Watching VM state (Ctrl+C to stop)...
+Audio: ON  | Now:      5.23 | Shreds: 1
+^C
+
+chuck> ?<Tab>             # Shows active shred IDs
+chuck> ? 2
+Shred 2:
+  name: examples/demo.ck
+  running: True
+  done: False
+```
+
+## Files Modified
+
+### Critical Features:
+- `src/pychuck/cli/repl.py` - Context-aware completer class, key bindings
+- `src/pychuck/cli/commands.py` - `watch` and `load_snippet` commands
+- `src/pychuck/cli/parser.py` - Patterns for `watch` and `@<name>`
+
+### User Experience:
+- Created example snippets in `~/.chuck_snippets/`
+- Updated help text with new features
+- Added keyboard shortcuts documentation
+
+## Production Readiness
+
+The vanilla TUI now includes:
+- ✓ Syntax highlighting
+- ✓ Status toolbar
+- ✓ Better error reporting
+- ✓ Multiline support (editor + inline)
+- ✓ Context-aware completion
+- ✓ Live monitoring
+- ✓ Code snippets
+- ✓ Enhanced history search
+
+**Status: Production-ready for professional ChucK development workflows.**

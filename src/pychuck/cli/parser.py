@@ -46,6 +46,10 @@ class CommandParser:
             (r'^:\s+(.+\.ck)$', self._compile_file),
             (r'^!\s+"([^"]+)"$', self._exec_code),
             (r'^\$\s+(.+)$', self._shell),
+            (r'^edit$', self._open_editor),
+            (r'^ml$', self._multiline),
+            (r'^watch$', self._watch),
+            (r'^@(\w+)$', self._load_snippet),
         ]
 
     def parse(self, text: str) -> Optional[Command]:
@@ -130,6 +134,18 @@ class CommandParser:
 
     def _shell(self, m):
         return Command('shell', {'cmd': m.group(1)})
+
+    def _open_editor(self, m):
+        return Command('open_editor', {})
+
+    def _multiline(self, m):
+        return Command('multiline', {})
+
+    def _watch(self, m):
+        return Command('watch', {})
+
+    def _load_snippet(self, m):
+        return Command('load_snippet', {'name': m.group(1)})
 
     def _parse_value(self, s):
         """Parse value from string"""
