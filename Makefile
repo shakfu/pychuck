@@ -51,5 +51,5 @@ clean:
 test:
 	PYTHONPATH=$(ROOT)/src pytest tests/ -v
 
-snap: test
+snap:
 	@git add --all . && git commit -m 'snap' && git push

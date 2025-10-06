@@ -3,9 +3,11 @@
 pychuck command-line interface
 
 Usage:
-    python -m pychuck tui              # Launch TUI REPL
-    python -m pychuck version          # Show version
-    python -m pychuck info             # Show ChucK info
+    python -m pychuck tui                    # Launch TUI REPL
+    python -m pychuck tui --start-audio      # Launch REPL with audio started
+    python -m pychuck tui --no-smart-enter   # Launch REPL without smart Enter
+    python -m pychuck version                # Show version
+    python -m pychuck info                   # Show ChucK info
 """
 import sys
 import argparse
@@ -20,6 +22,10 @@ def main():
 
     # tui subcommand
     tui_parser = subparsers.add_parser('tui', help='Launch interactive REPL')
+    tui_parser.add_argument('--start-audio', action='store_true',
+                           help='Start audio automatically on REPL startup')
+    tui_parser.add_argument('--no-smart-enter', action='store_true',
+                           help='Disable smart Enter mode (always require Esc+Enter to submit)')
 
     # version subcommand
     version_parser = subparsers.add_parser('version', help='Show version information')
@@ -31,7 +37,8 @@ def main():
 
     if args.command == 'tui':
         from .cli.tui import main as tui_main
-        tui_main()
+        tui_main(start_audio=args.start_audio,
+                smart_enter=not args.no_smart_enter)
     elif args.command == 'version':
         from . import version
         print(f"pychuck version: 0.1.1")

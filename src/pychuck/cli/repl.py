@@ -10,11 +10,12 @@ from .commands import CommandExecutor
 from .paths import get_history_file, ensure_pychuck_directories
 
 class ChuckREPL:
-    def __init__(self):
+    def __init__(self, smart_enter=True):
         self.chuck = ChucK()
         self.session = REPLSession(self.chuck)
         self.parser = CommandParser()
         self.executor = CommandExecutor(self.session)
+        self.smart_enter = smart_enter  # Enable smart Enter behavior
 
         # Import prompt_toolkit (now a required dependency)
         from prompt_toolkit import PromptSession
@@ -46,7 +47,7 @@ class ChuckREPL:
                 self.commands = [
                     '+', '-', '~', '?', '?g', '?a',
                     'clear', 'reset', 'cls', '>', '||', 'X', '.',
-                    'all', '$', ':', '!', 'help', 'quit', 'exit', 'edit', 'ml', 'watch'
+                    'all', '$', ':', '!', 'help', 'quit', 'exit', 'edit', 'watch'
                 ]
 
             def get_completions(self, document, complete_event):
@@ -151,7 +152,7 @@ class ChuckREPL:
             'prompt-chuck': '#00ff00',     # green for =>
         })
 
-        # Key bindings for enhanced history search
+        # Key bindings for enhanced history search and multiline
         kb = KeyBindings()
 
         @kb.add('c-s')
@@ -162,12 +163,58 @@ class ChuckREPL:
         # Ensure pychuck directories exist
         ensure_pychuck_directories()
 
+        # Prompt continuation for multiline input
+        def get_continuation(width, line_number, is_soft_wrap):
+            return '... ' if line_number > 0 else ''
+
+        # Smart multiline filter - determines if we should stay in multiline mode
+        from prompt_toolkit.filters import Condition
+        from prompt_toolkit.application import get_app
+
+        @Condition
+        def should_continue_multiline():
+            if not self.smart_enter:
+                return True  # Always multiline, require Esc+Enter/Ctrl+Enter
+
+            # Get current buffer text
+            app = get_app()
+            text = app.current_buffer.text
+
+            # If there's already a newline, we're in multiline mode
+            if '\n' in text:
+                return True
+
+            # Single line - check if it's a REPL command
+            text_stripped = text.strip()
+            if not text_stripped:
+                return False
+
+            # Known single-line commands should submit on Enter
+            single_line_cmds = [
+                'quit', 'exit', 'q', 'help', 'clear', 'reset', 'cls',
+                'watch', '?', '?g', '?a', '.', '>', '||', 'X'
+            ]
+            if text_stripped in single_line_cmds:
+                return False  # Don't continue, accept on Enter
+
+            # Patterns that start REPL commands
+            if text_stripped.startswith(('+', '-', '~', '?', ':', '!', '$', '@', 'edit')):
+                return False  # REPL command, accept on Enter
+
+            # If it contains ChucK code markers, stay multiline
+            if any(marker in text_stripped for marker in ['=>', ';', '{']):
+                return True  # Likely ChucK code, require Esc+Enter
+
+            # Default: single-line input without ChucK markers, accept on Enter
+            return False
+
         self.prompt_session = PromptSession(
             history=FileHistory(str(get_history_file())),
             auto_suggest=AutoSuggestFromHistory(),
             completer=chuck_completer,
             lexer=PygmentsLexer(lexer_class),  # Syntax highlighting (ChucK or C-like)
-            multiline=False,
+            multiline=should_continue_multiline,  # Dynamic multiline based on content
+            prompt_continuation=get_continuation,  # Show ... for continuation lines
             complete_while_typing=False,  # Only complete on Tab
             enable_history_search=True,
             bottom_toolbar=get_toolbar,
@@ -187,10 +234,23 @@ class ChuckREPL:
         self.chuck.set_chout_callback(lambda msg: print(f"[chout] {msg}", end=''))
         self.chuck.set_cherr_callback(lambda msg: print(f"[cherr] {msg}", end='', file=sys.stderr))
 
-    def run(self):
-        """Main REPL loop"""
+    def run(self, start_audio=False):
+        """Main REPL loop
+
+        Args:
+            start_audio: If True, start audio automatically on startup
+        """
         try:
             self.setup()
+
+            # Start audio if requested
+            if start_audio:
+                from .. import start_audio as start_audio_func
+                try:
+                    start_audio_func(self.chuck)
+                    self.session.audio_running = True
+                except Exception as e:
+                    print(f"Warning: Could not start audio: {e}", file=sys.stderr)
 
             # Clear screen
             sys.stdout.write('\033[2J\033[H')  # Clear screen and move cursor to home
@@ -203,7 +263,8 @@ class ChuckREPL:
             sys.stdout.write('\033[?1006l')  # Disable SGR mouse mode
             sys.stdout.flush()
 
-            print("PyChucK REPL v0.1.1")
+            audio_status = " (audio started)" if start_audio and self.session.audio_running else ""
+            print(f"PyChucK REPL v0.1.1{audio_status}")
             print("Type 'help' for commands, 'quit' to exit\n")
 
             while True:
@@ -227,10 +288,18 @@ class ChuckREPL:
                     # Parse and execute
                     cmd = self.parser.parse(text)
                     if cmd:
-                        result = self.executor.execute(cmd)
-                        # Check if we should enter multiline mode
-                        if result == 'MULTILINE_MODE':
-                            self._multiline_mode()
+                        self.executor.execute(cmd)
+                    else:
+                        # If not a recognized command, treat as ChucK code
+                        # Check if it looks like ChucK code (contains =>, ;, or multiline)
+                        if '\n' in text or '=>' in text or ';' in text or '{' in text:
+                            success, shred_ids = self.chuck.compile_code(text)
+                            if success:
+                                for sid in shred_ids:
+                                    self.session.add_shred(sid, f"code:{text[:20]}...")
+                                    print(f"✓ sporked code -> shred {sid}")
+                            else:
+                                print("✗ failed to compile code")
 
                 except KeyboardInterrupt:
                     continue
@@ -262,33 +331,6 @@ class ChuckREPL:
             del self.executor
         if hasattr(self, 'chuck'):
             del self.chuck
-
-    def _multiline_mode(self):
-        """Enter multiline input mode"""
-        print("Entering multiline mode. Type 'END' on a line by itself to finish.")
-        lines = []
-
-        while True:
-            try:
-                line = self.prompt_session.prompt('...   ')
-
-                if line.strip() == 'END':
-                    break
-
-                lines.append(line)
-            except (KeyboardInterrupt, EOFError):
-                print("\nMultiline input cancelled")
-                return
-
-        code = '\n'.join(lines)
-        if code.strip():
-            success, shred_ids = self.chuck.compile_code(code)
-            if success:
-                for sid in shred_ids:
-                    self.session.add_shred(sid, f"multiline:{code[:20]}...")
-                    print(f"✓ sporked multiline code -> shred {sid}")
-            else:
-                print("✗ failed to spork multiline code")
 
     def print_help(self):
         print("""
@@ -333,15 +375,23 @@ Other:
   ! "<code>"            Execute immediately
   $ <cmd>               Shell command
   edit                  Open $EDITOR for code
-  ml                    Enter multiline mode
   watch                 Monitor VM state
   @<name>               Load snippet from ~/.pychuck/snippets/
   help                  Show this help
   quit                  Exit
+
+Multiline Input (Smart Enter Mode):
+  Enter on REPL commands    Submit immediately (quit, help, +, -, etc.)
+  Enter on ChucK code       Insert newline (continue editing)
+  Esc+Enter                 Submit code (always works)
 
 Keyboard Shortcuts:
   Ctrl+R                Reverse history search
   Ctrl+S                Forward history search
   Ctrl+C                Cancel/interrupt
   Tab                   Auto-complete
+
+CLI Options:
+  --start-audio         Start audio automatically on REPL startup
+  --no-smart-enter      Disable smart Enter mode (always require Esc+Enter)
 """)

@@ -50,7 +50,6 @@ class CommandParser:
             (r'^!\s+"([^"]+)"$', self._exec_code),
             (r'^\$\s+(.+)$', self._shell),
             (r'^edit$', self._open_editor),
-            (r'^ml$', self._multiline),
             (r'^watch$', self._watch),
             (r'^@(\w+)$', self._load_snippet),
         ]
@@ -61,7 +60,9 @@ class CommandParser:
             if match:
                 return handler(match)
 
-        print(f"Unknown command: {text}")
+        # Don't print error if it looks like ChucK code (will be handled by REPL)
+        if not ('\n' in text or '=>' in text or ';' in text or '{' in text):
+            print(f"Unknown command: {text}")
         return None
 
     def _spork_file(self, m):
@@ -143,9 +144,6 @@ class CommandParser:
 
     def _open_editor(self, m):
         return Command('open_editor', {})
-
-    def _multiline(self, m):
-        return Command('multiline', {})
 
     def _watch(self, m):
         return Command('watch', {})

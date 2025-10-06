@@ -49,16 +49,28 @@ make test
 
 ### Command-Line Interface
 
-pychuck includes an interactive REPL:
+pychuck includes an interactive REPL with smart multiline editing:
 
 ```bash
 # Launch the interactive REPL
 python -m pychuck tui
+
+# Start with audio enabled
+python -m pychuck tui --start-audio
+
+# Disable smart Enter mode
+python -m pychuck tui --no-smart-enter
 ```
 
-The REPL uses `prompt_toolkit` for tab completion of commands and `.ck` files. Features command history, auto-suggest, case-insensitive completion, and ChucK syntax highlighting.
+**Features:**
+- **Smart Enter mode**: Enter submits REPL commands immediately, but allows multiline ChucK code editing
+- **ChucK syntax highlighting**: Full lexer for ChucK language
+- **Intelligent code detection**: Automatically compiles multiline ChucK code
+- **Tab completion**: Commands and `.ck` files with context-aware suggestions
+- **Command history**: Persistent history with Ctrl+R search
+- **Colored prompt**: `[=>]` matches ChucK logo styling
 
-Supports ChucK REPL commands for shred management, audio control, global variables, and events. Type `help` in the REPL for command reference.
+The REPL supports ChucK commands for shred management, audio control, global variables, and events. Type `help` in the REPL for command reference.
 
 ### Real-Time Audio
 

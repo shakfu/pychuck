@@ -43,6 +43,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Colored prompt `[=>]` with orange brackets and green chuck operator
   - Screen clears on REPL startup for clean interface
   - Prompt updated to `[=>]` matching ChucK logo
+  - **Smart Enter mode (enabled by default)**:
+    - Enter on REPL commands (quit, help, +, -, etc.) submits immediately
+    - Enter on ChucK code inserts newline (multiline editing)
+    - Esc+Enter always submits code
+    - Continuation prompt shows `...` for multiline input
+  - **Direct ChucK code compilation** - Multiline code automatically detected and compiled
+  - Auto-detection based on ChucK markers (=>, ;, {, newlines)
+  - No need for special commands or mode switching
 
 - **Documentation**:
   - `docs/PYCHUCK_HOME.md` - Complete guide to `~/.pychuck/` directory structure
@@ -60,14 +68,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 - **REPL Improvements**:
   - REPL version display updated to show "PyChucK REPL v0.1.1"
   - Help text updated with `cls` command under "Screen:" section
-  - Tab completion includes `cls` command
+  - Help text updated with "Multiline Input (Smart Enter Mode):" section
+  - Tab completion includes `cls` command (removed `ml`)
   - README.md mentions ChucK syntax highlighting feature
   - **prompt-toolkit is now a required dependency** (no longer optional)
   - Simplified REPL initialization by removing readline/libedit fallback code
   - REPL mode display simplified (removed mode indicator)
+  - **Multiline editing enabled by default** (no special mode needed)
+  - **Smart Enter mode**: Context-aware Enter behavior
+  - Added prompt continuation (`...`) for multiline input
+  - Auto-detection of ChucK code (checks for `=>`, `;`, `{`, or newlines)
+  - Parser suppresses "Unknown command" for ChucK code patterns
+  - `smart_enter` parameter in ChuckREPL constructor (defaults to True)
 
-- **Command-line interface simplified**:
-  - `python -m pychuck tui` now launches vanilla REPL directly (no flags)
+- **Command-line interface**:
+  - `python -m pychuck tui` now launches vanilla REPL directly
+  - Added `--start-audio` flag to automatically start audio on REPL startup
+  - Added `--no-smart-enter` flag to disable smart Enter mode
   - Removed `--rich`, `--simple`, `--basic` command-line flags
   - `tui.py` simplified to only launch vanilla REPL
   - Updated README.md to reflect vanilla REPL as sole interface
@@ -95,15 +112,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Removed conditional input prompt logic
   - Simplified multiline mode to only use prompt-toolkit
 
+- **Multiline mode command removed**:
+  - Removed `ml` command (multiline mode is now always enabled)
+  - Removed `_multiline_mode()` method from REPL
+  - Removed `_cmd_multiline()` from command executor
+  - Removed multiline pattern from command parser
+  - Removed `ml` from tab completion list
+
 ### Technical Details
 
 - All 76 tests pass (60 original + 16 lexer tests)
 - ChucK lexer follows Pygments best practices (RegexLexer)
 - Colored prompt uses HTML formatting for prompt_toolkit
+- Smart Enter mode uses `@Condition` decorator for dynamic multiline behavior
 - Path management provides forward compatibility for sessions, logs, projects, config
 - Migration guide included in `docs/PYCHUCK_HOME.md`
-- prompt-toolkit is imported directly (no longer in try-except block)
-- Pygments is a dependency of prompt-toolkit, so no need to declare it separately
+- prompt-toolkit is now a required dependency (imported directly, no fallbacks)
+- Pygments is a dependency of prompt_toolkit, so no need to declare it separately
+
+### Summary
+
+Version 0.1.3 represents a major REPL overhaul focused on user experience:
+
+**Key Improvements:**
+1. **Smart multiline editing** - Context-aware Enter behavior eliminates mode switching
+2. **ChucK syntax highlighting** - Full Pygments lexer for ChucK language
+3. **Automatic code detection** - ChucK code is compiled, commands are executed
+4. **Unified directory structure** - All user data in `~/.pychuck/`
+5. **Required prompt-toolkit** - Simplified codebase, better UX
+6. **CLI options** - `--start-audio` and `--no-smart-enter` flags
+
+The REPL now provides a modern, intuitive interface for both quick REPL commands and multiline ChucK programming.
 
 ---
 

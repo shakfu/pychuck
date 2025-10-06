@@ -260,10 +260,6 @@ class CommandExecutor:
             except:
                 pass
 
-    def _cmd_multiline(self, args):
-        # Signal to REPL to enter multiline mode
-        return 'MULTILINE_MODE'
-
     def _cmd_watch(self, args):
         """Monitor VM state continuously"""
         import time
