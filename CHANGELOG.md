@@ -13,6 +13,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ---
 
+## [Unreleased]
+
+### Removed
+
+- **Textual/Rich TUI implementation removed**:
+  - Removed `tui_rich.py`, `tui_simple.py`, `tui_basic.py` implementations
+  - Removed `tui_rich.tcss` stylesheet
+  - Removed `widgets/` directory and all custom widgets
+  - Removed `test_textual_minimal.py` test file
+  - Removed textual-related documentation files:
+    - `docs/dev/DEBUG_BLACK_SCREEN.md`
+    - `docs/dev/MOUSE_FIX.md`
+    - `docs/dev/RICH_TUI_IMPROVEMENTS.md`
+    - `docs/dev/TUI_README.md`
+
+### Changed
+
+- **Command-line interface simplified**:
+  - `python -m pychuck tui` now launches vanilla REPL directly (no flags)
+  - Removed `--rich`, `--simple`, `--basic` command-line flags
+  - `tui.py` simplified to only launch vanilla REPL
+  - Updated README.md to reflect vanilla REPL as sole interface
+  - Vanilla REPL uses `prompt_toolkit` or `readline` for tab completion
+
+### Technical Details
+
+- Retained vanilla REPL implementation in `cli/repl.py`
+- All 60 tests continue to pass
+- No changes to core pychuck bindings or ChucK functionality
+
+---
+
 ## [0.1.2]
 
 ### Added

@@ -3,7 +3,7 @@
 pychuck command-line interface
 
 Usage:
-    python -m pychuck tui [--rich]     # Launch TUI REPL
+    python -m pychuck tui              # Launch TUI REPL
     python -m pychuck version          # Show version
     python -m pychuck info             # Show ChucK info
 """
@@ -20,21 +20,6 @@ def main():
 
     # tui subcommand
     tui_parser = subparsers.add_parser('tui', help='Launch interactive REPL')
-    tui_parser.add_argument(
-        '--rich',
-        action='store_true',
-        help='Use rich TUI interface (requires textual)'
-    )
-    tui_parser.add_argument(
-        '--simple',
-        action='store_true',
-        help='Use simplified TUI (for debugging, requires textual)'
-    )
-    tui_parser.add_argument(
-        '--basic',
-        action='store_true',
-        help='Use basic TUI (no colors, for terminals with issues, requires textual)'
-    )
 
     # version subcommand
     version_parser = subparsers.add_parser('version', help='Show version information')
@@ -46,7 +31,7 @@ def main():
 
     if args.command == 'tui':
         from .cli.tui import main as tui_main
-        tui_main(use_rich=args.rich, use_simple=args.simple, use_basic=args.basic)
+        tui_main()
     elif args.command == 'version':
         from . import version
         print(f"pychuck version: 0.1.0")

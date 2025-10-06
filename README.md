@@ -49,21 +49,16 @@ make test
 
 ### Command-Line Interface
 
-pychuck includes an interactive REPL with two interface options:
+pychuck includes an interactive REPL:
 
 ```bash
-# Vanilla REPL (default) - lightweight with tab completion
+# Launch the interactive REPL
 python -m pychuck tui
-
-# Rich TUI - advanced interface with syntax highlighting (requires textual)
-python -m pychuck tui --rich
 ```
 
-**Vanilla REPL**: Uses `prompt_toolkit` or `readline` for tab completion of commands and `.ck` files. Features command history, auto-suggest, and case-insensitive completion. Best for daily use.
+The REPL uses `prompt_toolkit` or `readline` for tab completion of commands and `.ck` files. Features command history, auto-suggest, and case-insensitive completion.
 
-**Rich TUI**: Full-featured textual interface with syntax highlighting, mouse support, and advanced layout. Requires `pip install pychuck[tui]`. Currently experimental.
-
-Both interfaces support the same ChucK REPL commands for shred management, audio control, global variables, and events. Type `help` in any REPL for command reference.
+Supports ChucK REPL commands for shred management, audio control, global variables, and events. Type `help` in the REPL for command reference.
 
 ### Real-Time Audio
 
