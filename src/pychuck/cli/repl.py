@@ -16,253 +16,165 @@ class ChuckREPL:
         self.parser = CommandParser()
         self.executor = CommandExecutor(self.session)
 
-        # Only use prompt_toolkit if available
+        # Import prompt_toolkit (now a required dependency)
+        from prompt_toolkit import PromptSession
+        from prompt_toolkit.history import FileHistory
+        from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
+        from prompt_toolkit.completion import PathCompleter, merge_completers, WordCompleter, Completer, Completion
+        from prompt_toolkit.key_binding import KeyBindings
+        from prompt_toolkit.lexers import PygmentsLexer
+        from prompt_toolkit.styles import Style
+        from prompt_toolkit.document import Document
+        from prompt_toolkit.formatted_text import HTML
+
+        # Try to import ChucK lexer, fall back to C lexer
         try:
-            from prompt_toolkit import PromptSession
-            from prompt_toolkit.history import FileHistory
-            from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
-            from prompt_toolkit.completion import PathCompleter, merge_completers, WordCompleter, Completer, Completion
-            from prompt_toolkit.key_binding import KeyBindings
-            from prompt_toolkit.lexers import PygmentsLexer
-            from prompt_toolkit.styles import Style
-            from prompt_toolkit.document import Document
-            from prompt_toolkit.formatted_text import HTML
-
-            # Try to import ChucK lexer, fall back to C lexer
-            try:
-                from .chuck_lexer import ChuckLexer
-                lexer_class = ChuckLexer
-            except ImportError:
-                from pygments.lexers.c_cpp import CLexer
-                lexer_class = CLexer
-
-            # Context-aware completer
-            class ChuckCompleter(Completer):
-                def __init__(self, repl_instance):
-                    self.repl = repl_instance
-                    self.path_completer = PathCompleter(
-                        file_filter=lambda filename: filename.endswith('.ck') or os.path.isdir(filename),
-                        expanduser=True
-                    )
-                    self.commands = [
-                        '+', '-', '~', '?', '?g', '?a',
-                        'clear', 'reset', 'cls', '>', '||', 'X', '.',
-                        'all', '$', ':', '!', 'help', 'quit', 'exit', 'edit', 'ml', 'watch'
-                    ]
-
-                def get_completions(self, document, complete_event):
-                    text = document.text.strip()
-
-                    # After '+', suggest .ck files
-                    if text.startswith('+ ') and len(text) > 2:
-                        # Create new document with just the path part
-                        path_text = text[2:].strip()
-                        path_doc = Document(path_text, len(path_text))
-                        for completion in self.path_completer.get_completions(path_doc, complete_event):
-                            yield completion
-
-                    # After '-', suggest shred IDs or 'all'
-                    elif text.startswith('- ') and len(text) > 2:
-                        prefix = text[2:].strip()
-                        # Suggest 'all'
-                        if 'all'.startswith(prefix):
-                            yield Completion('all', start_position=-len(prefix))
-                        # Suggest active shred IDs
-                        try:
-                            for sid in self.repl.session.shreds.keys():
-                                sid_str = str(sid)
-                                if sid_str.startswith(prefix):
-                                    yield Completion(sid_str, start_position=-len(prefix))
-                        except:
-                            pass
-
-                    # After '~', suggest shred IDs
-                    elif text.startswith('~ ') and len(text) > 2:
-                        parts = text[2:].strip()
-                        if ' ' not in parts:  # Still typing shred ID
-                            try:
-                                for sid in self.repl.session.shreds.keys():
-                                    sid_str = str(sid)
-                                    if sid_str.startswith(parts):
-                                        yield Completion(sid_str, start_position=-len(parts))
-                            except:
-                                pass
-
-                    # After '? ', suggest shred IDs
-                    elif text.startswith('? ') and len(text) > 2:
-                        prefix = text[2:].strip()
-                        try:
-                            for sid in self.repl.session.shreds.keys():
-                                sid_str = str(sid)
-                                if sid_str.startswith(prefix):
-                                    yield Completion(sid_str, start_position=-len(prefix))
-                        except:
-                            pass
-
-                    # After '<name>?' or '<name>::', suggest known globals
-                    elif '?' in text and not text.startswith('?'):
-                        prefix = text.split('?')[0]
-                        try:
-                            globals_list = self.repl.chuck.get_all_globals()
-                            for typ, name in globals_list:
-                                if name.startswith(prefix):
-                                    yield Completion(name + '?', start_position=-len(text))
-                        except:
-                            pass
-
-                    elif '::' in text:
-                        prefix = text.split('::')[0]
-                        try:
-                            globals_list = self.repl.chuck.get_all_globals()
-                            for typ, name in globals_list:
-                                if name.startswith(prefix):
-                                    yield Completion(name + '::', start_position=-len(text))
-                        except:
-                            pass
-
-                    # After ': ', suggest .ck files (compile mode)
-                    elif text.startswith(': ') and len(text) > 2:
-                        path_text = text[2:].strip()
-                        path_doc = Document(path_text, len(path_text))
-                        for completion in self.path_completer.get_completions(path_doc, complete_event):
-                            yield completion
-
-                    # Default: suggest commands
-                    else:
-                        for cmd in self.commands:
-                            if cmd.startswith(text):
-                                yield Completion(cmd, start_position=-len(text))
-
-            chuck_completer = ChuckCompleter(self)
-
-            # Create status toolbar function
-            def get_toolbar():
-                try:
-                    audio_status = "ON" if self.session.audio_running else "OFF"
-                    now = self.chuck.now()
-                    shred_count = len(self.session.shreds)
-                    return f"Audio: {audio_status} | Now: {now:.2f} | Shreds: {shred_count}"
-                except:
-                    return "Audio: -- | Now: -- | Shreds: --"
-
-            # Custom style for syntax highlighting and prompt
-            repl_style = Style.from_dict({
-                'bottom-toolbar': '#ffffff bg:#333333',
-                'prompt-bracket': '#ff8800',  # orange for brackets
-                'prompt-chuck': '#00ff00',     # green for =>
-            })
-
-            # Key bindings for enhanced history search
-            kb = KeyBindings()
-
-            @kb.add('c-s')
-            def _(event):
-                """Forward history search with Ctrl+S"""
-                event.current_buffer.history_forward()
-
-            # Ensure pychuck directories exist
-            ensure_pychuck_directories()
-
-            self.prompt_session = PromptSession(
-                history=FileHistory(str(get_history_file())),
-                auto_suggest=AutoSuggestFromHistory(),
-                completer=chuck_completer,
-                lexer=PygmentsLexer(lexer_class),  # Syntax highlighting (ChucK or C-like)
-                multiline=False,
-                complete_while_typing=False,  # Only complete on Tab
-                enable_history_search=True,
-                bottom_toolbar=get_toolbar,
-                style=repl_style,
-                key_bindings=kb,
-            )
-            self.use_prompt_toolkit = True
-            self.prompt_html = HTML  # Store HTML class for later use
+            from .chuck_lexer import ChuckLexer
+            lexer_class = ChuckLexer
         except ImportError:
-            self.use_prompt_toolkit = False
-            # Fall back to readline for basic history support
-            try:
-                import readline
-                import glob
-                self.use_readline = True
+            from pygments.lexers.c_cpp import CLexer
+            lexer_class = CLexer
 
-                # Detect if using libedit (macOS default) vs GNU readline
-                is_libedit = 'libedit' in readline.__doc__ if readline.__doc__ else False
+        # Context-aware completer
+        class ChuckCompleter(Completer):
+            def __init__(self, repl_instance):
+                self.repl = repl_instance
+                self.path_completer = PathCompleter(
+                    file_filter=lambda filename: filename.endswith('.ck') or os.path.isdir(filename),
+                    expanduser=True
+                )
+                self.commands = [
+                    '+', '-', '~', '?', '?g', '?a',
+                    'clear', 'reset', 'cls', '>', '||', 'X', '.',
+                    'all', '$', ':', '!', 'help', 'quit', 'exit', 'edit', 'ml', 'watch'
+                ]
 
-                # Disable bell
-                try:
-                    readline.parse_and_bind('set bell-style none')
-                except:
-                    pass  # May not be supported on all platforms
+            def get_completions(self, document, complete_event):
+                text = document.text.strip()
 
-                # Ensure pychuck directories exist
-                ensure_pychuck_directories()
+                # After '+', suggest .ck files
+                if text.startswith('+ ') and len(text) > 2:
+                    # Create new document with just the path part
+                    path_text = text[2:].strip()
+                    path_doc = Document(path_text, len(path_text))
+                    for completion in self.path_completer.get_completions(path_doc, complete_event):
+                        yield completion
 
-                # Set up history file
-                histfile = str(get_history_file())
-                try:
-                    readline.read_history_file(histfile)
-                    # Default history length
-                    readline.set_history_length(1000)
-                except FileNotFoundError:
-                    pass
+                # After '-', suggest shred IDs or 'all'
+                elif text.startswith('- ') and len(text) > 2:
+                    prefix = text[2:].strip()
+                    # Suggest 'all'
+                    if 'all'.startswith(prefix):
+                        yield Completion('all', start_position=-len(prefix))
+                    # Suggest active shred IDs
+                    try:
+                        for sid in self.repl.session.shreds.keys():
+                            sid_str = str(sid)
+                            if sid_str.startswith(prefix):
+                                yield Completion(sid_str, start_position=-len(prefix))
+                    except:
+                        pass
 
-                # Save history on exit
-                import atexit
-                atexit.register(readline.write_history_file, histfile)
-
-                # Set up tab completion with readline
-                def chuck_completer(text, state):
-                    """Tab completion for ChucK commands and .ck files"""
-                    # Commands
-                    commands = ['+', '-', '~', '?', '?g', '?a',
-                               'clear', 'reset', 'cls', '>', '||', 'X', '.',
-                               'all', '$', ':', '!', 'help', 'quit', 'exit']
-
-                    # Get matches from commands
-                    matches = [cmd for cmd in commands if cmd.startswith(text)]
-
-                    # Also try file completion for .ck files
-                    if '/' in text or '.' in text or text == '':
-                        # Expand ~ and environment variables
-                        expanded = os.path.expanduser(text)
-
-                        # Add glob patterns
-                        file_matches = []
+                # After '~', suggest shred IDs
+                elif text.startswith('~ ') and len(text) > 2:
+                    parts = text[2:].strip()
+                    if ' ' not in parts:  # Still typing shred ID
                         try:
-                            # Match files
-                            file_matches = glob.glob(expanded + '*')
-                            # Filter for .ck files or directories
-                            file_matches = [f for f in file_matches
-                                          if f.endswith('.ck') or os.path.isdir(f)]
-                            # Add trailing slash to directories
-                            file_matches = [f + '/' if os.path.isdir(f) else f
-                                          for f in file_matches]
+                            for sid in self.repl.session.shreds.keys():
+                                sid_str = str(sid)
+                                if sid_str.startswith(parts):
+                                    yield Completion(sid_str, start_position=-len(parts))
                         except:
                             pass
 
-                        matches.extend(file_matches)
-
+                # After '? ', suggest shred IDs
+                elif text.startswith('? ') and len(text) > 2:
+                    prefix = text[2:].strip()
                     try:
-                        return matches[state]
-                    except IndexError:
-                        return None
+                        for sid in self.repl.session.shreds.keys():
+                            sid_str = str(sid)
+                            if sid_str.startswith(prefix):
+                                yield Completion(sid_str, start_position=-len(prefix))
+                    except:
+                        pass
 
-                readline.set_completer(chuck_completer)
+                # After '<name>?' or '<name>::', suggest known globals
+                elif '?' in text and not text.startswith('?'):
+                    prefix = text.split('?')[0]
+                    try:
+                        globals_list = self.repl.chuck.get_all_globals()
+                        for typ, name in globals_list:
+                            if name.startswith(prefix):
+                                yield Completion(name + '?', start_position=-len(text))
+                    except:
+                        pass
 
-                # Configure tab completion based on readline implementation
-                if is_libedit:
-                    # macOS libedit syntax
-                    readline.parse_and_bind('bind ^I rl_complete')
+                elif '::' in text:
+                    prefix = text.split('::')[0]
+                    try:
+                        globals_list = self.repl.chuck.get_all_globals()
+                        for typ, name in globals_list:
+                            if name.startswith(prefix):
+                                yield Completion(name + '::', start_position=-len(text))
+                    except:
+                        pass
+
+                # After ': ', suggest .ck files (compile mode)
+                elif text.startswith(': ') and len(text) > 2:
+                    path_text = text[2:].strip()
+                    path_doc = Document(path_text, len(path_text))
+                    for completion in self.path_completer.get_completions(path_doc, complete_event):
+                        yield completion
+
+                # Default: suggest commands
                 else:
-                    # GNU readline syntax
-                    readline.parse_and_bind('tab: complete')
+                    for cmd in self.commands:
+                        if cmd.startswith(text):
+                            yield Completion(cmd, start_position=-len(text))
 
-                # Enable filename completion characters
-                # Set delimiters so that paths and commands are completed properly
-                readline.set_completer_delims(' \t\n;')
+        chuck_completer = ChuckCompleter(self)
 
-            except ImportError:
-                self.use_readline = False
+        # Create status toolbar function
+        def get_toolbar():
+            try:
+                audio_status = "ON" if self.session.audio_running else "OFF"
+                now = self.chuck.now()
+                shred_count = len(self.session.shreds)
+                return f"Audio: {audio_status} | Now: {now:.2f} | Shreds: {shred_count}"
+            except:
+                return "Audio: -- | Now: -- | Shreds: --"
+
+        # Custom style for syntax highlighting and prompt
+        repl_style = Style.from_dict({
+            'bottom-toolbar': '#ffffff bg:#333333',
+            'prompt-bracket': '#ff8800',  # orange for brackets
+            'prompt-chuck': '#00ff00',     # green for =>
+        })
+
+        # Key bindings for enhanced history search
+        kb = KeyBindings()
+
+        @kb.add('c-s')
+        def _(event):
+            """Forward history search with Ctrl+S"""
+            event.current_buffer.history_forward()
+
+        # Ensure pychuck directories exist
+        ensure_pychuck_directories()
+
+        self.prompt_session = PromptSession(
+            history=FileHistory(str(get_history_file())),
+            auto_suggest=AutoSuggestFromHistory(),
+            completer=chuck_completer,
+            lexer=PygmentsLexer(lexer_class),  # Syntax highlighting (ChucK or C-like)
+            multiline=False,
+            complete_while_typing=False,  # Only complete on Tab
+            enable_history_search=True,
+            bottom_toolbar=get_toolbar,
+            style=repl_style,
+            key_bindings=kb,
+        )
+        self.prompt_html = HTML  # Store HTML class for later use
 
     def setup(self):
         """Initialize ChucK with sensible defaults"""
@@ -291,21 +203,14 @@ class ChuckREPL:
             sys.stdout.write('\033[?1006l')  # Disable SGR mouse mode
             sys.stdout.flush()
 
-            mode = "prompt-toolkit" if self.use_prompt_toolkit else ("readline" if hasattr(self, 'use_readline') and self.use_readline else "basic")
-            print(f"PyChucK REPL v0.1.1 (mode - {mode})")
+            print("PyChucK REPL v0.1.1")
             print("Type 'help' for commands, 'quit' to exit\n")
 
             while True:
                 try:
-                    if self.use_prompt_toolkit:
-                        # For prompt_toolkit, use HTML-like formatting with custom styles
-                        prompt_html = self.prompt_html('<prompt-bracket>[</prompt-bracket><prompt-chuck>=></prompt-chuck><prompt-bracket>]</prompt-bracket> ')
-                        text = self.prompt_session.prompt(prompt_html)
-                    else:
-                        # For basic input, use ANSI color codes
-                        # ANSI colors: \033[38;5;208m = orange, \033[32m = green, \033[0m = reset
-                        colored_prompt = '\033[38;5;208m[\033[32m=>\033[38;5;208m]\033[0m '
-                        text = input(colored_prompt)
+                    # Use HTML-like formatting with custom styles for prompt
+                    prompt_html = self.prompt_html('<prompt-bracket>[</prompt-bracket><prompt-chuck>=></prompt-chuck><prompt-bracket>]</prompt-bracket> ')
+                    text = self.prompt_session.prompt(prompt_html)
 
                     text = text.strip()
 
@@ -365,10 +270,7 @@ class ChuckREPL:
 
         while True:
             try:
-                if self.use_prompt_toolkit:
-                    line = self.prompt_session.prompt('...   ')
-                else:
-                    line = input('...   ')
+                line = self.prompt_session.prompt('...   ')
 
                 if line.strip() == 'END':
                     break

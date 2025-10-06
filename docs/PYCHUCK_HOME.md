@@ -21,8 +21,8 @@ pychuck uses `~/.pychuck/` as its home directory for storing user data, configur
 Stores command history from the pychuck REPL:
 - Persists across sessions
 - Supports Ctrl+R reverse search
-- Supports Ctrl+S forward search (prompt_toolkit only)
-- Maximum 1000 entries (configurable via readline)
+- Supports Ctrl+S forward search
+- Maximum 1000 entries (configurable via prompt_toolkit)
 
 **Managed by:** `src/pychuck/cli/repl.py`
 

@@ -34,7 +34,7 @@ DMG = $(DIST_NAME).dmg
 ZIP = $(DIST_NAME).zip
 
 
-.PHONY: all build clean test
+.PHONY: all build clean test snap
 
 all: build
 
@@ -50,3 +50,6 @@ clean:
 
 test:
 	PYTHONPATH=$(ROOT)/src pytest tests/ -v
+
+snap: test
+	@git add --all . && git commit -m 'snap' && git push

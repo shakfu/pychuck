@@ -62,13 +62,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Help text updated with `cls` command under "Screen:" section
   - Tab completion includes `cls` command
   - README.md mentions ChucK syntax highlighting feature
+  - **prompt-toolkit is now a required dependency** (no longer optional)
+  - Simplified REPL initialization by removing readline/libedit fallback code
+  - REPL mode display simplified (removed mode indicator)
 
 - **Command-line interface simplified**:
   - `python -m pychuck tui` now launches vanilla REPL directly (no flags)
   - Removed `--rich`, `--simple`, `--basic` command-line flags
   - `tui.py` simplified to only launch vanilla REPL
   - Updated README.md to reflect vanilla REPL as sole interface
-  - Vanilla REPL uses `prompt_toolkit` or `readline` for tab completion
 
 ### Removed
 
@@ -87,13 +89,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Removed references to `~/.chuck_snippets/`
   - Removed references to `~/.chuck_repl_history`
 
+- **Readline/libedit fallback code removed**:
+  - Removed ~85 lines of readline/libedit fallback code from `repl.py`
+  - Removed `use_prompt_toolkit` and `use_readline` flags
+  - Removed conditional input prompt logic
+  - Simplified multiline mode to only use prompt-toolkit
+
 ### Technical Details
 
 - All 76 tests pass (60 original + 16 lexer tests)
 - ChucK lexer follows Pygments best practices (RegexLexer)
-- Colored prompt uses HTML formatting for prompt_toolkit, ANSI codes for basic mode
+- Colored prompt uses HTML formatting for prompt_toolkit
 - Path management provides forward compatibility for sessions, logs, projects, config
 - Migration guide included in `docs/PYCHUCK_HOME.md`
+- prompt-toolkit is imported directly (no longer in try-except block)
+- Pygments is a dependency of prompt-toolkit, so no need to declare it separately
 
 ---
 
