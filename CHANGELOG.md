@@ -17,6 +17,82 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ### Added
 
+- **Multi-Tab Editor** (`pychuck edit`):
+  - Full-screen ChucK editor with syntax highlighting
+  - Multi-tab support: Ctrl-T (new), Ctrl-W (close), Ctrl-N/Ctrl-P (navigate)
+  - F5 or Ctrl-R to spork (compile and run current buffer)
+  - F6 to replace running shred with current buffer
+  - Ctrl-O to open files with interactive dialog
+  - Ctrl-S to save files
+  - Ctrl-A to start audio
+  - Tab names show shred IDs after sporking (e.g., `bass-1.ck`)
+  - Project versioning integration
+  - F1/F2/F3 for help/shreds/log windows
+  - Ctrl-Q for clean exit with proper resource cleanup
+  - Implemented in `tui/editor.py` (~410 lines)
+
+- **Project Versioning System** (`tui/project.py`):
+  - Automatic file versioning for livecoding sessions
+  - Versioning scheme: `file.ck` → `file-1.ck` (spork) → `file-1-1.ck` (replace)
+  - Stored in `~/.pychuck/projects/<project_name>/`
+  - Tracks spork and replace operations with shred IDs
+  - Chronological timeline support with modification times
+  - `ProjectVersion` class for parsing and generating versioned filenames
+  - `Project` class for managing project directories and version history
+  - Complete test coverage in `test_project_versioning.py` (10 tests)
+
+- **Shared TUI Base Class** (`tui/common.py`):
+  - `ChuckApplication` base class for editor and REPL
+  - Common key bindings: F1 (help), F2 (shreds), F3 (log), Ctrl-Q (exit)
+  - Reusable UI components: help window, shreds table, log window
+  - Centralized ChucK instance and session management
+  - Proper cleanup with circular reference breaking (no memory leaks)
+
+- **Command-Line Execution Mode** (`pychuck exec`):
+  - Non-interactive file execution from command line
+  - Multiple file support
+  - Duration parameter: `--duration N` runs for N seconds then exits
+  - Silent mode: `--silent` runs without audio (useful for testing)
+  - Custom sample rate: `--srate N`
+  - Custom channel count: `--channels N`
+  - Signal handling for graceful shutdown (Ctrl-C)
+  - Implemented in `cli/executor.py` (~120 lines)
+
+- **Subcommand-Based CLI** (`cli/main.py`):
+  - `pychuck edit [files...] [--project name] [--start-audio]` - Launch editor
+  - `pychuck repl [files...] [--project name] [--start-audio]` - Launch REPL
+  - `pychuck exec <files...> [options]` - Execute files
+  - `pychuck version` - Show version information
+  - `pychuck info` - Show ChucK and pychuck info
+  - `pychuck tui` - Backward compatibility alias for repl
+  - Comprehensive argument parsing with help text
+  - Command handlers in separate module
+  - ~220 lines of clean CLI code
+
+- **Chuck-Style REPL Commands**:
+  - `add <file>` or `+ <file>` - Spork a file as new shred
+  - `remove <id>` or `- <id>` - Remove shred by ID
+  - `remove all` or `- all` - Remove all shreds
+  - `replace <id> <file>` - Replace shred with code from file
+  - `status` - Show VM status (shreds, audio, now time)
+  - `time` - Show current ChucK time
+  - Consistent with chuck executable command style
+  - Updated parser to support word-based commands
+  - Shortcut symbols still supported for compatibility
+
+- **REPL File Loading on Startup**:
+  - Load ChucK files on REPL startup: `pychuck repl file1.ck file2.ck`
+  - Files are automatically sporked before entering interactive mode
+  - Works with project versioning when `--project` specified
+  - Implemented in `tui/repl.py` run() method
+
+- **Test Suite Expansion**:
+  - `test_project_versioning.py` - 10 tests for versioning system
+  - `test_cli.py` - 10 tests for CLI argument parsing
+  - **Total: 93 tests, 100% passing**
+  - Comprehensive coverage of new features
+  - No regressions in existing tests
+
 - **Full-Screen REPL Application**:
   - Converted to full-screen `prompt_toolkit` Application with stable layout
   - Mouse support enabled for scrolling in log/help windows
@@ -110,12 +186,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Now uses `chuck_lang.REPL_COMMANDS` instead of hardcoded list
   - Ensures consistency across all components
 
+- **Shreds Table Display**:
+  - Updated to show parent folder + filename instead of just filename
+  - Widened table from 60 to 78 characters for better readability
+  - Elapsed time column shows time since shred was sporked (not raw VM samples)
+  - Format: `parentfolder/file.ck` with up to 56 characters for name
+
+### Fixed
+
+- **Shreds Table Display Bug**:
+  - Fixed shreds table showing source code instead of filenames (both REPL and editor)
+  - Table now correctly displays filename from `info['name']` instead of `info['source']`
+  - Extracts just filename or parent/filename from full path for cleaner display
+  - Elapsed time calculated correctly from current VM time minus spork time
+
+- **REPL Exit Crash with Audio**:
+  - Fixed segmentation fault when pressing Ctrl-Q with audio running
+  - Cleanup now properly calls `stop_audio()` before `shutdown_audio()`
+  - Added proper error handling for each cleanup step
+  - Shreds are now removed before stopping audio to prevent callback issues
+
+- **Editor File Open Dialog**:
+  - Fixed Ctrl-O crash caused by nested event loop conflict
+  - Implemented proper floating dialog with `CompletionsMenu` support
+  - Tab completion now works like standard shell completion (inserts common prefix first)
+  - Added custom key bindings to prevent Tab from being used for focus navigation
+  - Dialog properly cleans up floats list on close
+
+- **Editor Dynamic Tab Switching**:
+  - Fixed opened files not appearing after Ctrl-O
+  - Layout now uses `DynamicContainer` to update editor content when switching tabs
+  - New tabs are automatically focused after opening
+
 ### Technical Details
 
-- All 76 tests pass
+- All 93 tests pass (73 original + 20 new)
 - ChucK lexer tests verify correct categorization of language elements
 - Completion system preserves REPL command priority
 - `chuck_lang` module provides forward compatibility for language specification updates
+- Zero memory leaks with proper cleanup and circular reference breaking
 
 ## [0.1.3]
 

@@ -247,46 +247,53 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
                 return "No active shreds"
 
             lines = []
-            lines.append("ID    Name                              Time")
-            lines.append("─" * 60)
+            lines.append("ID    Name                                                    Elapsed")
+            lines.append("─" * 78)
+
+            # Get current VM time for elapsed calculation
+            try:
+                current_time = self.chuck.now()
+            except:
+                current_time = 0.0
 
             for shred_id, info in sorted(self.session.shreds.items()):
-                source = info['source']
-                # For file shreds, show just the filename
-                if info['type'] == 'file':
-                    import os
-                    name = os.path.basename(source)
-                else:
-                    # For code shreds, truncate if too long
-                    name = source if len(source) <= 30 else source[:27] + "..."
+                # Extract parent folder + filename from path
+                from pathlib import Path
+                full_name = info['name']
+                try:
+                    path = Path(full_name)
+                    # Show parent/filename if it's a path, otherwise just the name
+                    if path.parent.name:
+                        name = f"{path.parent.name}/{path.name}"
+                    else:
+                        name = path.name
+                except:
+                    name = full_name
+                name = name[:56]  # Wider column for better readability
 
-                # Format ChucK VM time (in samples)
-                chuck_time = info.get('chuck_time', 0.0)
-                # Convert samples to seconds (assuming standard sample rate)
+                # Calculate elapsed time in seconds
+                spork_time = info.get('time', 0.0)
+                elapsed_samples = current_time - spork_time
+                # Get sample rate from ChucK (default 44100)
                 try:
                     sample_rate = self.chuck.get_param_int(PARAM_SAMPLE_RATE)
-                    if sample_rate > 0:
-                        time_seconds = chuck_time / sample_rate
-                    else:
-                        time_seconds = 0
                 except:
-                    time_seconds = 0
+                    sample_rate = 44100
+                elapsed_sec = elapsed_samples / sample_rate if sample_rate > 0 else 0.0
 
                 # Format time display
-                if time_seconds < 1:
-                    time_str = f"{int(chuck_time)}smp"  # Show samples if < 1 second
-                elif time_seconds < 60:
-                    time_str = f"{time_seconds:.2f}s"
-                elif time_seconds < 3600:
-                    mins = int(time_seconds / 60)
-                    secs = time_seconds % 60
+                if elapsed_sec < 60:
+                    time_str = f"{elapsed_sec:.1f}s"
+                elif elapsed_sec < 3600:
+                    mins = int(elapsed_sec / 60)
+                    secs = elapsed_sec % 60
                     time_str = f"{mins}m{secs:04.1f}s"
                 else:
-                    hours = int(time_seconds / 3600)
-                    mins = int((time_seconds % 3600) / 60)
+                    hours = int(elapsed_sec / 3600)
+                    mins = int((elapsed_sec % 3600) / 60)
                     time_str = f"{hours}h{mins:02d}m"
 
-                lines.append(f"{shred_id:<5} {name:<33} {time_str}")
+                lines.append(f"{shred_id:<5} {name:<56} {time_str}")
 
             return "\n".join(lines)
 
@@ -641,14 +648,25 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
     def cleanup(self):
         """Shutdown cleanly"""
         print("\nShutting down...")
-        try:
-            shutdown_audio(500)
-        except:
-            pass  # Audio might not be running
+
+        # Remove all shreds first
         try:
             self.chuck.remove_all_shreds()
-        except:
-            pass
+        except Exception as e:
+            print(f"Warning: Error removing shreds: {e}", file=sys.stderr)
+
+        # Stop audio properly if running
+        if hasattr(self, 'session') and self.session.audio_running:
+            try:
+                stop_audio()  # Stop audio stream first
+            except Exception as e:
+                print(f"Warning: Error stopping audio: {e}", file=sys.stderr)
+
+            try:
+                shutdown_audio(500)  # Then clean up audio resources
+            except Exception as e:
+                print(f"Warning: Error shutting down audio: {e}", file=sys.stderr)
+
         # Break circular references to allow proper garbage collection
         if hasattr(self, 'session'):
             self.session.chuck = None

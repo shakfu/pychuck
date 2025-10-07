@@ -146,9 +146,13 @@ def create_parser():
 
 def cmd_edit(args):
     """Launch the multi-tab editor."""
-    # TODO: Phase 4 - implement editor
-    print("Editor mode not yet implemented. Use 'pychuck repl' for now.")
-    sys.exit(1)
+    from ..tui.editor import main as editor_main
+
+    editor_main(
+        files=args.files,
+        project_name=args.project,
+        start_audio=args.start_audio
+    )
 
 
 def cmd_repl(args):

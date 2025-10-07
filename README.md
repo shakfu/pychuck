@@ -6,7 +6,9 @@ The pychuck library provides interactive control over ChucK, enabling live codin
 
 ## Highlights
 
-- **Professional REPL** - Full-screen terminal interface with syntax highlighting, help windows, and VM output capture
+- **Multi-Tab Editor** - Full-screen ChucK editor with F5 to spork, F6 to replace, project versioning
+- **Professional REPL** - Full-screen terminal interface with Chuck-style commands and syntax highlighting
+- **Project Versioning** - Automatic versioning of livecoding sessions (file.ck → file-1.ck → file-1-1.ck)
 - **Real-Time Audio** - Play ChucK code through your speakers with asynchronous RtAudio playback
 - **File Support** - Load and run `.ck` files directly with absolute path handling
 - **Plugin System** - Use chugins to extend ChucK with effects and instruments
@@ -50,26 +52,101 @@ make test
 
 ### Command-Line Interface
 
-pychuck includes a full-screen interactive REPL with professional features:
+pychuck provides three modes of operation:
+
+#### 1. Multi-Tab Editor (for livecoding)
 
 ```bash
-# Launch the interactive REPL
-python -m pychuck tui
+# Launch the editor
+python -m pychuck edit
+
+# Open specific files in tabs
+python -m pychuck edit bass.ck melody.ck
+
+# Enable project versioning
+python -m pychuck edit --project mymusic
 
 # Start with audio enabled
-python -m pychuck tui --start-audio
+python -m pychuck edit --start-audio --project mymusic
+```
+
+**Editor Features:**
+- Multi-tab editing with ChucK syntax highlighting
+- F5 or Ctrl-R to spork (compile and run current buffer)
+- F6 to replace running shred with current buffer
+- Ctrl-O to open files with interactive dialog (Tab for path completion)
+- Ctrl-S to save files
+- Ctrl-T for new tab, Ctrl-W to close tab
+- Ctrl-N/Ctrl-P (or Ctrl-PageDown/PageUp) to navigate tabs
+- Tab names show shred IDs after sporking (e.g., `bass-1.ck`)
+- Project versioning: file.ck → file-1.ck → file-1-1.ck
+- F1/F2/F3 for help/shreds/log windows
+- Ctrl-Q to exit
+
+#### 2. Interactive REPL
+
+```bash
+# Launch the REPL
+python -m pychuck repl
+
+# Load files on startup
+python -m pychuck repl bass.ck melody.ck
+
+# Enable project versioning
+python -m pychuck repl --project mymusic
+
+# Start with audio enabled
+python -m pychuck repl --start-audio
 
 # Disable smart Enter mode
-python -m pychuck tui --no-smart-enter
+python -m pychuck repl --no-smart-enter
 
-# Hide topbar (can toggle with F2)
-python -m pychuck tui --no-sidebar
+# Hide sidebar (can toggle with F2)
+python -m pychuck repl --no-sidebar
+```
+
+**REPL Commands:**
+- `add <file>` or `+ <file>` - Spork a file
+- `remove <id>` or `- <id>` - Remove a shred
+- `remove all` or `- all` - Remove all shreds
+- `replace <id> <file>` - Replace shred with file
+- `status` - Show VM status
+- `time` - Show ChucK time
+- Type `help` or press F1 for full command reference
+
+#### 3. Command-Line Execution
+
+```bash
+# Execute ChucK files from command line
+python -m pychuck exec myfile.ck
+
+# Run multiple files
+python -m pychuck exec bass.ck melody.ck
+
+# Run for 10 seconds then exit
+python -m pychuck exec myfile.ck --duration 10
+
+# Silent mode (no audio)
+python -m pychuck exec myfile.ck --silent
+
+# Custom sample rate
+python -m pychuck exec myfile.ck --srate 48000
+```
+
+#### 4. Version and Info
+
+```bash
+# Show version
+python -m pychuck version
+
+# Show ChucK and pychuck info
+python -m pychuck info
 ```
 
 **Interface Features:**
 - **Full-screen layout**: Professional terminal UI with multiple display areas
 - **Live topbar**: Minimal display showing shred IDs `[1] [2] [3]`
-- **Shreds table**: Detailed shred information table (F2) with ID, name, and ChucK VM time at launch
+- **Shreds table**: Detailed shred information table (F2) with ID, name (folder/file), and elapsed time since spork
 - **Error display bar**: Red error bar shows command errors without disrupting layout
 - **Help window**: Built-in command reference (toggle with F1)
 - **Log window**: Scrollable ChucK VM output capture (toggle with Ctrl+L)
@@ -85,17 +162,33 @@ python -m pychuck tui --no-sidebar
 - **Command history**: Persistent history with Ctrl+R search
 - **Colored prompt**: `[=>]` matches ChucK logo styling
 
-**Keyboard Shortcuts:**
+**Common Keyboard Shortcuts (Editor & REPL):**
 - `F1` - Toggle help window
-- `F2` - Toggle shreds table (detailed view with ID, name, time)
-- `Ctrl+L` - Toggle log window (ChucK VM output)
-- `Ctrl+R` - Start audio playback
-- `Ctrl+S` - Stop audio playback
-- `Ctrl+C` - Exit REPL
+- `F2` - Toggle shreds table (detailed view with ID, folder/filename, elapsed time)
+- `F3` - Toggle log window (ChucK VM output)
+- `Ctrl+Q` - Exit application
 - `Tab` - Command and ChucK code completion
 - `Up/Down` - Navigate command history
 
-The REPL supports ChucK commands for shred management, audio control, global variables, and events. Press F1 or type `help` for command reference.
+### Project Versioning
+
+When using `--project <name>`, pychuck automatically versions your files as you livecode:
+
+```
+~/.pychuck/projects/mymusic/
+  bass.ck           # Original file
+  bass-1.ck         # After first spork (shred ID 1)
+  bass-1-1.ck       # After first replace of shred 1
+  bass-1-2.ck       # After second replace of shred 1
+  melody-2.ck       # Second file sporked (shred ID 2)
+  melody-2-1.ck     # After replace of shred 2
+```
+
+This creates a complete history of your livecoding session, making it easy to:
+- Review your creative process
+- Recover previous versions
+- Replay session timeline
+- Share reproducible livecoding performances
 
 ### Real-Time Audio
 
