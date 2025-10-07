@@ -15,7 +15,7 @@ class CommandParser:
             (r'^\+\s+"([^"]+)"$', self._spork_code),
             (r'^\+\s+\'([^\']+)\'$', self._spork_code),
             (r'^-\s+all$', self._remove_all),
-            (r'^-\s+(\d+)$', self._remove_shred),
+            (r'^-\s*(\d+)$', self._remove_shred),  # Accept "- 1" or "-1"
             (r'^~\s+(\d+)\s+"([^"]+)"$', self._replace_shred),
 
             # Status
@@ -49,6 +49,7 @@ class CommandParser:
             (r'^:\s+(.+\.ck)$', self._compile_file),
             (r'^!\s+"([^"]+)"$', self._exec_code),
             (r'^\$\s+(.+)$', self._shell),
+            (r'^edit\s*(\d+)$', self._edit_shred),  # Accept "edit 1" or "edit1"
             (r'^edit$', self._open_editor),
             (r'^watch$', self._watch),
             (r'^@(\w+)$', self._load_snippet),
@@ -60,9 +61,8 @@ class CommandParser:
             if match:
                 return handler(match)
 
-        # Don't print error if it looks like ChucK code (will be handled by REPL)
-        if not ('\n' in text or '=>' in text or ';' in text or '{' in text):
-            print(f"Unknown command: {text}")
+        # Return None for potential ChucK code (will be handled by REPL)
+        # Don't generate error for things that look like ChucK code
         return None
 
     def _spork_file(self, m):
@@ -141,6 +141,9 @@ class CommandParser:
 
     def _shell(self, m):
         return Command('shell', {'cmd': m.group(1)})
+
+    def _edit_shred(self, m):
+        return Command('edit_shred', {'id': int(m.group(1))})
 
     def _open_editor(self, m):
         return Command('open_editor', {})

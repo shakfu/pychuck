@@ -26,6 +26,8 @@ def main():
                            help='Start audio automatically on REPL startup')
     tui_parser.add_argument('--no-smart-enter', action='store_true',
                            help='Disable smart Enter mode (always require Esc+Enter to submit)')
+    tui_parser.add_argument('--no-sidebar', action='store_true',
+                           help='Hide topbar showing active shreds (can toggle with F2)')
 
     # version subcommand
     version_parser = subparsers.add_parser('version', help='Show version information')
@@ -38,7 +40,8 @@ def main():
     if args.command == 'tui':
         from .cli.tui import main as tui_main
         tui_main(start_audio=args.start_audio,
-                smart_enter=not args.no_smart_enter)
+                smart_enter=not args.no_smart_enter,
+                show_sidebar=not args.no_sidebar)
     elif args.command == 'version':
         from . import version
         print(f"pychuck version: 0.1.1")

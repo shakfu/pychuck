@@ -2,7 +2,8 @@ import sys
 import os
 from .. import (
     ChucK, start_audio, stop_audio, shutdown_audio,
-    PARAM_SAMPLE_RATE, PARAM_OUTPUT_CHANNELS, PARAM_INPUT_CHANNELS
+    PARAM_SAMPLE_RATE, PARAM_OUTPUT_CHANNELS, PARAM_INPUT_CHANNELS,
+    LOG_NONE
 )
 from ..chuck_lang import REPL_COMMANDS, ALL_IDENTIFIERS
 from .parser import CommandParser
@@ -11,15 +12,17 @@ from .commands import CommandExecutor
 from .paths import get_history_file, ensure_pychuck_directories
 
 class ChuckREPL:
-    def __init__(self, smart_enter=True):
+    def __init__(self, smart_enter=True, show_sidebar=True):
         self.chuck = ChucK()
         self.session = REPLSession(self.chuck)
         self.parser = CommandParser()
         self.executor = CommandExecutor(self.session)
         self.smart_enter = smart_enter  # Enable smart Enter behavior
+        self.show_sidebar = show_sidebar  # Show/hide sidebar
 
         # Import prompt_toolkit (now a required dependency)
-        from prompt_toolkit import PromptSession
+        from prompt_toolkit import Application
+        from prompt_toolkit.buffer import Buffer
         from prompt_toolkit.history import FileHistory
         from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
         from prompt_toolkit.completion import PathCompleter, merge_completers, WordCompleter, Completer, Completion
@@ -27,7 +30,15 @@ class ChuckREPL:
         from prompt_toolkit.lexers import PygmentsLexer
         from prompt_toolkit.styles import Style
         from prompt_toolkit.document import Document
-        from prompt_toolkit.formatted_text import HTML
+        from prompt_toolkit.formatted_text import HTML, ANSI
+        from prompt_toolkit.layout.containers import HSplit, VSplit, Window, ConditionalContainer
+        from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
+        from prompt_toolkit.layout.layout import Layout
+        from prompt_toolkit.layout.dimension import Dimension as D
+        from prompt_toolkit.layout.margins import ScrollbarMargin
+        from prompt_toolkit.filters import Condition
+        from prompt_toolkit.shortcuts import message_dialog
+        from prompt_toolkit.widgets import TextArea
 
         # Try to import ChucK lexer, fall back to C lexer
         try:
@@ -152,8 +163,147 @@ class ChuckREPL:
 
         chuck_completer = ChuckCompleter(self)
 
-        # Create status toolbar function
-        def get_toolbar():
+        # Error message state
+        self.error_message = ""
+
+        # Help window visibility
+        self.show_help_window = False
+
+        # Shreds table window visibility
+        self.show_shreds_window = False
+
+        # Log window visibility and buffer
+        self.show_log_window = False
+        self.log_lines = []
+        self.max_log_lines = 100  # Keep last 100 messages
+
+        # Create topbar content function (simplified to show just IDs)
+        def get_topbar_text():
+            """Generate topbar content showing active shred IDs"""
+            if self.session.shreds:
+                shred_ids = " ".join(f"[{sid}]" for sid in sorted(self.session.shreds.keys()))
+                return f"Shreds: {shred_ids}  (F2: table)"
+            else:
+                return "No active shreds  (F2: table)"
+
+        # Create error bar function
+        def get_error_text():
+            """Show error message if any"""
+            if self.error_message:
+                return f"✗ {self.error_message}"
+            return ""
+
+        # Create help text content
+        help_text = """\
+SHRED MANAGEMENT                        STATUS & INFO
+  + <file.ck>    Spork file               ?         List shreds
+  + "<code>"     Spork code               ? <id>    Shred info
+  - <id>         Remove shred             ?g        List globals
+  - all          Remove all               ?a        Audio info
+  edit <id>      Edit shred               .         Current time
+
+GLOBALS                                 EVENTS
+  <name>::<val>  Set global               <ev>!     Signal event
+  <name>?        Get global               <ev>!!    Broadcast event
+
+AUDIO CONTROL                           VM CONTROL
+  >              Start audio              clear     Clear VM
+  ||             Stop audio               reset     Reset shred ID
+  X              Shutdown                 cls       Clear screen
+
+OTHER COMMANDS                          KEYBOARD SHORTCUTS
+  : <file>       Compile only             F1        Toggle help
+  $ <cmd>        Shell cmd                F2        Shreds table
+  edit           Open editor              Ctrl+L    Toggle log
+  @<name>        Load snippet             Ctrl+R    History search
+                                          Esc+Enter Submit code
+                                          Tab       Auto-complete"""
+
+        # Create help TextArea (non-scrollable, fits exactly)
+        self.help_area = TextArea(
+            text=help_text,
+            read_only=True,
+            scrollbar=False,
+            focusable=False,
+            height=D.exact(20),  # Exact height to fit help text
+            style='class:help-area'
+        )
+
+        # Create log TextArea (scrollable, for VM messages)
+        self.log_area = TextArea(
+            text="",
+            read_only=True,
+            scrollbar=True,
+            focusable=False,
+            height=D(min=0, max=30),  # Scrollable log area
+            style='class:log-area'
+        )
+
+        # Create shreds table function
+        def get_shreds_table():
+            """Generate formatted table of active shreds"""
+            if not self.session.shreds:
+                return "No active shreds"
+
+            lines = []
+            lines.append("ID    Name                              Time")
+            lines.append("─" * 60)
+
+            for shred_id, info in sorted(self.session.shreds.items()):
+                source = info['source']
+                # For file shreds, show just the filename
+                if info['type'] == 'file':
+                    import os
+                    name = os.path.basename(source)
+                else:
+                    # For code shreds, truncate if too long
+                    name = source if len(source) <= 30 else source[:27] + "..."
+
+                # Format ChucK VM time (in samples)
+                chuck_time = info.get('chuck_time', 0.0)
+                # Convert samples to seconds (assuming standard sample rate)
+                try:
+                    sample_rate = self.chuck.get_param_int(PARAM_SAMPLE_RATE)
+                    if sample_rate > 0:
+                        time_seconds = chuck_time / sample_rate
+                    else:
+                        time_seconds = 0
+                except:
+                    time_seconds = 0
+
+                # Format time display
+                if time_seconds < 1:
+                    time_str = f"{int(chuck_time)}smp"  # Show samples if < 1 second
+                elif time_seconds < 60:
+                    time_str = f"{time_seconds:.2f}s"
+                elif time_seconds < 3600:
+                    mins = int(time_seconds / 60)
+                    secs = time_seconds % 60
+                    time_str = f"{mins}m{secs:04.1f}s"
+                else:
+                    hours = int(time_seconds / 3600)
+                    mins = int((time_seconds % 3600) / 60)
+                    time_str = f"{hours}h{mins:02d}m"
+
+                lines.append(f"{shred_id:<5} {name:<33} {time_str}")
+
+            return "\n".join(lines)
+
+        # Store the shreds table generator function
+        self.get_shreds_table = get_shreds_table
+
+        # Create shreds table TextArea (non-scrollable, auto-sized)
+        self.shreds_area = TextArea(
+            text="",
+            read_only=True,
+            scrollbar=False,
+            focusable=False,
+            height=D(min=0, max=20),  # Auto-size up to 20 lines
+            style='class:shreds-area'
+        )
+
+        # Create bottom toolbar function (shows VM status)
+        def get_bottom_toolbar():
             try:
                 audio_status = "ON" if self.session.audio_running else "OFF"
                 now = self.chuck.now()
@@ -165,6 +315,11 @@ class ChuckREPL:
         # Custom style for syntax highlighting and prompt
         repl_style = Style.from_dict({
             'bottom-toolbar': '#ffffff bg:#333333',
+            'top-toolbar': '#00ffff bg:#000033',  # cyan on dark blue for topbar
+            'error-toolbar': '#ffffff bg:#cc0000',  # white on red for errors
+            'help-area': '#aaaaaa bg:#222222',     # gray on dark gray for help
+            'log-area': '#cccccc bg:#111111',      # lighter gray for log
+            'shreds-area': '#00ffff bg:#001133',   # cyan on dark blue for shreds table
             'prompt-bracket': '#ff8800',  # orange for brackets
             'prompt-chuck': '#00ff00',     # green for =>
         })
@@ -172,10 +327,36 @@ class ChuckREPL:
         # Key bindings for enhanced history search and multiline
         kb = KeyBindings()
 
+        # Topbar visibility condition
+        @Condition
+        def topbar_visible():
+            return self.show_sidebar
+
         @kb.add('c-s')
         def _(event):
             """Forward history search with Ctrl+S"""
             event.current_buffer.history_forward()
+
+        @kb.add('f2')
+        def _(event):
+            """Toggle shreds table window with F2"""
+            self.show_shreds_window = not self.show_shreds_window
+            # Update shreds table content when opening
+            if self.show_shreds_window:
+                self.shreds_area.text = self.get_shreds_table()
+            event.app.invalidate()  # Force redraw
+
+        @kb.add('f1')
+        def _(event):
+            """Toggle help window with F1"""
+            self.show_help_window = not self.show_help_window
+            event.app.invalidate()  # Force redraw
+
+        @kb.add('c-l')
+        def _(event):
+            """Toggle log window with Ctrl+L"""
+            self.show_log_window = not self.show_log_window
+            event.app.invalidate()  # Force redraw
 
         # Ensure pychuck directories exist
         ensure_pychuck_directories()
@@ -225,31 +406,187 @@ class ChuckREPL:
             # Default: single-line input without ChucK markers, accept on Enter
             return False
 
-        self.prompt_session = PromptSession(
+        # Create input buffer
+        self.input_buffer = Buffer(
             history=FileHistory(str(get_history_file())),
             auto_suggest=AutoSuggestFromHistory(),
             completer=chuck_completer,
-            lexer=PygmentsLexer(lexer_class),  # Syntax highlighting (ChucK or C-like)
-            multiline=should_continue_multiline,  # Dynamic multiline based on content
-            prompt_continuation=get_continuation,  # Show ... for continuation lines
-            complete_while_typing=False,  # Only complete on Tab
-            enable_history_search=True,
-            bottom_toolbar=get_toolbar,
-            style=repl_style,
-            key_bindings=kb,
+            complete_while_typing=False,
+            multiline=should_continue_multiline,
+            on_text_insert=lambda _: None,  # Could be used for live updates
         )
+
+        # Create topbar window
+        topbar_window = ConditionalContainer(
+            Window(
+                content=FormattedTextControl(text=get_topbar_text),
+                height=D.exact(1),
+                style='class:top-toolbar',
+            ),
+            filter=topbar_visible
+        )
+
+        # Create main input window with prompt
+        def get_prompt_text():
+            prompt_html = HTML('<prompt-bracket>[</prompt-bracket><prompt-chuck>=></prompt-chuck><prompt-bracket>]</prompt-bracket> ')
+            return prompt_html
+
+        input_window = Window(
+            content=BufferControl(
+                buffer=self.input_buffer,
+                lexer=PygmentsLexer(lexer_class),
+                include_default_input_processors=True,
+            ),
+            get_line_prefix=lambda line_number, wrap_count: get_continuation(0, line_number, False) if line_number > 0 else get_prompt_text(),
+            wrap_lines=True,
+            right_margins=[ScrollbarMargin(display_arrows=True)],
+        )
+
+        # Create error bar window (conditional)
+        @Condition
+        def error_visible():
+            return bool(self.error_message)
+
+        error_window = ConditionalContainer(
+            Window(
+                height=D.exact(1),
+                content=FormattedTextControl(text=get_error_text),
+                style='class:error-toolbar'
+            ),
+            filter=error_visible
+        )
+
+        # Create help window (conditional)
+        @Condition
+        def help_visible():
+            return self.show_help_window
+
+        help_window = ConditionalContainer(
+            self.help_area,
+            filter=help_visible
+        )
+
+        # Create shreds table window (conditional)
+        @Condition
+        def shreds_visible():
+            return self.show_shreds_window
+
+        shreds_window = ConditionalContainer(
+            self.shreds_area,
+            filter=shreds_visible
+        )
+
+        # Create log window (conditional)
+        @Condition
+        def log_visible():
+            return self.show_log_window
+
+        log_window = ConditionalContainer(
+            self.log_area,
+            filter=log_visible
+        )
+
+        # Create layout with top toolbar (shreds) and bottom toolbar (status)
+        root_container = HSplit([
+            topbar_window,  # Top: shows active shreds (IDs only)
+            Window(height=D.exact(1)),  # Gap between topbar and input
+            input_window,   # Middle: REPL input
+            error_window,   # Error bar (only shown when there's an error)
+            help_window,    # Help window (toggle with F1)
+            shreds_window,  # Shreds table window (toggle with F2)
+            log_window,     # Log window (toggle with Ctrl+L)
+            Window(height=D.exact(1), content=FormattedTextControl(text=get_bottom_toolbar), style='class:bottom-toolbar'),  # Bottom: VM status
+        ])
+
+        # Create application
+        self.app = Application(
+            layout=Layout(root_container),
+            key_bindings=kb,
+            style=repl_style,
+            full_screen=True,
+            mouse_support=True,  # Enable mouse for scrolling
+        )
+
         self.prompt_html = HTML  # Store HTML class for later use
+
+    def add_to_log(self, msg):
+        """Capture ChucK VM messages to log window"""
+        msg = msg.rstrip('\n')
+        if msg:
+            self.log_lines.append(msg)
+            # Keep only recent messages
+            if len(self.log_lines) > self.max_log_lines:
+                self.log_lines.pop(0)
+            # Update the log area
+            self.log_area.text = '\n'.join(self.log_lines)
+            # Scroll to bottom
+            self.log_area.buffer.cursor_position = len(self.log_area.text)
+            self.app.invalidate()
 
     def setup(self):
         """Initialize ChucK with sensible defaults"""
+        # Use ChucK's stdout callback to capture VM messages (must be set before init)
+        ChucK.set_stdout_callback(self.add_to_log)
+        ChucK.set_stderr_callback(self.add_to_log)
+
         self.chuck.set_param(PARAM_SAMPLE_RATE, 44100)
         self.chuck.set_param(PARAM_OUTPUT_CHANNELS, 2)
         self.chuck.set_param(PARAM_INPUT_CHANNELS, 0)
         self.chuck.init()
 
-        # Capture ChucK output
-        self.chuck.set_chout_callback(lambda msg: print(f"[chout] {msg}", end=''))
-        self.chuck.set_cherr_callback(lambda msg: print(f"[cherr] {msg}", end='', file=sys.stderr))
+        # Capture ChucK output (chout/cherr from user code)
+        self.chuck.set_chout_callback(lambda msg: self.add_to_log(f"[out] {msg}"))
+        self.chuck.set_cherr_callback(lambda msg: self.add_to_log(f"[err] {msg}"))
+
+    def process_input(self, buff):
+        """Process input when user presses Enter"""
+        text = buff.text.strip()
+
+        # Clear previous error
+        self.error_message = ""
+
+        if not text:
+            return
+
+        if text in ['quit', 'exit', 'q']:
+            self.app.exit()
+            return
+
+        if text == 'help':
+            self.show_help_window = not self.show_help_window
+            self.app.invalidate()
+            return
+
+        # Parse and execute
+        cmd = self.parser.parse(text)
+        if cmd:
+            # Only print newline for commands that produce output
+            # Silent commands: audio start/stop, shred add/remove
+            silent_cmds = ['start_audio', 'stop_audio', 'shutdown_audio', 'spork_file',
+                          'spork_code', 'remove_shred', 'remove_all', 'edit_shred']
+            if cmd.type not in silent_cmds:
+                print()  # newline for output
+            # Execute command and get error if any
+            error = self.executor.execute(cmd)
+            if error:
+                self.error_message = error
+        else:
+            # If not a recognized command, treat as ChucK code
+            # Check if it looks like ChucK code (contains =>, ;, or multiline)
+            if '\n' in text or '=>' in text or ';' in text or '{' in text:
+                # ChucK code compilation is silent, topbar shows result
+                success, shred_ids = self.chuck.compile_code(text)
+                if success:
+                    for sid in shred_ids:
+                        self.session.add_shred(sid, text, shred_type='code')
+                else:
+                    self.error_message = "Failed to compile code"
+            else:
+                # Not a recognized command and doesn't look like ChucK code
+                self.error_message = f"Unknown command: {text}"
+
+        # Force redraw to update topbar/toolbar/error
+        self.app.invalidate()
 
     def run(self, start_audio=False):
         """Main REPL loop
@@ -269,10 +606,6 @@ class ChuckREPL:
                 except Exception as e:
                     print(f"Warning: Could not start audio: {e}", file=sys.stderr)
 
-            # Clear screen
-            sys.stdout.write('\033[2J\033[H')  # Clear screen and move cursor to home
-            sys.stdout.flush()
-
             # Disable terminal mouse tracking and other escape sequences
             # that might be left over from previous programs
             sys.stdout.write('\033[?1000l')  # Disable mouse tracking
@@ -280,50 +613,12 @@ class ChuckREPL:
             sys.stdout.write('\033[?1006l')  # Disable SGR mouse mode
             sys.stdout.flush()
 
-            audio_status = " (audio started)" if start_audio and self.session.audio_running else ""
-            print(f"PyChucK REPL v0.1.1{audio_status}")
-            print("Type 'help' for commands, 'quit' to exit\n")
+            # Set accept handler for buffer
+            self.input_buffer.accept_handler = self.process_input
 
-            while True:
-                try:
-                    # Use HTML-like formatting with custom styles for prompt
-                    prompt_html = self.prompt_html('<prompt-bracket>[</prompt-bracket><prompt-chuck>=></prompt-chuck><prompt-bracket>]</prompt-bracket> ')
-                    text = self.prompt_session.prompt(prompt_html)
+            # Run the application
+            self.app.run()
 
-                    text = text.strip()
-
-                    if not text:
-                        continue
-
-                    if text in ['quit', 'exit', 'q']:
-                        break
-
-                    if text == 'help':
-                        self.print_help()
-                        continue
-
-                    # Parse and execute
-                    cmd = self.parser.parse(text)
-                    if cmd:
-                        self.executor.execute(cmd)
-                    else:
-                        # If not a recognized command, treat as ChucK code
-                        # Check if it looks like ChucK code (contains =>, ;, or multiline)
-                        if '\n' in text or '=>' in text or ';' in text or '{' in text:
-                            success, shred_ids = self.chuck.compile_code(text)
-                            if success:
-                                for sid in shred_ids:
-                                    self.session.add_shred(sid, f"code:{text[:20]}...")
-                                    print(f"✓ sporked code -> shred {sid}")
-                            else:
-                                print("✗ failed to compile code")
-
-                except KeyboardInterrupt:
-                    continue
-                except EOFError:
-                    break
-                except Exception as e:
-                    print(f"Error: {e}", file=sys.stderr)
         finally:
             self.cleanup()
 
@@ -349,66 +644,3 @@ class ChuckREPL:
         if hasattr(self, 'chuck'):
             del self.chuck
 
-    def print_help(self):
-        print("""
-ChucK REPL Commands:
-
-Shred Management:
-  + <file.ck>           Spork file
-  + "<code>"            Spork code
-  - <id>                Remove shred
-  - all                 Remove all shreds
-  ~ <id> "<code>"       Replace shred
-
-Status:
-  ?                     List shreds
-  ? <id>                Show shred info
-  ?g                    List globals
-  ?a                    Audio info
-  .                     Current time
-
-Globals:
-  <name>::<value>       Set global
-  <name>?               Get global (async)
-
-Events:
-  <event>!              Signal event
-  <event>!!             Broadcast event
-
-Audio:
-  >                     Start audio
-  ||                    Stop audio
-  X                     Shutdown audio
-
-VM:
-  clear                 Clear VM
-  reset                 Reset shred ID
-
-Screen:
-  cls                   Clear screen
-
-Other:
-  : <file>              Compile only
-  ! "<code>"            Execute immediately
-  $ <cmd>               Shell command
-  edit                  Open $EDITOR for code
-  watch                 Monitor VM state
-  @<name>               Load snippet from ~/.pychuck/snippets/
-  help                  Show this help
-  quit                  Exit
-
-Multiline Input (Smart Enter Mode):
-  Enter on REPL commands    Submit immediately (quit, help, +, -, etc.)
-  Enter on ChucK code       Insert newline (continue editing)
-  Esc+Enter                 Submit code (always works)
-
-Keyboard Shortcuts:
-  Ctrl+R                Reverse history search
-  Ctrl+S                Forward history search
-  Ctrl+C                Cancel/interrupt
-  Tab                   Auto-complete (REPL commands, file paths, ChucK code)
-
-CLI Options:
-  --start-audio         Start audio automatically on REPL startup
-  --no-smart-enter      Disable smart Enter mode (always require Esc+Enter)
-""")

@@ -51,5 +51,8 @@ clean:
 test:
 	PYTHONPATH=$(ROOT)/src pytest tests/ -v
 
+repl:
+	@uv run python -m pychuck tui
+
 snap:
 	@git add --all . && git commit -m 'snap' && git push

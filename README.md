@@ -6,8 +6,9 @@ The pychuck library provides interactive control over ChucK, enabling live codin
 
 ## Highlights
 
+- **Professional REPL** - Full-screen terminal interface with syntax highlighting, help windows, and VM output capture
 - **Real-Time Audio** - Play ChucK code through your speakers with asynchronous RtAudio playback
-- **File Support** - Load and run `.ck` files directly
+- **File Support** - Load and run `.ck` files directly with absolute path handling
 - **Plugin System** - Use chugins to extend ChucK with effects and instruments
 - **Two Modes** - Real-time playback or offline rendering to `numpy` arrays
 - **Interactive Control** - Bidirectional communication via global variables and events
@@ -49,7 +50,7 @@ make test
 
 ### Command-Line Interface
 
-pychuck includes an interactive REPL with smart multiline editing:
+pychuck includes a full-screen interactive REPL with professional features:
 
 ```bash
 # Launch the interactive REPL
@@ -60,17 +61,41 @@ python -m pychuck tui --start-audio
 
 # Disable smart Enter mode
 python -m pychuck tui --no-smart-enter
+
+# Hide topbar (can toggle with F2)
+python -m pychuck tui --no-sidebar
 ```
 
-**Features:**
-- **Smart Enter mode**: Enter submits REPL commands immediately, but allows multiline ChucK code editing
-- **ChucK syntax highlighting**: Full lexer for ChucK language
+**Interface Features:**
+- **Full-screen layout**: Professional terminal UI with multiple display areas
+- **Live topbar**: Minimal display showing shred IDs `[1] [2] [3]`
+- **Shreds table**: Detailed shred information table (F2) with ID, name, and ChucK VM time at launch
+- **Error display bar**: Red error bar shows command errors without disrupting layout
+- **Help window**: Built-in command reference (toggle with F1)
+- **Log window**: Scrollable ChucK VM output capture (toggle with Ctrl+L)
+- **Mouse support**: Scroll through log output with mouse wheel
+- **Scrollable input**: Main input area with scrollbar for long code
+
+**Editing Features:**
+- **Smart Enter mode**: Enter submits commands immediately, but allows multiline ChucK code editing
+- **ChucK syntax highlighting**: Full Pygments lexer for ChucK language with color themes
+- **ChucK code completion**: Tab completion for keywords, types, UGens, and standard library
 - **Intelligent code detection**: Automatically compiles multiline ChucK code
-- **Tab completion**: Commands and `.ck` files with context-aware suggestions
+- **Tab completion**: Commands, `.ck` files, and ChucK language elements
 - **Command history**: Persistent history with Ctrl+R search
 - **Colored prompt**: `[=>]` matches ChucK logo styling
 
-The REPL supports ChucK commands for shred management, audio control, global variables, and events. Type `help` in the REPL for command reference.
+**Keyboard Shortcuts:**
+- `F1` - Toggle help window
+- `F2` - Toggle shreds table (detailed view with ID, name, time)
+- `Ctrl+L` - Toggle log window (ChucK VM output)
+- `Ctrl+R` - Start audio playback
+- `Ctrl+S` - Stop audio playback
+- `Ctrl+C` - Exit REPL
+- `Tab` - Command and ChucK code completion
+- `Up/Down` - Navigate command history
+
+The REPL supports ChucK commands for shred management, audio control, global variables, and events. Press F1 or type `help` for command reference.
 
 ### Real-Time Audio
 

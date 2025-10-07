@@ -7,59 +7,65 @@ class CommandExecutor:
         self.chuck = session.chuck
 
     def execute(self, cmd):
+        """Execute command and return error message if any"""
         handler = getattr(self, f'_cmd_{cmd.type}', None)
         if handler:
             return handler(cmd.args)
         else:
-            print(f"Unknown command type: {cmd.type}")
-            return None
+            return f"Unknown command type: {cmd.type}"
 
     def _cmd_spork_file(self, args):
+        import os
+        # Convert relative path to absolute path
+        path = os.path.abspath(args['path'])
+
         success, shred_ids = self.chuck.compile_file(args['path'])
         if success:
             for sid in shred_ids:
-                self.session.add_shred(sid, args['path'])
-                print(f"✓ sporked {args['path']} -> shred {sid}")
+                self.session.add_shred(sid, path, shred_type='file')
+                # Topbar shows new shred automatically
+            return None
         else:
-            print(f"✗ failed to spork {args['path']}")
-            # TODO: Add chuck.get_last_error() to get compiler error messages
+            return f"Failed to spork {args['path']}"
 
     def _cmd_spork_code(self, args):
         success, shred_ids = self.chuck.compile_code(args['code'])
         if success:
             for sid in shred_ids:
-                self.session.add_shred(sid, f"inline:{args['code'][:20]}...")
-                print(f"✓ sporked code -> shred {sid}")
+                self.session.add_shred(sid, args['code'], shred_type='code')
+                # Topbar shows new shred automatically
+            return None
         else:
-            print("✗ failed to spork code")
-            # TODO: Add chuck.get_last_error() to get compiler error messages
+            return "Failed to spork code"
 
     def _cmd_remove_shred(self, args):
         sid = args['id']
-        success = self.chuck.remove_shred(sid)
-        if success:
+        try:
+            self.chuck.remove_shred(sid)
             self.session.remove_shred(sid)
-            print(f"✓ removed shred {sid}")
-        else:
-            print(f"✗ failed to remove shred {sid} (not found)")
+            # Topbar updates automatically
+            return None
+        except Exception as e:
+            return f"Failed to remove shred {sid}: {e}"
 
     def _cmd_remove_all(self, args):
         count = len(self.session.shreds)
         self.chuck.remove_all_shreds()
         self.session.clear_shreds()
-        print(f"✓ removed {count} shred(s)")
+        # Topbar updates automatically
+        return None
 
     def _cmd_replace_shred(self, args):
         try:
             new_id = self.chuck.replace_shred(args['id'], args['code'])
             if new_id > 0:
                 self.session.remove_shred(args['id'])
-                self.session.add_shred(new_id, f"replaced:{args['code'][:20]}...")
-                print(f"✓ replaced shred {args['id']} -> {new_id}")
+                self.session.add_shred(new_id, args['code'], shred_type='code')
+                return None
             else:
-                print(f"✗ failed to replace shred {args['id']}")
+                return f"Failed to replace shred {args['id']}"
         except Exception as e:
-            print(f"✗ error replacing shred: {e}")
+            return f"Error replacing shred: {e}"
 
     def _cmd_list_shreds(self, args):
         shreds = self.chuck.get_all_shred_ids()
@@ -166,25 +172,25 @@ class CommandExecutor:
         try:
             start_audio(self.chuck)
             self.session.audio_running = True
-            print("✓ audio started")
+            return None
         except Exception as e:
-            print(f"✗ failed to start audio: {e}")
+            return f"Failed to start audio: {e}"
 
     def _cmd_stop_audio(self, args):
         try:
             stop_audio()
             self.session.audio_running = False
-            print("✓ audio stopped")
+            return None
         except Exception as e:
-            print(f"✗ failed to stop audio: {e}")
+            return f"Failed to stop audio: {e}"
 
     def _cmd_shutdown_audio(self, args):
         try:
             shutdown_audio(500)
             self.session.audio_running = False
-            print("✓ audio shutdown")
+            return None
         except Exception as e:
-            print(f"✗ failed to shutdown audio: {e}")
+            return f"Failed to shutdown audio: {e}"
 
     def _cmd_clear_vm(self, args):
         self.chuck.clear_vm()
@@ -216,6 +222,50 @@ class CommandExecutor:
         else:
             print("✗ execution failed")
             # TODO: Add chuck.get_last_error() to get compiler error messages
+
+    def _cmd_edit_shred(self, args):
+        """Edit and replace a shred by ID"""
+        import tempfile
+        import os
+
+        shred_id = args['id']
+
+        if shred_id not in self.session.shreds:
+            return f"Shred {shred_id} not found"
+
+        shred_info = self.session.shreds[shred_id]
+        source = shred_info['source']
+        shred_type = shred_info['type']
+
+        # Get editor from environment or use default
+        editor = os.environ.get('EDITOR', 'nano')
+
+        # Create temp file with current content
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.ck', delete=False) as f:
+            f.write(source)
+            temp_path = f.name
+
+        try:
+            # Open editor
+            subprocess.run([editor, temp_path])
+
+            # Read the modified file
+            with open(temp_path, 'r') as f:
+                new_code = f.read()
+
+            # Replace the shred if content changed
+            if new_code.strip() and new_code != source:
+                new_id = self.chuck.replace_shred(shred_id, new_code)
+                if new_id > 0:
+                    self.session.remove_shred(shred_id)
+                    self.session.add_shred(new_id, new_code, shred_type=shred_type)
+                    # Topbar updates automatically
+                    return None
+                else:
+                    return f"Failed to replace shred {shred_id}"
+            return None
+        finally:
+            os.unlink(temp_path)
 
     def _cmd_shell(self, args):
         subprocess.run(args['cmd'], shell=True)

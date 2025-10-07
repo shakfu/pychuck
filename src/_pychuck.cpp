@@ -237,6 +237,19 @@ NB_MODULE(_pychuck, m) {
     m.attr("PARAM_USER_CHUGINS") = CHUCK_PARAM_USER_CHUGINS;
     m.attr("PARAM_VERSION") = CHUCK_PARAM_VERSION;
     m.attr("PARAM_VM_ADAPTIVE") = CHUCK_PARAM_VM_ADAPTIVE;
+
+    // Log level constants
+    m.attr("LOG_NONE") = CK_LOG_NONE;
+    m.attr("LOG_CORE") = CK_LOG_CORE;
+    m.attr("LOG_SYSTEM") = CK_LOG_SYSTEM;
+    m.attr("LOG_HERALD") = CK_LOG_HERALD;
+    m.attr("LOG_WARNING") = CK_LOG_WARNING;
+    m.attr("LOG_INFO") = CK_LOG_INFO;
+    m.attr("LOG_DEBUG") = CK_LOG_DEBUG;
+    m.attr("LOG_FINE") = CK_LOG_FINE;
+    m.attr("LOG_FINER") = CK_LOG_FINER;
+    m.attr("LOG_FINEST") = CK_LOG_FINEST;
+    m.attr("LOG_ALL") = CK_LOG_ALL;
     m.attr("PARAM_VM_HALT") = CHUCK_PARAM_VM_HALT;
     m.attr("PARAM_WORKING_DIRECTORY") = CHUCK_PARAM_WORKING_DIRECTORY;
 

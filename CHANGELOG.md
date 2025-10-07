@@ -17,6 +17,60 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ### Added
 
+- **Full-Screen REPL Application**:
+  - Converted to full-screen `prompt_toolkit` Application with stable layout
+  - Mouse support enabled for scrolling in log/help windows
+  - No layout disruption from ChucK VM or error messages
+  - Clean separation of input, output, status, and auxiliary windows
+
+- **Topbar for Active Shreds**:
+  - Minimal topbar displaying shred IDs only
+  - Format: `Shreds: [1] [2] [3]  (F2: table)`
+  - Symmetrical with bottom status toolbar
+  - Gap between topbar and input area for clean layout
+  - Topbar updates automatically when shreds are added/removed
+
+- **Shreds Table Window**:
+  - Toggle detailed shreds table with F2
+  - Displays comprehensive shred information in tabular format
+  - Columns: ID, Name (filename or code snippet), Time (ChucK VM time when launched)
+  - Shows only filename for file shreds (not full path)
+  - Time displayed relative to audio thread start (ChucK VM samples/seconds)
+  - Auto-formats time: samples (< 1s), seconds, minutes, hours
+  - Styled with cyan on dark blue (matching WebChucK aesthetic)
+  - Updates in real-time when toggled
+  - Clean, aligned table with Unicode separators
+
+- **Help Window**:
+  - Toggle help display with F1 or `help` command
+  - Two-column compact layout fitting in 20 lines
+  - Non-scrollable, static content
+  - Displays all REPL commands and keyboard shortcuts
+  - Appears above status bar without disrupting layout
+
+- **Log Window**:
+  - Toggle ChucK VM log with Ctrl+L
+  - Scrollable display of last 100 VM messages
+  - Captures all stdout/stderr from ChucK VM
+  - Auto-scrolls to bottom for new messages
+  - Mouse and keyboard scrolling support
+  - Distinct styling (lighter gray) from help window
+
+- **Edit Shred Command**:
+  - Edit and replace running shreds with `edit <id>` (e.g., `edit 1`, `edit 2`)
+  - Uses ChucK shred IDs consistently with remove command
+  - Opens shred source in $EDITOR
+  - Automatically replaces shred with modified code on save
+  - Converts relative file paths to absolute paths for editing
+
+- **Error Display Bar**:
+  - Errors shown in dedicated red error bar above log/help windows
+  - Appears only when there's an error (conditional display)
+  - All errors routed through error bar instead of `print()` calls
+  - Prevents layout disruption in full-screen mode
+  - Auto-clears on next command
+  - Handles unknown commands gracefully
+
 - **ChucK Language Module** (`src/pychuck/chuck_lang.py`):
   - Single source of truth for all ChucK language elements
   - Complete sets: KEYWORDS, TYPES, OPERATORS, TIME_UNITS, UGENS, STD_CLASSES
@@ -37,6 +91,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Updates help text to document code completion
 
 ### Changed
+
+- **REPL Architecture Refactoring**:
+  - Migrated from `PromptSession` to full-screen `Application` with custom layout
+  - Supports complex layouts (topbar, gap, input area, bottom toolbar)
+  - Eliminated `print()` calls for state-changing commands to prevent layout disruption
+  - Silent operation for audio control and shred management
+  - Better control over rendering and event handling
+  - Enables future enhancements (multiple panes, advanced UI features)
 
 - **ChucK Lexer Refactoring**:
   - Now uses `chuck_lang` module as source of truth
