@@ -12,9 +12,9 @@ from .commands import CommandExecutor
 from .paths import get_history_file, ensure_pychuck_directories
 
 class ChuckREPL:
-    def __init__(self, smart_enter=True, show_sidebar=True):
+    def __init__(self, smart_enter=True, show_sidebar=True, project_name=None):
         self.chuck = ChucK()
-        self.session = REPLSession(self.chuck)
+        self.session = REPLSession(self.chuck, project_name=project_name)
         self.parser = CommandParser()
         self.executor = CommandExecutor(self.session)
         self.smart_enter = smart_enter  # Enable smart Enter behavior
@@ -214,8 +214,9 @@ AUDIO CONTROL                           VM CONTROL
 OTHER COMMANDS                          KEYBOARD SHORTCUTS
   : <file>       Compile only             F1        Toggle help
   $ <cmd>        Shell cmd                F2        Shreds table
-  edit           Open editor              Ctrl+L    Toggle log
-  @<name>        Load snippet             Ctrl+R    History search
+  edit           Open editor              F3        Toggle log
+  @<name>        Load snippet             Ctrl+Q    Exit REPL
+                                          Ctrl+R    History search
                                           Esc+Enter Submit code
                                           Tab       Auto-complete"""
 
@@ -352,11 +353,16 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
             self.show_help_window = not self.show_help_window
             event.app.invalidate()  # Force redraw
 
-        @kb.add('c-l')
+        @kb.add('f3')
         def _(event):
-            """Toggle log window with Ctrl+L"""
+            """Toggle log window with F3"""
             self.show_log_window = not self.show_log_window
             event.app.invalidate()  # Force redraw
+
+        @kb.add('c-q')
+        def _(event):
+            """Exit with Ctrl-Q"""
+            event.app.exit()
 
         # Ensure pychuck directories exist
         ensure_pychuck_directories()
@@ -494,7 +500,7 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
             error_window,   # Error bar (only shown when there's an error)
             help_window,    # Help window (toggle with F1)
             shreds_window,  # Shreds table window (toggle with F2)
-            log_window,     # Log window (toggle with Ctrl+L)
+            log_window,     # Log window (toggle with F3)
             Window(height=D.exact(1), content=FormattedTextControl(text=get_bottom_toolbar), style='class:bottom-toolbar'),  # Bottom: VM status
         ])
 
@@ -578,7 +584,7 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
                 success, shred_ids = self.chuck.compile_code(text)
                 if success:
                     for sid in shred_ids:
-                        self.session.add_shred(sid, text, shred_type='code')
+                        self.session.add_shred(sid, f"code-{sid}", content=text, shred_type='code')
                 else:
                     self.error_message = "Failed to compile code"
             else:
@@ -588,11 +594,12 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
         # Force redraw to update topbar/toolbar/error
         self.app.invalidate()
 
-    def run(self, start_audio=False):
+    def run(self, start_audio=False, files=None):
         """Main REPL loop
 
         Args:
             start_audio: If True, start audio automatically on startup
+            files: Optional list of ChucK files to load on startup
         """
         try:
             self.setup()
@@ -605,6 +612,15 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
                     self.session.audio_running = True
                 except Exception as e:
                     print(f"Warning: Could not start audio: {e}", file=sys.stderr)
+
+            # Load files if provided
+            if files:
+                for filepath in files:
+                    try:
+                        result = self.executor.execute_command(f"+ {filepath}")
+                        self.log(result)
+                    except Exception as e:
+                        self.log(f"Error loading {filepath}: {e}")
 
             # Disable terminal mouse tracking and other escape sequences
             # that might be left over from previous programs

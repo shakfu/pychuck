@@ -149,3 +149,46 @@ def get_snippet_path(name: str) -> Path:
         Path to the snippet file
     """
     return get_snippets_dir() / f'{name}.ck'
+
+
+def list_projects() -> list[str]:
+    """
+    List all available projects.
+
+    Returns:
+        List of project names (directory names in ~/.pychuck/projects/)
+    """
+    projects_dir = get_projects_dir()
+    if not projects_dir.exists():
+        return []
+
+    return [d.name for d in projects_dir.iterdir() if d.is_dir()]
+
+
+def create_project(name: str) -> Path:
+    """
+    Create a new project directory.
+
+    Args:
+        name: Project name
+
+    Returns:
+        Path to the created project directory
+    """
+    from .project import Project
+    projects_dir = get_projects_dir()
+    project = Project(name, projects_dir)
+    return project.project_dir
+
+
+def get_project_path(name: str) -> Path:
+    """
+    Get the path to a project by name.
+
+    Args:
+        name: Project name
+
+    Returns:
+        Path to the project directory
+    """
+    return get_projects_dir() / name

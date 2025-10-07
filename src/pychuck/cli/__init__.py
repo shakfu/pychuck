@@ -1,5 +1,5 @@
 """
-Command-line interface for pychuck
-"""
+CLI module for pychuck.
 
-__all__ = ['tui', 'repl', 'parser', 'session', 'commands']
+Handles command-line argument parsing and file execution.
+"""

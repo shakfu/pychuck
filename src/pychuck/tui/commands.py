@@ -16,23 +16,31 @@ class CommandExecutor:
 
     def _cmd_spork_file(self, args):
         import os
+        from pathlib import Path
         # Convert relative path to absolute path
         path = os.path.abspath(args['path'])
+
+        # Read file content for project versioning
+        try:
+            content = Path(path).read_text()
+        except:
+            content = None
 
         success, shred_ids = self.chuck.compile_file(args['path'])
         if success:
             for sid in shred_ids:
-                self.session.add_shred(sid, path, shred_type='file')
+                self.session.add_shred(sid, path, content=content, shred_type='file')
                 # Topbar shows new shred automatically
             return None
         else:
             return f"Failed to spork {args['path']}"
 
     def _cmd_spork_code(self, args):
-        success, shred_ids = self.chuck.compile_code(args['code'])
+        code = args['code']
+        success, shred_ids = self.chuck.compile_code(code)
         if success:
             for sid in shred_ids:
-                self.session.add_shred(sid, args['code'], shred_type='code')
+                self.session.add_shred(sid, f"code-{sid}", content=code, shred_type='code')
                 # Topbar shows new shred automatically
             return None
         else:
@@ -57,15 +65,55 @@ class CommandExecutor:
 
     def _cmd_replace_shred(self, args):
         try:
-            new_id = self.chuck.replace_shred(args['id'], args['code'])
+            code = args['code']
+            old_id = args['id']
+            new_id = self.chuck.replace_shred(old_id, code)
+            if new_id > 0:
+                # Save replacement to project if available
+                if self.session.project:
+                    self.session.replace_shred(old_id, code)
+
+                self.session.remove_shred(old_id)
+                self.session.add_shred(new_id, f"code-{new_id}", content=code, shred_type='code')
+                return None
+            else:
+                return f"Failed to replace shred {old_id}"
+        except Exception as e:
+            return f"Error replacing shred: {e}"
+
+    def _cmd_replace_shred_file(self, args):
+        """Replace shred with code from file"""
+        try:
+            from pathlib import Path
+            filepath = args['path']
+            code = Path(filepath).read_text()
+
+            new_id = self.chuck.replace_shred(args['id'], code)
             if new_id > 0:
                 self.session.remove_shred(args['id'])
-                self.session.add_shred(new_id, args['code'], shred_type='code')
+                # Save to project if available
+                if self.session.project:
+                    self.session.replace_shred(new_id, code)
+                self.session.add_shred(new_id, filepath, shred_type='file')
                 return None
             else:
                 return f"Failed to replace shred {args['id']}"
         except Exception as e:
             return f"Error replacing shred: {e}"
+
+    def _cmd_status(self, args):
+        """Show VM status (Chuck-style)"""
+        all_ids = self.chuck.get_all_shred_ids()
+        now = self.chuck.now()
+        audio = "running" if self.session.audio_running else "stopped"
+
+        print(f"[chuck](VM): status")
+        print(f"  shreds: {len(all_ids)}")
+        print(f"  audio: {audio}")
+        print(f"  now: {now} samples")
+        if all_ids:
+            print(f"  shred IDs: {all_ids}")
+        return None
 
     def _cmd_list_shreds(self, args):
         shreds = self.chuck.get_all_shred_ids()
@@ -257,8 +305,13 @@ class CommandExecutor:
             if new_code.strip() and new_code != source:
                 new_id = self.chuck.replace_shred(shred_id, new_code)
                 if new_id > 0:
+                    # Save replacement to project if available
+                    if self.session.project:
+                        self.session.replace_shred(shred_id, new_code)
+
                     self.session.remove_shred(shred_id)
-                    self.session.add_shred(new_id, new_code, shred_type=shred_type)
+                    name = shred_info['name']
+                    self.session.add_shred(new_id, name, content=new_code, shred_type=shred_type)
                     # Topbar updates automatically
                     return None
                 else:
@@ -299,7 +352,7 @@ class CommandExecutor:
                 success, shred_ids = self.chuck.compile_code(code)
                 if success:
                     for sid in shred_ids:
-                        self.session.add_shred(sid, f"editor:{temp_path}")
+                        self.session.add_shred(sid, f"editor-{sid}", content=code, shred_type='code')
                         print(f"✓ sporked from editor -> shred {sid}")
                 else:
                     print("✗ failed to spork editor code")
@@ -356,10 +409,16 @@ class CommandExecutor:
             return
 
         # Spork the snippet
+        # Read snippet content for project versioning
+        try:
+            content = snippet_path.read_text()
+        except:
+            content = None
+
         success, shred_ids = self.chuck.compile_file(str(snippet_path))
         if success:
             for sid in shred_ids:
-                self.session.add_shred(sid, f"@{name}")
+                self.session.add_shred(sid, f"@{name}", content=content, shred_type='file')
                 print(f"✓ sporked snippet @{name} -> shred {sid}")
         else:
             print(f"✗ failed to spork snippet @{name}")

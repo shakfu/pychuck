@@ -10,7 +10,15 @@ class Command:
 class CommandParser:
     def __init__(self):
         self.patterns = [
-            # Shred management
+            # Chuck-style word commands (new)
+            (r'^add\s+(.+\.ck)$', self._spork_file),
+            (r'^remove\s+all$', self._remove_all),
+            (r'^remove\s+(\d+)$', self._remove_shred),
+            (r'^replace\s+(\d+)\s+(.+\.ck)$', self._replace_shred_file),
+            (r'^status$', self._status),
+            (r'^time$', self._current_time),
+
+            # Shred management (shortcut symbols)
             (r'^\+\s+(.+\.ck)$', self._spork_file),
             (r'^\+\s+"([^"]+)"$', self._spork_code),
             (r'^\+\s+\'([^\']+)\'$', self._spork_code),
@@ -82,6 +90,15 @@ class CommandParser:
             'id': int(m.group(1)),
             'code': m.group(2)
         })
+
+    def _replace_shred_file(self, m):
+        return Command('replace_shred_file', {
+            'id': int(m.group(1)),
+            'path': m.group(2)
+        })
+
+    def _status(self, m):
+        return Command('status', {})
 
     def _list_shreds(self, m):
         return Command('list_shreds', {})

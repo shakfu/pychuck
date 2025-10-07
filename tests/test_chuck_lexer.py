@@ -8,7 +8,7 @@ from pygments.token import (
 )
 
 try:
-    from pychuck.cli.chuck_lexer import ChuckLexer
+    from pychuck.tui.chuck_lexer import ChuckLexer
     LEXER_AVAILABLE = True
 except ImportError:
     LEXER_AVAILABLE = False
