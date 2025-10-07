@@ -346,6 +346,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 Version 0.1.3 represents a major REPL overhaul focused on user experience:
 
 **Key Improvements:**
+
 1. **Smart multiline editing** - Context-aware Enter behavior eliminates mode switching
 2. **ChucK syntax highlighting** - Full Pygments lexer for ChucK language
 3. **Automatic code detection** - ChucK code is compiled, commands are executed
@@ -506,6 +507,7 @@ The REPL now provides a modern, intuitive interface for both quick REPL commands
 ### Inspired By
 
 Implementation based on analysis of `chuck_tilde.cpp` (Max/MSP external):
+
 - Global variable management patterns (lines 1398-1497, 1631-1783)
 - Event signaling architecture (lines 1506-1526, 1785-1801)
 - Shred introspection methods (lines 662-710, 1255-1269)
