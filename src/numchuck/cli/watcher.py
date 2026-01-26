@@ -66,8 +66,8 @@ def watch_files(
         output_channels=channels,
     )
 
-    # Create session for tracking
-    session = ChuckSession(chuck)
+    # Create session for tracking (needs raw ChucK instance)
+    session = ChuckSession(chuck.raw)
 
     def on_reload(path: Path, shred_id: int) -> None:
         if verbose:
@@ -114,8 +114,8 @@ def watch_files(
         if verbose:
             print()
 
-        # Start audio
-        start_audio(chuck)
+        # Start audio (needs raw ChucK instance)
+        start_audio(chuck.raw)
         session.audio_running = True
         if verbose:
             print("Audio started")
@@ -133,8 +133,7 @@ def watch_files(
                 shred_count = len(chuck.shreds)
                 watched_count = len(watcher.get_watched_files())
                 print(
-                    f"\r[watching] {watched_count} files | "
-                    f"{shred_count} shreds active",
+                    f"\r[watching] {watched_count} files | {shred_count} shreds active",
                     end="",
                     flush=True,
                 )

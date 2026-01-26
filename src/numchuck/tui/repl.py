@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sys
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .parser import CommandParser
 from .commands import CommandExecutor
@@ -53,6 +53,7 @@ class ChuckREPL:
         from prompt_toolkit.widgets import TextArea
 
         # Try to import ChucK lexer, fall back to C lexer
+        lexer_class: Any
         try:
             from ..lang import ChuckLexer
 
@@ -76,7 +77,7 @@ class ChuckREPL:
 
         # Log window visibility and buffer
         self.show_log_window = False
-        self.log_lines = []
+        self.log_lines: list[str] = []
         self.max_log_lines = 100  # Keep last 100 messages
 
         # Create topbar content function (simplified to show just IDs)
@@ -386,7 +387,7 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
         )
 
         # Create application
-        self.app = Application(
+        self.app: Any = Application(
             layout=Layout(root_container),
             key_bindings=kb,
             style=repl_style,
@@ -429,11 +430,14 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
         self.app_state.set_log_callback(lambda msg: self.add_to_log(f"[out] {msg}"))
         self.app_state.setup_output_capture()
 
-    def process_input(self, buff: Buffer) -> None:
+    def process_input(self, buff: Buffer) -> bool:
         """Process input when user presses Enter.
 
         Args:
             buff: Input buffer containing user text
+
+        Returns:
+            True to clear the buffer after processing
         """
         text = buff.text.strip()
 
@@ -441,16 +445,16 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
         self.error_message = ""
 
         if not text:
-            return
+            return True
 
         if text in ["quit", "exit", "q"]:
             self.app.exit()
-            return
+            return True
 
         if text == "help":
             self.show_help_window = not self.show_help_window
             self.app.invalidate()
-            return
+            return True
 
         # Parse and execute
         cmd = self.parser.parse(text)
@@ -492,6 +496,7 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
 
         # Force redraw to update topbar/toolbar/error
         self.app.invalidate()
+        return True
 
     def run(self, start_audio: bool = False, files: list[str] | None = None) -> None:
         """Main REPL loop.
@@ -511,10 +516,13 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
             if files:
                 for filepath in files:
                     try:
-                        result = self.executor.execute_command(f"+ {filepath}")
-                        self.log(result)
+                        cmd = self.parser.parse(f"+ {filepath}")
+                        if cmd:
+                            result = self.executor.execute(cmd)
+                            if result:
+                                self.add_to_log(result)
                     except Exception as e:
-                        self.log(f"Error loading {filepath}: {e}")
+                        self.add_to_log(f"Error loading {filepath}: {e}")
 
             # Disable terminal mouse tracking and other escape sequences
             # that might be left over from previous programs
@@ -542,14 +550,12 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
 
         # Break additional circular references
         if hasattr(self, "executor"):
-            self.executor.chuck = None
-            self.executor.session = None
+            self.executor._chuck = None  # type: ignore[assignment]
+            self.executor.session = None  # type: ignore[assignment]
             del self.executor
 
-        # Clear convenience references
-        if hasattr(self, "chuck"):
-            self.chuck = None
-        if hasattr(self, "session"):
-            self.session = None
+        # Clear convenience references (assigned in __init__)
+        self.chuck = None  # type: ignore[assignment]
+        self.session = None  # type: ignore[assignment]
         if hasattr(self, "app_state"):
             del self.app_state

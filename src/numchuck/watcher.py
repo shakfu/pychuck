@@ -13,8 +13,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
-from watchdog.events import FileModifiedEvent, FileSystemEventHandler
+from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
+from watchdog.observers.api import BaseObserver
 
 if TYPE_CHECKING:
     from .tui.session import ChuckSession
@@ -64,7 +65,7 @@ class FileWatcher:
     on_error: Callable[[Path, str], None] | None = None
     debounce_ms: int = 100
     _watched_files: dict[str, WatchedFile] = field(default_factory=dict)
-    _observer: Observer | None = field(default=None, repr=False)
+    _observer: BaseObserver | None = field(default=None, repr=False)
     _handler: _FileChangeHandler | None = field(default=None, repr=False)
     _running: bool = field(default=False, repr=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
@@ -108,12 +109,14 @@ class FileWatcher:
             )
 
             # If already running, add directory to observer
-            if self._running and self._observer is not None:
+            if (
+                self._running
+                and self._observer is not None
+                and self._handler is not None
+            ):
                 parent_dir = str(path.parent)
                 # Observer will watch the parent directory
-                self._observer.schedule(
-                    self._handler, parent_dir, recursive=False
-                )
+                self._observer.schedule(self._handler, parent_dir, recursive=False)
 
             return True
 
@@ -203,8 +206,6 @@ class FileWatcher:
             if str_path not in self._watched_files:
                 return
 
-            watched = self._watched_files[str_path]
-
             # Cancel any existing debounce timer for this file
             if str_path in self._debounce_timers:
                 self._debounce_timers[str_path].cancel()
@@ -293,13 +294,18 @@ class _FileChangeHandler(FileSystemEventHandler):
         self.watcher = watcher
         super().__init__()
 
-    def on_modified(self, event: FileModifiedEvent) -> None:
+    def on_modified(self, event: FileSystemEvent) -> None:
         """Handle file modification event."""
         if event.is_directory:
             return
 
+        # Get path as string
+        src_path = event.src_path
+        if isinstance(src_path, bytes):
+            src_path = src_path.decode("utf-8")
+
         # Only handle .ck files
-        if not event.src_path.endswith(".ck"):
+        if not src_path.endswith(".ck"):
             return
 
-        self.watcher._handle_file_modified(event.src_path)
+        self.watcher._handle_file_modified(src_path)

@@ -10,16 +10,15 @@ from typing import TYPE_CHECKING, Any
 
 from .._numchuck import start_audio, stop_audio, shutdown_audio, audio_info
 from ..paths import (
-    get_snippet_path,
     get_snippet_path_with_source,
     get_snippets_dir,
     ensure_numchuck_directories,
-    list_snippets,
     list_all_snippets,
 )
 from .logging import get_logger, TUILogger
 
 if TYPE_CHECKING:
+    from .._numchuck import ChucK
     from .parser import Command
     from .session import ChuckSession
 
@@ -45,8 +44,15 @@ class CommandExecutor:
             logger: Optional logger (uses global logger if None)
         """
         self.session = session
-        self.chuck = session.chuck
+        self._chuck = session.chuck
         self._logger = logger or get_logger()
+
+    @property
+    def chuck(self) -> ChucK:
+        """Get ChucK instance, raising if not available."""
+        if self._chuck is None:
+            raise RuntimeError("ChucK instance not available")
+        return self._chuck
 
     def execute(self, cmd: Command) -> str | None:
         """Execute command and return error message if any.
@@ -546,7 +552,10 @@ class CommandExecutor:
 
     def _get_or_create_watcher(self):
         """Get or create the file watcher instance."""
-        if not hasattr(self.session, "_file_watcher") or self.session._file_watcher is None:
+        if (
+            not hasattr(self.session, "_file_watcher")
+            or self.session._file_watcher is None
+        ):
             from ..watcher import FileWatcher
 
             def on_reload(path: Path, shred_id: int) -> None:
@@ -611,7 +620,10 @@ class CommandExecutor:
         filepath = args["path"]
         path = Path(filepath).resolve()
 
-        if not hasattr(self.session, "_file_watcher") or self.session._file_watcher is None:
+        if (
+            not hasattr(self.session, "_file_watcher")
+            or self.session._file_watcher is None
+        ):
             return "No files are being watched"
 
         watcher = self.session._file_watcher
@@ -626,7 +638,10 @@ class CommandExecutor:
 
     def _cmd_unwatch_all(self, args: dict[str, Any]) -> str | None:
         """Stop watching all files."""
-        if not hasattr(self.session, "_file_watcher") or self.session._file_watcher is None:
+        if (
+            not hasattr(self.session, "_file_watcher")
+            or self.session._file_watcher is None
+        ):
             return "No files are being watched"
 
         watcher = self.session._file_watcher
@@ -643,7 +658,10 @@ class CommandExecutor:
 
     def _cmd_list_watched(self, args: dict[str, Any]) -> str | None:
         """List all watched files."""
-        if not hasattr(self.session, "_file_watcher") or self.session._file_watcher is None:
+        if (
+            not hasattr(self.session, "_file_watcher")
+            or self.session._file_watcher is None
+        ):
             self._log("no files being watched")
             self._log("")
             self._log("Use 'watch file.ck' to start watching a file")

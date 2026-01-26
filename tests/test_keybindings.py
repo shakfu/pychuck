@@ -164,9 +164,9 @@ class TestCreateKeybinding:
             pass
 
         # Invalid bindings should warn but not crash
-        # Note: prompt_toolkit might accept some "invalid" bindings
-        # so we just verify it doesn't crash
-        create_keybinding(kb, "invalid-key-combo-xyz", handler)
+        # Explicitly capture the expected warning
+        with pytest.warns(UserWarning, match="Invalid keybinding"):
+            create_keybinding(kb, "invalid-key-combo-xyz", handler)
 
 
 class TestGetKeybinding:

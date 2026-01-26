@@ -6,7 +6,6 @@ Provides consistent logging with levels, timestamps, and UI integration.
 
 from __future__ import annotations
 
-import sys
 from datetime import datetime
 from enum import IntEnum
 from typing import Callable, TextIO
@@ -161,9 +160,7 @@ class TUILogger:
             message = f"{message}: {exc}"
         self._log(LogLevel.ERROR, message)
 
-    def get_messages(
-        self, level: LogLevel | None = None
-    ) -> list[tuple[LogLevel, str]]:
+    def get_messages(self, level: LogLevel | None = None) -> list[tuple[LogLevel, str]]:
         """Get stored log messages.
 
         Args:

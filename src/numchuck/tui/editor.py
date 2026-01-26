@@ -12,11 +12,12 @@ Features:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from prompt_toolkit import Application
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout import Layout, HSplit, Window
+from prompt_toolkit.layout.containers import FloatContainer
 from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.widgets import TextArea
 from prompt_toolkit.lexers import PygmentsLexer
@@ -25,7 +26,6 @@ from .common import ChuckApplication
 
 if TYPE_CHECKING:
     from prompt_toolkit.key_binding.key_processor import KeyPressEvent
-    from prompt_toolkit.layout.containers import FloatContainer
 
 
 class EditorTab:
@@ -296,8 +296,10 @@ class ChuckEditor:
         # Define handlers first
         def ok_handler() -> None:
             file_path = input_buffer.text.strip()
-            if self.app and self.app.layout.container.floats:
-                self.app.layout.container.floats.pop()  # Remove dialog
+            if self.app:
+                container = cast(FloatContainer, self.app.layout.container)
+                if container.floats:
+                    container.floats.pop()  # Remove dialog
 
             # Process the file path
             if file_path:
@@ -314,8 +316,10 @@ class ChuckEditor:
                 self.app.invalidate()
 
         def cancel_handler() -> None:
-            if self.app and self.app.layout.container.floats:
-                self.app.layout.container.floats.pop()  # Remove dialog
+            if self.app:
+                container = cast(FloatContainer, self.app.layout.container)
+                if container.floats:
+                    container.floats.pop()  # Remove dialog
             self.status_message = "Open cancelled"
             if self.app:
                 self.app.invalidate()
@@ -398,11 +402,13 @@ class ChuckEditor:
 
         # Add as floating window
         float_container = Float(content=dialog)
-        self.app.layout.container.floats.append(float_container)
+        if self.app:
+            container = cast(FloatContainer, self.app.layout.container)
+            container.floats.append(float_container)
 
-        # Focus the input buffer
-        self.app.layout.focus(input_window)
-        self.app.invalidate()
+            # Focus the input buffer
+            self.app.layout.focus(input_window)
+            self.app.invalidate()
 
     def add_tab(self, file_path: str | Path | None = None) -> None:
         """Add new tab.

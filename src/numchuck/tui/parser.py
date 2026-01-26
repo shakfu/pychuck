@@ -75,7 +75,10 @@ class CommandParser:
             (r"^playback\s+(\w+)(?:\s+(\d*\.?\d+))?$", self._playback),
             (r"^recordings$", self._list_recordings),
             # MIDI commands
-            (r"^midi\s+learn\s+(\w+)(?:\s+(\d*\.?\d+)\s+(\d*\.?\d+))?$", self._midi_learn),
+            (
+                r"^midi\s+learn\s+(\w+)(?:\s+(\d*\.?\d+)\s+(\d*\.?\d+))?$",
+                self._midi_learn,
+            ),
             (r"^midi\s+list$", self._midi_list),
             (r"^midi\s+remove\s+(\w+)$", self._midi_remove),
             (r"^midi\s+start$", self._midi_start),

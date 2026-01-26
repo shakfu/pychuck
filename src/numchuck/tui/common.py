@@ -12,7 +12,7 @@ Provides base class with common functionality:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Callable
 
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout.containers import ConditionalContainer, Window
@@ -31,7 +31,7 @@ from .._numchuck import (
     shutdown_audio,
 )
 from .session import ChuckSession
-from .logging import TUILogger, LogLevel, get_logger
+from .logging import TUILogger, get_logger
 from ..config import get_config, KeybindingsConfig
 
 if TYPE_CHECKING:
@@ -258,8 +258,20 @@ def parse_key_binding(key_str: str) -> str:
 
     # Valid special keys
     valid_special = {
-        "escape", "enter", "tab", "backspace", "delete", "insert",
-        "home", "end", "pageup", "pagedown", "left", "right", "up", "down",
+        "escape",
+        "enter",
+        "tab",
+        "backspace",
+        "delete",
+        "insert",
+        "home",
+        "end",
+        "pageup",
+        "pagedown",
+        "left",
+        "right",
+        "up",
+        "down",
         "space",
     }
 
@@ -300,6 +312,7 @@ def create_keybinding(
     except ValueError as e:
         # Log error but don't crash
         import warnings
+
         warnings.warn(f"Invalid keybinding '{key}': {e}", stacklevel=2)
 
 
@@ -515,7 +528,9 @@ class ChuckApplication:
             filter=Condition(lambda: self.show_shreds),
         )
 
-    def create_log_window(self, log_area: TextArea | None = None) -> ConditionalContainer:
+    def create_log_window(
+        self, log_area: TextArea | None = None
+    ) -> ConditionalContainer:
         """Create log window that toggles with F3.
 
         Args:

@@ -216,10 +216,14 @@ class WaveformBuffer:
                 right = samples[1::2]
                 if len(left) > 0:
                     current_peak_left = float(np.max(np.abs(left)))
-                    self._peak_left = max(current_peak_left, self._peak_left * self._peak_decay)
+                    self._peak_left = max(
+                        current_peak_left, self._peak_left * self._peak_decay
+                    )
                 if len(right) > 0:
                     current_peak_right = float(np.max(np.abs(right)))
-                    self._peak_right = max(current_peak_right, self._peak_right * self._peak_decay)
+                    self._peak_right = max(
+                        current_peak_right, self._peak_right * self._peak_decay
+                    )
             else:
                 # Mono
                 current_peak = float(np.max(np.abs(samples)))
@@ -306,7 +310,7 @@ def calculate_rms(samples: NDArray[np.float32]) -> float:
     """
     if len(samples) == 0:
         return 0.0
-    return float(np.sqrt(np.mean(samples ** 2)))
+    return float(np.sqrt(np.mean(samples**2)))
 
 
 def calculate_peak(samples: NDArray[np.float32]) -> float:

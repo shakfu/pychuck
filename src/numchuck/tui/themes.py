@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from prompt_toolkit.styles import Style
 
 if TYPE_CHECKING:
-    from ..config import ThemeColors, ThemeConfig
+    from ..config import ThemeConfig
 
 
 # =============================================================================

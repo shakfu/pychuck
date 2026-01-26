@@ -8,7 +8,6 @@ for native OSC integration using ChucK's built-in liblo support.
 from __future__ import annotations
 
 import socket
-import socket
 import struct
 import threading
 from dataclasses import dataclass, field
@@ -352,40 +351,48 @@ def generate_osc_listener_code(
         # Listen to all if no specific mappings
         lines.append('oin.addAddress("/numchuck/*");')
 
-    lines.extend([
-        "",
-        f'<<< "OSC listener started on port {port}" >>>;',
-        "",
-        "while (true) {",
-        "    oin => now;",
-        "    while (oin.recv(msg)) {",
-    ])
+    lines.extend(
+        [
+            "",
+            f'<<< "OSC listener started on port {port}" >>>;',
+            "",
+            "while (true) {",
+            "    oin => now;",
+            "    while (oin.recv(msg)) {",
+        ]
+    )
 
     if mappings:
         first = True
         for addr, global_name in mappings.items():
             condition = "if" if first else "else if"
             first = False
-            lines.extend([
-                f'        {condition} (msg.address == "{addr}") {{',
-                "            msg.getFloat(0) => global float " + global_name + ";",
-                "        }",
-            ])
+            lines.extend(
+                [
+                    f'        {condition} (msg.address == "{addr}") {{',
+                    "            msg.getFloat(0) => global float " + global_name + ";",
+                    "        }",
+                ]
+            )
     else:
         # Generic handler for /numchuck/set/* pattern
-        lines.extend([
-            '        if (msg.address.find("/numchuck/set/") == 0) {',
-            '            // Extract variable name from address',
-            '            msg.address.substring(14) => string varname;',
-            '            msg.getFloat(0) => float value;',
-            '            <<< "OSC set:", varname, "=", value >>>;',
-            "        }",
-        ])
+        lines.extend(
+            [
+                '        if (msg.address.find("/numchuck/set/") == 0) {',
+                "            // Extract variable name from address",
+                "            msg.address.substring(14) => string varname;",
+                "            msg.getFloat(0) => float value;",
+                '            <<< "OSC set:", varname, "=", value >>>;',
+                "        }",
+            ]
+        )
 
-    lines.extend([
-        "    }",
-        "}",
-    ])
+    lines.extend(
+        [
+            "    }",
+            "}",
+        ]
+    )
 
     return "\n".join(lines)
 

@@ -303,17 +303,21 @@ def generate_midi_listener_code(mappings: MIDIMappings) -> str:
         scale = mapping.max_value - mapping.min_value
         offset = mapping.min_value
 
-        lines.extend([
-            f"            {condition} (channel == {mapping.channel} && cc == {mapping.cc_number}) {{",
-            f"                {offset} + (value / 127.0) * {scale} => global float {mapping.global_name};",
-            "            }",
-        ])
+        lines.extend(
+            [
+                f"            {condition} (channel == {mapping.channel} && cc == {mapping.cc_number}) {{",
+                f"                {offset} + (value / 127.0) * {scale} => global float {mapping.global_name};",
+                "            }",
+            ]
+        )
 
-    lines.extend([
-        "        }",
-        "    }",
-        "}",
-    ])
+    lines.extend(
+        [
+            "        }",
+            "    }",
+            "}",
+        ]
+    )
 
     return "\n".join(lines)
 
@@ -326,7 +330,7 @@ def generate_midi_monitor_code() -> str:
     Returns:
         ChucK code string
     """
-    return '''// MIDI CC Monitor
+    return """// MIDI CC Monitor
 MidiIn min;
 MidiMsg msg;
 
@@ -348,4 +352,4 @@ while (true) {
         }
     }
 }
-'''
+"""

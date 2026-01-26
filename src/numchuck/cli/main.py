@@ -121,9 +121,7 @@ def create_parser():
     )
 
     # snippets subcommand
-    snippets_parser = subparsers.add_parser(
-        "snippets", help="Manage code snippets"
-    )
+    snippets_parser = subparsers.add_parser("snippets", help="Manage code snippets")
     snippets_subparsers = snippets_parser.add_subparsers(
         dest="snippets_command", help="Snippets commands"
     )
