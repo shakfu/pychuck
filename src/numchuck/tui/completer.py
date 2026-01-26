@@ -21,7 +21,9 @@ from prompt_toolkit.document import Document
 from ..chuck_lang import ALL_IDENTIFIERS, REPL_COMMANDS
 
 if TYPE_CHECKING:
+    from prompt_toolkit.completion import CompleteEvent
     from .session import ChuckSession
+    from .._numchuck import ChucK
 
 
 class ChuckCompleter(Completer):
@@ -34,7 +36,7 @@ class ChuckCompleter(Completer):
         chuck: ChucK instance for querying global variables
     """
 
-    def __init__(self, session: ChuckSession, chuck):
+    def __init__(self, session: ChuckSession, chuck: ChucK) -> None:
         """Initialize the completer.
 
         Args:
@@ -66,7 +68,9 @@ class ChuckCompleter(Completer):
         except (AttributeError, RuntimeError):
             return iter([])
 
-    def _complete_path(self, text: str, complete_event) -> Iterator[Completion]:
+    def _complete_path(
+        self, text: str, complete_event: CompleteEvent
+    ) -> Iterator[Completion]:
         """Complete file paths for .ck files."""
         path_doc = Document(text, len(text))
         yield from self.path_completer.get_completions(path_doc, complete_event)
@@ -91,7 +95,9 @@ class ChuckCompleter(Completer):
                     start_position=-len(prefix) - len(suffix),
                 )
 
-    def get_completions(self, document, complete_event) -> Iterator[Completion]:
+    def get_completions(
+        self, document: Document, complete_event: CompleteEvent
+    ) -> Iterator[Completion]:
         """Get completions based on current document context.
 
         Args:

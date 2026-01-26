@@ -1,17 +1,42 @@
-from typing import Dict, Optional
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 from .paths import get_projects_dir
 from .project import Project
+from .logging import get_logger, TUILogger
+
+if TYPE_CHECKING:
+    from .._numchuck import ChucK
 
 
 class ChuckSession:
-    """Session managing ChucK instance state with optional project support."""
+    """Session managing ChucK instance state with optional project support.
 
-    def __init__(self, chuck, project_name: Optional[str] = None):
-        self.chuck = chuck
-        self.shreds: Dict[int, Dict] = {}  # id -> {'name': 'file.ck', 'time': samples}
+    Tracks:
+    - Active shreds with their metadata
+    - Audio running state
+    - Optional project for file versioning
+    """
+
+    def __init__(
+        self,
+        chuck: ChucK,
+        project_name: str | None = None,
+        logger: TUILogger | None = None,
+    ) -> None:
+        """Initialize session.
+
+        Args:
+            chuck: ChucK instance to track
+            project_name: Optional project name for file versioning
+            logger: Optional logger (uses global logger if None)
+        """
+        self.chuck: ChucK | None = chuck
+        self.shreds: dict[int, dict[str, Any]] = {}
         self.audio_running = False
-        self.project = None
+        self.project: Project | None = None
+        self._logger = logger or get_logger()
 
         # Initialize project if name provided
         if project_name:
@@ -22,9 +47,9 @@ class ChuckSession:
         self,
         shred_id: int,
         name: str,
-        content: Optional[str] = None,
+        content: str | None = None,
         shred_type: str = "code",
-    ):
+    ) -> None:
         """Add a shred and optionally save to project.
 
         Args:
@@ -34,10 +59,12 @@ class ChuckSession:
             shred_type: Type of shred ('code' or 'file')
         """
         # Capture ChucK VM time when shred was created
-        try:
-            chuck_time = self.chuck.now()
-        except (RuntimeError, AttributeError):
-            chuck_time = 0.0
+        chuck_time = 0.0
+        if self.chuck is not None:
+            try:
+                chuck_time = self.chuck.now()
+            except (RuntimeError, AttributeError) as e:
+                self._logger.debug(f"Could not get VM time: {e}")
 
         self.shreds[shred_id] = {
             "id": shred_id,
@@ -51,11 +78,10 @@ class ChuckSession:
         if self.project and content:
             try:
                 self.project.save_on_spork(name, content, shred_id)
-            except Exception as e:
-                # Don't fail if project save fails
-                print(f"Warning: Failed to save to project: {e}")
+            except OSError as e:
+                self._logger.warning(f"Failed to save to project: {e}")
 
-    def replace_shred(self, shred_id: int, content: str):
+    def replace_shred(self, shred_id: int, content: str) -> None:
         """Replace shred and save new version to project.
 
         Args:
@@ -65,15 +91,15 @@ class ChuckSession:
         if self.project:
             try:
                 self.project.save_on_replace(shred_id, content)
-            except Exception as e:
-                print(f"Warning: Failed to save replacement to project: {e}")
+            except OSError as e:
+                self._logger.warning(f"Failed to save replacement to project: {e}")
 
-    def remove_shred(self, shred_id: int):
+    def remove_shred(self, shred_id: int) -> None:
         """Remove a shred from tracking."""
         if shred_id in self.shreds:
             self.shreds.pop(shred_id)
 
-    def clear_shreds(self):
+    def clear_shreds(self) -> None:
         """Clear all tracked shreds."""
         self.shreds.clear()
 

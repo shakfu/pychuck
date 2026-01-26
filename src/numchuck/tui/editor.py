@@ -5,11 +5,14 @@ Features:
 - Multi-tab editing
 - F5 to spork (compile and run)
 - F6 to replace running shred
-- Project-based versioning (file.ck → file-1.ck → file-1-1.ck)
+- Project-based versioning (file.ck -> file-1.ck -> file-1-1.ck)
 - Tab names show shred IDs
 """
 
+from __future__ import annotations
+
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from prompt_toolkit import Application
 from prompt_toolkit.key_binding import KeyBindings
@@ -20,14 +23,23 @@ from prompt_toolkit.lexers import PygmentsLexer
 
 from .common import ChuckApplication
 
+if TYPE_CHECKING:
+    from prompt_toolkit.key_binding.key_processor import KeyPressEvent
+    from prompt_toolkit.layout.containers import FloatContainer
+
 
 class EditorTab:
     """Represents a single file being edited."""
 
-    def __init__(self, file_path=None):
-        self.file_path = Path(file_path) if file_path else None
-        self.modified = False
-        self.shred_id = None  # Set when sporked
+    def __init__(self, file_path: str | Path | None = None) -> None:
+        """Initialize an editor tab.
+
+        Args:
+            file_path: Optional path to file to load
+        """
+        self.file_path: Path | None = Path(file_path) if file_path else None
+        self.modified: bool = False
+        self.shred_id: int | None = None  # Set when sporked
 
         # Load content
         if self.file_path and self.file_path.exists():
@@ -51,13 +63,13 @@ class EditorTab:
         )
 
         # Track modifications
-        def on_change(_):
+        def on_change(_: Any) -> None:
             self.modified = True
 
         self.text_area.buffer.on_text_changed += on_change
 
     @property
-    def display_name(self):
+    def display_name(self) -> str:
         """Tab display name with shred ID and modified indicator."""
         if self.file_path:
             name = self.file_path.name
@@ -78,12 +90,12 @@ class EditorTab:
         return name
 
     @property
-    def content(self):
+    def content(self) -> str:
         """Get current buffer content."""
         return self.text_area.text
 
     @content.setter
-    def content(self, value):
+    def content(self, value: str) -> None:
         """Set buffer content and mark as unmodified."""
         self.text_area.text = value
         self.modified = False
@@ -101,27 +113,39 @@ class ChuckEditor:
         access.
     """
 
-    def __init__(self, project_name=None, start_audio=False):
+    def __init__(
+        self, project_name: str | None = None, start_audio: bool = False
+    ) -> None:
+        """Initialize the editor.
+
+        Args:
+            project_name: Optional project name for versioning
+            start_audio: Whether to start audio on launch
+        """
         self.app_state = ChuckApplication(project_name=project_name, auto_init=True)
-        self.tabs = []
-        self.current_tab_index = 0  # Safe: prompt_toolkit is single-threaded
+        self.tabs: list[EditorTab] = []
+        self.current_tab_index: int = 0  # Safe: prompt_toolkit is single-threaded
         self.start_audio_flag = start_audio
         self.status_message = ""
 
         # Create application
-        self.app = None
+        self.app: Application[None] | None = None
 
-    def create_key_bindings(self):
-        """Create editor key bindings."""
+    def create_key_bindings(self) -> KeyBindings:
+        """Create editor key bindings.
+
+        Returns:
+            KeyBindings with all editor shortcuts
+        """
         kb = self.app_state.get_common_key_bindings()
 
         @kb.add("c-o")
-        def open_file(event):
+        def open_file(event: KeyPressEvent) -> None:
             """Open file (Ctrl-O)"""
             self._show_open_file_dialog()
 
         @kb.add("c-s")
-        def save_file(event):
+        def save_file(event: KeyPressEvent) -> None:
             """Save current file (Ctrl-S)"""
             if not self.tabs:
                 return
@@ -132,7 +156,7 @@ class ChuckEditor:
                     tab.file_path.write_text(tab.content)
                     tab.modified = False
                     self.status_message = f"Saved {tab.file_path.name}"
-                except Exception as e:
+                except OSError as e:
                     self.status_message = f"Save failed: {e}"
             else:
                 self.status_message = "No filename (will auto-save on spork)"
@@ -140,7 +164,7 @@ class ChuckEditor:
 
         @kb.add("f5")
         @kb.add("c-r")
-        def spork_code(event):
+        def spork_code(event: KeyPressEvent) -> None:
             """Spork current buffer (F5 or Ctrl-R)"""
             if not self.tabs:
                 return
@@ -251,7 +275,7 @@ class ChuckEditor:
 
         return kb
 
-    def _show_open_file_dialog(self):
+    def _show_open_file_dialog(self) -> None:
         """Show a dialog to open a file with tab completion."""
         from prompt_toolkit.completion import PathCompleter
         from prompt_toolkit.layout.containers import Float, HSplit, Window
@@ -270,9 +294,9 @@ class ChuckEditor:
         )
 
         # Define handlers first
-        def ok_handler():
+        def ok_handler() -> None:
             file_path = input_buffer.text.strip()
-            if self.app.layout.container.floats:
+            if self.app and self.app.layout.container.floats:
                 self.app.layout.container.floats.pop()  # Remove dialog
 
             # Process the file path
@@ -286,13 +310,15 @@ class ChuckEditor:
             else:
                 self.status_message = "Open cancelled"
 
-            self.app.invalidate()
+            if self.app:
+                self.app.invalidate()
 
-        def cancel_handler():
-            if self.app.layout.container.floats:
+        def cancel_handler() -> None:
+            if self.app and self.app.layout.container.floats:
                 self.app.layout.container.floats.pop()  # Remove dialog
             self.status_message = "Open cancelled"
-            self.app.invalidate()
+            if self.app:
+                self.app.invalidate()
 
         # Create custom key bindings for the input buffer
         input_kb = KeyBindings()
@@ -378,8 +404,12 @@ class ChuckEditor:
         self.app.layout.focus(input_window)
         self.app.invalidate()
 
-    def add_tab(self, file_path=None):
-        """Add new tab."""
+    def add_tab(self, file_path: str | Path | None = None) -> None:
+        """Add new tab.
+
+        Args:
+            file_path: Optional path to file to open in new tab
+        """
         tab = EditorTab(file_path)
         self.tabs.append(tab)
         self.current_tab_index = len(self.tabs) - 1
@@ -388,10 +418,14 @@ class ChuckEditor:
         if self.app:
             self.app.layout.focus(tab.text_area)
 
-    def create_tab_bar(self):
-        """Create tab bar showing all open tabs."""
+    def create_tab_bar(self) -> Window:
+        """Create tab bar showing all open tabs.
 
-        def get_text():
+        Returns:
+            Window with tab bar
+        """
+
+        def get_text() -> str:
             if not self.tabs:
                 return ""
 
@@ -412,15 +446,19 @@ class ChuckEditor:
             style="bg:#3366cc fg:#ffffff",
         )
 
-    def create_layout(self):
-        """Create editor layout."""
+    def create_layout(self) -> FloatContainer:
+        """Create editor layout.
+
+        Returns:
+            FloatContainer with complete editor layout
+        """
         if not self.tabs:
             self.add_tab()
 
         # Use a dynamic container that updates based on current_tab_index
         from prompt_toolkit.layout.containers import DynamicContainer, FloatContainer
 
-        def get_current_editor():
+        def get_current_editor() -> TextArea | Window:
             if self.tabs and 0 <= self.current_tab_index < len(self.tabs):
                 return self.tabs[self.current_tab_index].text_area
             return Window()  # Fallback empty window
@@ -440,8 +478,12 @@ class ChuckEditor:
         # Wrap in FloatContainer to support floating dialogs
         return FloatContainer(content=root_container, floats=[])
 
-    def get_help_text(self):
-        """Get help text for F1 window."""
+    def get_help_text(self) -> str:
+        """Get help text for F1 window.
+
+        Returns:
+            Help text string
+        """
         project_info = (
             f"Project: {self.app_state.session.project.name}"
             if self.app_state.session.project
@@ -477,14 +519,18 @@ UI
 
 PROJECT VERSIONING
 Files saved to: {project_dir}
-Versioning: file.ck → file-1.ck (spork) → file-1-1.ck (replace)
+Versioning: file.ck -> file-1.ck (spork) -> file-1-1.ck (replace)
 """
 
-    def get_status_text(self):
-        """Get status bar text."""
+    def get_status_text(self) -> str:
+        """Get status bar text.
+
+        Returns:
+            Status text string
+        """
         # Shred count
         shred_count = len(self.app_state.session.shreds)
-        audio_status = "♪" if self.app_state.audio_running else "⏸"
+        audio_status = "[ON]" if self.app_state.audio_running else "[OFF]"
 
         # Current file info
         if self.tabs:
@@ -495,7 +541,7 @@ Versioning: file.ck → file-1.ck (spork) → file-1-1.ck (replace)
 
         return f" {audio_status} {shred_count} shreds | {file_info} | {self.status_message} | F1:Help "
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         """Cleanup on exit."""
         # Clean up app state (handles audio stop and ChucK cleanup)
         self.app_state.cleanup()
@@ -514,8 +560,12 @@ Versioning: file.ck → file-1.ck (spork) → file-1-1.ck (replace)
         if hasattr(self, "app"):
             self.app = None
 
-    def run(self, files=None):
-        """Run editor."""
+    def run(self, files: list[str] | None = None) -> None:
+        """Run editor.
+
+        Args:
+            files: Optional list of file paths to open
+        """
         # Load files or create empty tab
         if files:
             for f in files:
@@ -544,8 +594,18 @@ Versioning: file.ck → file-1.ck (spork) → file-1-1.ck (replace)
             self.cleanup()
 
 
-def main(files=None, project_name=None, start_audio=False):
-    """Main entry point for editor."""
+def main(
+    files: list[str] | None = None,
+    project_name: str | None = None,
+    start_audio: bool = False,
+) -> None:
+    """Main entry point for editor.
+
+    Args:
+        files: Optional list of files to open
+        project_name: Optional project name for versioning
+        start_audio: Whether to start audio on launch
+    """
     editor = ChuckEditor(project_name=project_name, start_audio=start_audio)
     editor.run(files=files)
 

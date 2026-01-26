@@ -88,6 +88,51 @@ High priority items from comprehensive code review.
 - [x] **Completer tests** - 12 new tests for ChuckCompleter class
 - Total test count: 228 (up from 216)
 
+---
+
+## TUI Quality Improvements (2026-01-26)
+
+### Audio Management
+
+- [x] **Create AudioManager helper class** (`src/numchuck/tui/common.py`)
+  - RAII-style audio lifecycle management
+  - Methods: `start()`, `stop()`, `restart()`
+  - Property: `is_running`
+  - Logger integration for consistent error reporting
+  - ChuckApplication now uses AudioManager internally
+
+### Error Handling
+
+- [x] **Standardize error handling in TUI** (`src/numchuck/tui/commands.py`, `session.py`)
+  - Command methods return error strings (not raise exceptions)
+  - Logger integration for warnings and errors
+  - Specific exception types instead of broad `Exception` catches
+  - Consistent error reporting through TUILogger
+
+### Type Hints
+
+- [x] **Complete type hints for TUI modules**
+  - `common.py` - Full annotations for AudioManager and ChuckApplication
+  - `commands.py` - All 20+ command methods annotated
+  - `session.py` - ChuckSession fully typed
+  - `repl.py` - Key methods typed (run, setup, process_input, cleanup)
+  - `completer.py` - ChuckCompleter with TYPE_CHECKING imports
+  - `editor.py` - EditorTab and ChuckEditor fully typed
+
+### Logging
+
+- [x] **Create centralized logging module** (`src/numchuck/tui/logging.py`)
+  - LogLevel enum (DEBUG, INFO, WARNING, ERROR)
+  - TUILogger class with callbacks, stream output, timestamps
+  - Message storage with level filtering
+  - Global logger functions: `get_logger()`, `set_logger()`, `debug()`, `info()`, `warning()`, `error()`
+
+### Test Suite
+
+- [x] **AudioManager tests** - 8 new tests in `test_audio_manager.py`
+- [x] **Logging tests** - 15 new tests in `test_logging.py`
+- Total test count: 280 (up from 253)
+
 ### Packaging
 
 - [x] **Add py.typed marker** (`src/numchuck/py.typed`)

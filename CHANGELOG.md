@@ -63,6 +63,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Unified output capture with `setup_output_capture()` and `set_log_callback()`
   - 12 new completer tests
 
+- **TUI Logging Module** (`src/numchuck/tui/logging.py`):
+  - Centralized logging for TUI components
+  - `LogLevel` enum (DEBUG, INFO, WARNING, ERROR)
+  - `TUILogger` class with callbacks, stream output, timestamps
+  - Message storage with level filtering via `get_messages(level=...)`
+  - Global logger functions: `get_logger()`, `set_logger()`, `debug()`, `info()`, `warning()`, `error()`
+  - 15 new logging tests
+
+- **AudioManager Class** (`src/numchuck/tui/common.py`):
+  - RAII-style audio lifecycle management
+  - Methods: `start()`, `stop()`, `restart()`
+  - Property: `is_running`
+  - Logger integration for consistent error reporting
+  - ChuckApplication now uses AudioManager internally
+  - 8 new AudioManager tests
+
+- **TUI Type Hints Completion**:
+  - `common.py` - Full annotations for AudioManager and ChuckApplication
+  - `commands.py` - All 20+ command methods annotated with return types
+  - `session.py` - ChuckSession fully typed with logger integration
+  - `repl.py` - Key methods typed (run, setup, process_input, cleanup)
+  - `completer.py` - ChuckCompleter with TYPE_CHECKING imports
+  - `editor.py` - EditorTab and ChuckEditor classes fully typed
+
+- **TUI Error Handling Standardization**:
+  - Command methods return error strings instead of raising exceptions
+  - Logger integration for warnings and debug output
+  - Specific exception types instead of broad `Exception` catches
+
 ### Changed
 
 - **Python Version Support**:
@@ -74,7 +103,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Now exports: `Chuck`, `Shred`, `GlobalInt`, `GlobalFloat`, `GlobalString`
   - Now exports: `Config`, `load_config`, `get_config`, `save_config`
 
-- **Test Count**: 253 tests (up from 213)
+- **Test Count**: 280 tests (up from 253)
 
 ## [0.1.8]
 

@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING
 
 from .parser import CommandParser
 from .commands import CommandExecutor
@@ -6,9 +9,19 @@ from .paths import get_history_file, ensure_numchuck_directories
 from .common import ChuckApplication, generate_shreds_table
 from .completer import ChuckCompleter
 
+if TYPE_CHECKING:
+    from prompt_toolkit.buffer import Buffer
+
 
 class ChuckREPL:
-    def __init__(self, smart_enter=True, show_sidebar=True, project_name=None):
+    """Interactive REPL for ChucK with full-screen UI."""
+
+    def __init__(
+        self,
+        smart_enter: bool = True,
+        show_sidebar: bool = True,
+        project_name: str | None = None,
+    ) -> None:
         # Use ChuckApplication for shared ChucK management
         self.app_state = ChuckApplication(project_name=project_name)
         self.chuck = self.app_state.chuck  # Convenience reference
@@ -383,8 +396,12 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
 
         self.prompt_html = HTML  # Store HTML class for later use
 
-    def add_to_log(self, msg):
-        """Capture ChucK VM messages to log window"""
+    def add_to_log(self, msg: str) -> None:
+        """Capture ChucK VM messages to log window.
+
+        Args:
+            msg: Message to add to log
+        """
         msg = msg.rstrip("\n")
         if msg:
             self.log_lines.append(msg)
@@ -397,8 +414,8 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
             self.log_area.buffer.cursor_position = len(self.log_area.text)
             self.app.invalidate()
 
-    def setup(self):
-        """Initialize ChucK with sensible defaults"""
+    def setup(self) -> None:
+        """Initialize ChucK with sensible defaults."""
         from .._numchuck import ChucK as ChucKClass
 
         # Use ChucK's stdout callback to capture VM messages (must be set before init)
@@ -412,8 +429,12 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
         self.app_state.set_log_callback(lambda msg: self.add_to_log(f"[out] {msg}"))
         self.app_state.setup_output_capture()
 
-    def process_input(self, buff):
-        """Process input when user presses Enter"""
+    def process_input(self, buff: Buffer) -> None:
+        """Process input when user presses Enter.
+
+        Args:
+            buff: Input buffer containing user text
+        """
         text = buff.text.strip()
 
         # Clear previous error
@@ -472,8 +493,8 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
         # Force redraw to update topbar/toolbar/error
         self.app.invalidate()
 
-    def run(self, start_audio=False, files=None):
-        """Main REPL loop
+    def run(self, start_audio: bool = False, files: list[str] | None = None) -> None:
+        """Main REPL loop.
 
         Args:
             start_audio: If True, start audio automatically on startup
@@ -511,8 +532,8 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
         finally:
             self.cleanup()
 
-    def cleanup(self):
-        """Shutdown cleanly"""
+    def cleanup(self) -> None:
+        """Shutdown cleanly."""
         print("\nShutting down...")
 
         # Use app_state cleanup (handles shreds, audio, and references)

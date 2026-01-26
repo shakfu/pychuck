@@ -11,9 +11,8 @@ Provides base class with common functionality:
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
-from typing import Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout.containers import ConditionalContainer, Window
@@ -32,6 +31,102 @@ from .._numchuck import (
     shutdown_audio,
 )
 from .session import ChuckSession
+from .logging import TUILogger, LogLevel, get_logger
+
+if TYPE_CHECKING:
+    from prompt_toolkit.key_binding.key_processor import KeyPressEvent
+
+
+class AudioManager:
+    """Manages audio lifecycle for ChucK instances.
+
+    Provides consistent start/stop/shutdown operations with proper
+    error handling and state tracking.
+
+    Usage:
+        audio = AudioManager(chuck)
+        if audio.start():
+            # Audio is running
+            pass
+        audio.stop()
+    """
+
+    def __init__(
+        self,
+        chuck: ChucK,
+        logger: TUILogger | None = None,
+    ) -> None:
+        """Initialize AudioManager.
+
+        Args:
+            chuck: ChucK instance to manage
+            logger: Optional logger for messages (uses global logger if None)
+        """
+        self._chuck = chuck
+        self._running = False
+        self._logger = logger or get_logger()
+
+    @property
+    def is_running(self) -> bool:
+        """Check if audio is currently running."""
+        return self._running
+
+    def start(self) -> bool:
+        """Start real-time audio playback.
+
+        Returns:
+            True if audio started successfully, False otherwise
+        """
+        if self._running:
+            self._logger.debug("Audio already running")
+            return True
+
+        try:
+            start_audio(self._chuck)
+            self._running = True
+            self._logger.info("Audio started")
+            return True
+        except Exception as e:
+            self._logger.error("Could not start audio", exc=e)
+            return False
+
+    def stop(self) -> bool:
+        """Stop real-time audio playback.
+
+        Returns:
+            True if stopped successfully, False if error occurred
+        """
+        if not self._running:
+            self._logger.debug("Audio not running")
+            return True
+
+        success = True
+
+        try:
+            stop_audio()
+            self._logger.debug("Audio stopped")
+        except (RuntimeError, OSError) as e:
+            self._logger.error("Error stopping audio", exc=e)
+            success = False
+
+        try:
+            shutdown_audio(500)
+            self._logger.debug("Audio shutdown complete")
+        except (RuntimeError, OSError) as e:
+            self._logger.error("Error shutting down audio", exc=e)
+            success = False
+
+        self._running = False
+        return success
+
+    def restart(self) -> bool:
+        """Restart audio (stop then start).
+
+        Returns:
+            True if restart successful
+        """
+        self.stop()
+        return self.start()
 
 
 def format_elapsed_time(elapsed_sec: float) -> str:
@@ -142,7 +237,7 @@ class ChuckApplication:
 
     Provides common functionality for both REPL and Editor:
     - ChucK instance lifecycle management
-    - Audio start/stop/shutdown
+    - Audio start/stop/shutdown via AudioManager
     - Output capture (chout/cherr)
     - Session tracking with optional project support
     - Shared UI components
@@ -155,7 +250,8 @@ class ChuckApplication:
         output_channels: int = 2,
         input_channels: int = 0,
         auto_init: bool = False,
-    ):
+        logger: TUILogger | None = None,
+    ) -> None:
         """Initialize the application.
 
         Args:
@@ -164,14 +260,20 @@ class ChuckApplication:
             output_channels: Number of output audio channels
             input_channels: Number of input audio channels
             auto_init: If True, initialize ChucK immediately
+            logger: Optional logger instance (uses global logger if None)
         """
         self.chuck = ChucK()
         self._sample_rate = sample_rate
         self._output_channels = output_channels
         self._input_channels = input_channels
 
+        # Logger for consistent error reporting
+        self._logger = logger or get_logger()
+
+        # Audio management via AudioManager
+        self._audio_manager = AudioManager(self.chuck, self._logger)
+
         self.session = ChuckSession(self.chuck, project_name=project_name)
-        self.audio_running = False
 
         # Shared UI state
         self.show_help = False
@@ -217,73 +319,74 @@ class ChuckApplication:
         self.chuck.set_chout_callback(log_callback)
         self.chuck.set_cherr_callback(log_callback)
 
+    @property
+    def audio_running(self) -> bool:
+        """Check if audio is currently running."""
+        return self._audio_manager.is_running
+
+    @audio_running.setter
+    def audio_running(self, value: bool) -> None:
+        """Set audio running state (for compatibility)."""
+        # This is handled by AudioManager, but we sync session state
+        self.session.audio_running = value
+
     def start_audio_playback(self) -> bool:
         """Start real-time audio playback.
 
         Returns:
             True if audio started successfully, False otherwise
         """
-        if self.audio_running:
-            return True
-
-        try:
-            start_audio(self.chuck)
-            self.audio_running = True
-            self.session.audio_running = True
-            return True
-        except Exception as e:
-            print(f"Warning: Could not start audio: {e}", file=sys.stderr)
-            return False
+        result = self._audio_manager.start()
+        self.session.audio_running = result
+        return result
 
     def stop_audio_playback(self) -> None:
         """Stop real-time audio playback."""
-        if not self.audio_running:
-            return
-
-        try:
-            stop_audio()
-        except (RuntimeError, OSError) as e:
-            print(f"Warning: Error stopping audio: {e}", file=sys.stderr)
-
-        try:
-            shutdown_audio(500)
-        except (RuntimeError, OSError) as e:
-            print(f"Warning: Error shutting down audio: {e}", file=sys.stderr)
-
-        self.audio_running = False
+        self._audio_manager.stop()
         self.session.audio_running = False
 
-    def get_common_key_bindings(self):
-        """Common key bindings shared across editor and REPL."""
+    def get_common_key_bindings(self) -> KeyBindings:
+        """Common key bindings shared across editor and REPL.
+
+        Returns:
+            KeyBindings with F1/F2/F3/Ctrl-Q handlers
+        """
         kb = KeyBindings()
 
         @kb.add("c-q")
-        def exit_app(event):
+        def exit_app(event: KeyPressEvent) -> None:
             """Exit application"""
             event.app.exit()
 
         @kb.add("f1")
-        def toggle_help(event):
+        def toggle_help(event: KeyPressEvent) -> None:
             """Toggle help window"""
             self.show_help = not self.show_help
             event.app.invalidate()
 
         @kb.add("f2")
-        def toggle_shreds(event):
+        def toggle_shreds(event: KeyPressEvent) -> None:
             """Toggle shreds table"""
             self.show_shreds = not self.show_shreds
             event.app.invalidate()
 
         @kb.add("f3")
-        def toggle_log(event):
+        def toggle_log(event: KeyPressEvent) -> None:
             """Toggle log window"""
             self.show_log = not self.show_log
             event.app.invalidate()
 
         return kb
 
-    def create_help_window(self, help_text):
-        """Create help window that toggles with F1."""
+    def create_help_window(self, help_text: str) -> ConditionalContainer:
+        """Create help window that toggles with F1.
+
+        Args:
+            help_text: Text content for help window
+
+        Returns:
+            ConditionalContainer with help window
+        """
         help_area = TextArea(
             text=help_text,
             scrollbar=True,
@@ -299,10 +402,14 @@ class ChuckApplication:
             filter=Condition(lambda: self.show_help),
         )
 
-    def create_shreds_table(self):
-        """Create shreds table that toggles with F2."""
+    def create_shreds_table(self) -> ConditionalContainer:
+        """Create shreds table that toggles with F2.
 
-        def get_text():
+        Returns:
+            ConditionalContainer with shreds table
+        """
+
+        def get_text() -> str:
             return generate_shreds_table(
                 self.session.shreds, self.chuck, use_pipes=True
             )
@@ -312,7 +419,7 @@ class ChuckApplication:
             filter=Condition(lambda: self.show_shreds),
         )
 
-    def create_log_window(self, log_area: TextArea | None = None):
+    def create_log_window(self, log_area: TextArea | None = None) -> ConditionalContainer:
         """Create log window that toggles with F3.
 
         Args:
@@ -340,7 +447,7 @@ class ChuckApplication:
 
         return ConditionalContainer(log_area, filter=Condition(lambda: self.show_log))
 
-    def create_status_bar(self, status_text_func: Callable[[], str]):
+    def create_status_bar(self, status_text_func: Callable[[], str]) -> Window:
         """Create status bar at bottom of screen.
 
         Args:

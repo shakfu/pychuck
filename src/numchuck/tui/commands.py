@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 import os
 import subprocess
 import sys
 import tempfile
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from .._numchuck import start_audio, stop_audio, shutdown_audio, audio_info
 from .paths import (
@@ -12,41 +15,74 @@ from .paths import (
     ensure_numchuck_directories,
     list_snippets,
 )
+from .logging import get_logger, TUILogger
+
+if TYPE_CHECKING:
+    from .parser import Command
+    from .session import ChuckSession
 
 
 class CommandExecutor:
-    def __init__(self, session):
+    """Executes REPL commands with consistent error handling.
+
+    All command methods follow the pattern:
+    - Return None on success
+    - Return error message string on failure
+    - Log output via logger for UI integration
+    """
+
+    def __init__(
+        self,
+        session: ChuckSession,
+        logger: TUILogger | None = None,
+    ) -> None:
+        """Initialize CommandExecutor.
+
+        Args:
+            session: ChuckSession for state tracking
+            logger: Optional logger (uses global logger if None)
+        """
         self.session = session
         self.chuck = session.chuck
+        self._logger = logger or get_logger()
 
-    def execute(self, cmd):
-        """Execute command and return error message if any"""
+    def execute(self, cmd: Command) -> str | None:
+        """Execute command and return error message if any.
+
+        Args:
+            cmd: Parsed command object
+
+        Returns:
+            None on success, error message string on failure
+        """
         handler = getattr(self, f"_cmd_{cmd.type}", None)
         if handler:
             return handler(cmd.args)
         else:
             return f"Unknown command type: {cmd.type}"
 
-    def _cmd_spork_file(self, args):
+    def _cmd_spork_file(self, args: dict[str, Any]) -> str | None:
+        """Spork a ChucK file."""
         # Convert relative path to absolute path
         path = os.path.abspath(args["path"])
 
         # Read file content for project versioning
         try:
             content = Path(path).read_text()
-        except (OSError, UnicodeDecodeError):
+        except (OSError, UnicodeDecodeError) as e:
+            self._logger.warning(f"Could not read file content: {e}")
             content = None
 
         success, shred_ids = self.chuck.compile_file(args["path"])
         if success:
             for sid in shred_ids:
                 self.session.add_shred(sid, path, content=content, shred_type="file")
-                # Topbar shows new shred automatically
             return None
         else:
             return f"Failed to spork {args['path']}"
 
-    def _cmd_spork_code(self, args):
+    def _cmd_spork_code(self, args: dict[str, Any]) -> str | None:
+        """Spork inline ChucK code."""
         code = args["code"]
         success, shred_ids = self.chuck.compile_code(code)
         if success:
@@ -54,28 +90,28 @@ class CommandExecutor:
                 self.session.add_shred(
                     sid, f"code-{sid}", content=code, shred_type="code"
                 )
-                # Topbar shows new shred automatically
             return None
         else:
             return "Failed to spork code"
 
-    def _cmd_remove_shred(self, args):
+    def _cmd_remove_shred(self, args: dict[str, Any]) -> str | None:
+        """Remove a shred by ID."""
         sid = args["id"]
         try:
             self.chuck.remove_shred(sid)
             self.session.remove_shred(sid)
-            # Topbar updates automatically
             return None
-        except Exception as e:
+        except RuntimeError as e:
             return f"Failed to remove shred {sid}: {e}"
 
-    def _cmd_remove_all(self, args):
+    def _cmd_remove_all(self, args: dict[str, Any]) -> str | None:
+        """Remove all shreds."""
         self.chuck.remove_all_shreds()
         self.session.clear_shreds()
-        # Topbar updates automatically
         return None
 
-    def _cmd_replace_shred(self, args):
+    def _cmd_replace_shred(self, args: dict[str, Any]) -> str | None:
+        """Replace a shred with new code."""
         try:
             code = args["code"]
             old_id = args["id"]
@@ -92,11 +128,11 @@ class CommandExecutor:
                 return None
             else:
                 return f"Failed to replace shred {old_id}"
-        except Exception as e:
+        except RuntimeError as e:
             return f"Error replacing shred: {e}"
 
-    def _cmd_replace_shred_file(self, args):
-        """Replace shred with code from file"""
+    def _cmd_replace_shred_file(self, args: dict[str, Any]) -> str | None:
+        """Replace shred with code from file."""
         try:
             filepath = args["path"]
             code = Path(filepath).read_text()
@@ -111,180 +147,227 @@ class CommandExecutor:
                 return None
             else:
                 return f"Failed to replace shred {args['id']}"
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             return f"Error replacing shred: {e}"
 
-    def _cmd_status(self, args):
-        """Show VM status (Chuck-style)"""
+    def _cmd_status(self, args: dict[str, Any]) -> str | None:
+        """Show VM status (Chuck-style)."""
         all_ids = self.chuck.get_all_shred_ids()
         now = self.chuck.now()
         audio = "running" if self.session.audio_running else "stopped"
 
-        print("[chuck](VM): status")
-        print(f"  shreds: {len(all_ids)}")
-        print(f"  audio: {audio}")
-        print(f"  now: {now} samples")
+        self._log("[chuck](VM): status")
+        self._log(f"  shreds: {len(all_ids)}")
+        self._log(f"  audio: {audio}")
+        self._log(f"  now: {now} samples")
         if all_ids:
-            print(f"  shred IDs: {all_ids}")
+            self._log(f"  shred IDs: {all_ids}")
         return None
 
-    def _cmd_list_shreds(self, args):
+    def _cmd_list_shreds(self, args: dict[str, Any]) -> str | None:
+        """List all running shreds."""
         shreds = self.chuck.get_all_shred_ids()
         if not shreds:
-            print("no shreds running")
-            return
+            self._log("no shreds running")
+            return None
 
-        print(f"{'ID':<8} {'Name':<40}")
-        print("-" * 50)
+        self._log(f"{'ID':<8} {'Name':<40}")
+        self._log("-" * 50)
         for sid in shreds:
             name = self.session.get_shred_name(sid)
-            print(f"{sid:<8} {name:<40}")
+            self._log(f"{sid:<8} {name:<40}")
+        return None
 
-    def _cmd_shred_info(self, args):
+    def _cmd_shred_info(self, args: dict[str, Any]) -> str | None:
+        """Show info for a specific shred."""
         try:
             info = self.chuck.get_shred_info(args["id"])
-            print(f"Shred {info['id']}:")
-            print(f"  name: {info['name']}")
-            print(f"  running: {info['is_running']}")
-            print(f"  done: {info['is_done']}")
-        except Exception as e:
-            print(f"Error: {e}")
+            self._log(f"Shred {info['id']}:")
+            self._log(f"  name: {info['name']}")
+            self._log(f"  running: {info['is_running']}")
+            self._log(f"  done: {info['is_done']}")
+            return None
+        except RuntimeError as e:
+            return f"Error getting shred info: {e}"
 
-    def _cmd_list_globals(self, args):
+    def _cmd_list_globals(self, args: dict[str, Any]) -> str | None:
+        """List all global variables."""
         globals_list = self.chuck.get_all_globals()
         if not globals_list:
-            print("no globals defined")
-            return
+            self._log("no globals defined")
+            return None
 
-        print(f"{'Type':<20} {'Name':<30}")
-        print("-" * 52)
+        self._log(f"{'Type':<20} {'Name':<30}")
+        self._log("-" * 52)
         for typ, name in globals_list:
-            print(f"{typ:<20} {name:<30}")
+            self._log(f"{typ:<20} {name:<30}")
+        return None
 
-    def _cmd_audio_info(self, args):
+    def _cmd_audio_info(self, args: dict[str, Any]) -> str | None:
+        """Show audio system info."""
         info = audio_info()
-        print(f"Sample rate: {info['sample_rate']} Hz")
-        print(f"Channels out: {info['num_channels_out']}")
-        print(f"Channels in: {info['num_channels_in']}")
-        print(f"Buffer size: {info['buffer_size']}")
+        self._log(f"Sample rate: {info['sample_rate']} Hz")
+        self._log(f"Channels out: {info['num_channels_out']}")
+        self._log(f"Channels in: {info['num_channels_in']}")
+        self._log(f"Buffer size: {info['buffer_size']}")
+        return None
 
-    def _cmd_current_time(self, args):
-        print(f"now: {self.chuck.now()}")
+    def _cmd_current_time(self, args: dict[str, Any]) -> str | None:
+        """Show current ChucK time."""
+        self._log(f"now: {self.chuck.now()}")
+        return None
 
-    def _cmd_set_global(self, args):
+    def _log(self, message: str) -> None:
+        """Log output message (goes to UI or stdout)."""
+        # For now, print to stdout; UI can capture via callbacks
+        print(message)
+
+    def _cmd_set_global(self, args: dict[str, Any]) -> str | None:
+        """Set a global variable."""
         val = args["value"]
         name = args["name"]
 
-        if isinstance(val, int):
-            self.chuck.set_global_int(name, val)
-        elif isinstance(val, float):
-            self.chuck.set_global_float(name, val)
-        elif isinstance(val, str):
-            self.chuck.set_global_string(name, val)
-        elif isinstance(val, list):
-            if all(isinstance(x, int) for x in val):
-                self.chuck.set_global_int_array(name, val)
-            elif all(isinstance(x, float) for x in val):
-                self.chuck.set_global_float_array(name, val)
+        try:
+            if isinstance(val, int):
+                self.chuck.set_global_int(name, val)
+            elif isinstance(val, float):
+                self.chuck.set_global_float(name, val)
+            elif isinstance(val, str):
+                self.chuck.set_global_string(name, val)
+            elif isinstance(val, list):
+                if all(isinstance(x, int) for x in val):
+                    self.chuck.set_global_int_array(name, val)
+                elif all(isinstance(x, float) for x in val):
+                    self.chuck.set_global_float_array(name, val)
 
-        print(f"set {name} = {val}")
+            self._log(f"set {name} = {val}")
+            return None
+        except RuntimeError as e:
+            return f"Failed to set global '{name}': {e}"
 
-    def _cmd_get_global(self, args):
+    def _cmd_get_global(self, args: dict[str, Any]) -> str | None:
+        """Get a global variable value."""
         name = args["name"]
 
-        # Try int first (callback prints value)
+        # Try int first (callback logs value)
         found = [False]  # Use list to allow modification in nested function
 
-        def handle_int(v):
+        def handle_int(v: int) -> None:
             found[0] = True
-            print(f"{name} = {v}")
+            self._log(f"{name} = {v}")
 
-        def handle_float(v):
+        def handle_float(v: float) -> None:
             found[0] = True
-            print(f"{name} = {v}")
+            self._log(f"{name} = {v}")
 
-        def handle_string(v):
+        def handle_string(v: str) -> None:
             found[0] = True
-            print(f'{name} = "{v}"')
+            self._log(f'{name} = "{v}"')
 
+        # Try each type in sequence
         try:
             self.chuck.get_global_int(name, handle_int)
+            return None
         except RuntimeError:
-            try:
-                self.chuck.get_global_float(name, handle_float)
-            except RuntimeError:
-                try:
-                    self.chuck.get_global_string(name, handle_string)
-                except RuntimeError:
-                    pass
+            pass
+
+        try:
+            self.chuck.get_global_float(name, handle_float)
+            return None
+        except RuntimeError:
+            pass
+
+        try:
+            self.chuck.get_global_string(name, handle_string)
+            return None
+        except RuntimeError:
+            pass
 
         if not found[0]:
-            print(f"✗ global variable '{name}' not found or wrong type")
+            return f"Global variable '{name}' not found or wrong type"
+        return None
 
-    def _cmd_signal_event(self, args):
+    def _cmd_signal_event(self, args: dict[str, Any]) -> str | None:
+        """Signal a global event."""
         self.chuck.signal_global_event(args["name"])
-        print(f"signaled event '{args['name']}'")
+        self._log(f"signaled event '{args['name']}'")
+        return None
 
-    def _cmd_broadcast_event(self, args):
+    def _cmd_broadcast_event(self, args: dict[str, Any]) -> str | None:
+        """Broadcast a global event."""
         self.chuck.broadcast_global_event(args["name"])
-        print(f"broadcast event '{args['name']}'")
+        self._log(f"broadcast event '{args['name']}'")
+        return None
 
-    def _cmd_start_audio(self, args):
+    def _cmd_start_audio(self, args: dict[str, Any]) -> str | None:
+        """Start real-time audio playback."""
         try:
             start_audio(self.chuck)
             self.session.audio_running = True
+            self._logger.info("Audio started")
             return None
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             return f"Failed to start audio: {e}"
 
-    def _cmd_stop_audio(self, args):
+    def _cmd_stop_audio(self, args: dict[str, Any]) -> str | None:
+        """Stop real-time audio playback."""
         try:
             stop_audio()
             self.session.audio_running = False
+            self._logger.info("Audio stopped")
             return None
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             return f"Failed to stop audio: {e}"
 
-    def _cmd_shutdown_audio(self, args):
+    def _cmd_shutdown_audio(self, args: dict[str, Any]) -> str | None:
+        """Shutdown audio system."""
         try:
             shutdown_audio(500)
             self.session.audio_running = False
+            self._logger.info("Audio shutdown")
             return None
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             return f"Failed to shutdown audio: {e}"
 
-    def _cmd_clear_vm(self, args):
+    def _cmd_clear_vm(self, args: dict[str, Any]) -> str | None:
+        """Clear all shreds from VM."""
         self.chuck.clear_vm()
         self.session.clear_shreds()
-        print("VM cleared")
+        self._log("VM cleared")
+        return None
 
-    def _cmd_reset_id(self, args):
+    def _cmd_reset_id(self, args: dict[str, Any]) -> str | None:
+        """Reset shred ID counter."""
         self.chuck.reset_shred_id()
-        print("shred ID reset")
+        self._log("shred ID reset")
+        return None
 
-    def _cmd_clear_screen(self, args):
+    def _cmd_clear_screen(self, args: dict[str, Any]) -> str | None:
+        """Clear the terminal screen."""
         sys.stdout.write("\033[2J\033[H")  # Clear screen and move cursor to home
         sys.stdout.flush()
+        return None
 
-    def _cmd_compile_file(self, args):
-        # Compile with count=0 (don't run)
+    def _cmd_compile_file(self, args: dict[str, Any]) -> str | None:
+        """Compile a file without running."""
         success, _ = self.chuck.compile_file(args["path"], count=0)
         if success:
-            print(f"✓ compiled {args['path']}")
+            self._log(f"compiled {args['path']}")
+            return None
         else:
-            print(f"✗ compilation failed for {args['path']}")
-            # TODO: Add chuck.get_last_error() to get compiler error messages
+            return f"Compilation failed for {args['path']}"
 
-    def _cmd_exec_code(self, args):
+    def _cmd_exec_code(self, args: dict[str, Any]) -> str | None:
+        """Execute code immediately."""
         success, _ = self.chuck.compile_code(args["code"], immediate=True)
         if success:
-            print("✓ executed")
+            self._log("executed")
+            return None
         else:
-            print("✗ execution failed")
-            # TODO: Add chuck.get_last_error() to get compiler error messages
+            return "Execution failed"
 
-    def _cmd_edit_shred(self, args):
-        """Edit and replace a shred by ID"""
+    def _cmd_edit_shred(self, args: dict[str, Any]) -> str | None:
+        """Edit and replace a shred by ID."""
         shred_id = args["id"]
 
         if shred_id not in self.session.shreds:
@@ -323,18 +406,25 @@ class CommandExecutor:
                     self.session.add_shred(
                         new_id, name, content=new_code, shred_type=shred_type
                     )
-                    # Topbar updates automatically
                     return None
                 else:
                     return f"Failed to replace shred {shred_id}"
             return None
+        except (OSError, subprocess.SubprocessError) as e:
+            return f"Error editing shred: {e}"
         finally:
-            os.unlink(temp_path)
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                self._logger.debug(f"Could not delete temp file: {temp_path}")
 
-    def _cmd_shell(self, args):
+    def _cmd_shell(self, args: dict[str, Any]) -> str | None:
+        """Execute a shell command."""
         subprocess.run(args["cmd"], shell=True)
+        return None
 
-    def _cmd_open_editor(self, args):
+    def _cmd_open_editor(self, args: dict[str, Any]) -> str | None:
+        """Open external editor for code entry."""
         # Get editor from environment or use default
         editor = os.environ.get("EDITOR", "nano")
 
@@ -363,20 +453,22 @@ class CommandExecutor:
                         self.session.add_shred(
                             sid, f"editor-{sid}", content=code, shred_type="code"
                         )
-                        print(f"✓ sporked from editor -> shred {sid}")
+                        self._log(f"sporked from editor -> shred {sid}")
                 else:
-                    print("✗ failed to spork editor code")
+                    return "Failed to spork editor code"
+            return None
+        except (OSError, subprocess.SubprocessError) as e:
+            return f"Error opening editor: {e}"
         finally:
-            # Clean up temp file
             try:
                 os.unlink(temp_path)
             except OSError:
-                pass
+                self._logger.debug(f"Could not delete temp file: {temp_path}")
 
-    def _cmd_watch(self, args):
-        """Monitor VM state continuously"""
-        print("Watching VM state (Ctrl+C to stop)...")
-        print()
+    def _cmd_watch(self, args: dict[str, Any]) -> str | None:
+        """Monitor VM state continuously."""
+        self._log("Watching VM state (Ctrl+C to stop)...")
+        self._log("")
         try:
             while True:
                 shred_count = len(self.chuck.get_all_shred_ids())
@@ -390,9 +482,10 @@ class CommandExecutor:
                 time.sleep(0.1)
         except KeyboardInterrupt:
             print("\n")
+        return None
 
-    def _cmd_load_snippet(self, args):
-        """Load and spork a code snippet from ~/.numchuck/snippets/"""
+    def _cmd_load_snippet(self, args: dict[str, Any]) -> str | None:
+        """Load and spork a code snippet from ~/.numchuck/snippets/."""
         name = args["name"]
         snippet_path = get_snippet_path(name)
 
@@ -402,27 +495,27 @@ class CommandExecutor:
             if not snippets_dir.exists():
                 try:
                     ensure_numchuck_directories()
-                    print(f"Created snippets directory: {snippets_dir}")
-                    print("Add .ck files to this directory to use @<name> syntax")
-                except Exception as e:
-                    print(f"✗ could not create snippets directory: {e}")
-                    return
+                    self._log(f"Created snippets directory: {snippets_dir}")
+                    self._log("Add .ck files to this directory to use @<name> syntax")
+                except OSError as e:
+                    return f"Could not create snippets directory: {e}"
 
-            print(f"✗ snippet '{name}' not found at {snippet_path}")
-            print(f"Available snippets in {snippets_dir}:")
+            self._log(f"Snippet '{name}' not found at {snippet_path}")
+            self._log(f"Available snippets in {snippets_dir}:")
             snippets = list_snippets()
             if snippets:
                 for s in snippets:
-                    print(f"  @{s}")
+                    self._log(f"  @{s}")
             else:
-                print("  (none)")
-            return
+                self._log("  (none)")
+            return None
 
         # Spork the snippet
         # Read snippet content for project versioning
         try:
             content = snippet_path.read_text()
-        except (OSError, UnicodeDecodeError):
+        except (OSError, UnicodeDecodeError) as e:
+            self._logger.warning(f"Could not read snippet content: {e}")
             content = None
 
         success, shred_ids = self.chuck.compile_file(str(snippet_path))
@@ -431,7 +524,7 @@ class CommandExecutor:
                 self.session.add_shred(
                     sid, f"@{name}", content=content, shred_type="file"
                 )
-                print(f"✓ sporked snippet @{name} -> shred {sid}")
+                self._log(f"sporked snippet @{name} -> shred {sid}")
+            return None
         else:
-            print(f"✗ failed to spork snippet @{name}")
-            # TODO: Add chuck.get_last_error() to get compiler error messages
+            return f"Failed to spork snippet @{name}"
