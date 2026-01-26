@@ -18,7 +18,8 @@ from typing import TYPE_CHECKING, Iterator
 from prompt_toolkit.completion import Completer, Completion, PathCompleter
 from prompt_toolkit.document import Document
 
-from ..chuck_lang import ALL_IDENTIFIERS, REPL_COMMANDS
+from ..lang import ALL_IDENTIFIERS, REPL_COMMANDS
+from ..paths import list_all_snippets
 
 if TYPE_CHECKING:
     from prompt_toolkit.completion import CompleteEvent
@@ -95,6 +96,19 @@ class ChuckCompleter(Completer):
                     start_position=-len(prefix) - len(suffix),
                 )
 
+    def _complete_snippets(self, prefix: str) -> Iterator[Completion]:
+        """Complete snippet names (local and global)."""
+        try:
+            for name, source in list_all_snippets():
+                if name.startswith(prefix):
+                    yield Completion(
+                        name,
+                        start_position=-len(prefix),
+                        display_meta=source,
+                    )
+        except (ImportError, RuntimeError):
+            pass
+
     def get_completions(
         self, document: Document, complete_event: CompleteEvent
     ) -> Iterator[Completion]:
@@ -151,6 +165,11 @@ class ChuckCompleter(Completer):
         elif text.startswith(": ") and len(text) > 2:
             path_text = text[2:].strip()
             yield from self._complete_path(path_text, complete_event)
+
+        # After '@', suggest snippet names
+        elif text.startswith("@"):
+            prefix = text[1:]  # Remove leading '@'
+            yield from self._complete_snippets(prefix)
 
         # Default: suggest REPL commands or ChucK identifiers
         else:

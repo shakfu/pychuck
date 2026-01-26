@@ -17,6 +17,82 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ### Added
 
+- **Offline Audio Rendering API** (`src/numchuck/render.py`):
+  - `render(code, duration, sample_rate, channels, dtype)` - Render ChucK code to numpy array
+  - `render_file(files, duration, sample_rate, channels, dtype)` - Render ChucK files to numpy array
+  - `to_wav(output, code, files, duration, ...)` - Export ChucK code/files to WAV file
+  - `RenderError` exception for rendering failures
+  - Supports both `np.float32` and `np.int16` output dtypes
+  - Chunked rendering to avoid memory issues for long durations
+
+- **User Directory Template** (`_numchuck/`):
+  - Template for `.numchuck` user configuration directory
+  - Search order: `./.numchuck` (local) then `~/.numchuck` (global)
+  - Local configuration takes precedence over global
+  - Subdirectories with examples:
+    - `snippets/` - Code snippets (sine, fm, drum, noise, delay)
+    - `examples/` - Example ChucK files (hello, arpeggio, lfo)
+    - `themes/` - Color themes (dark.toml, light.toml)
+    - `keybindings/` - Key binding configurations (default.toml)
+    - `chugins/` - User chugins with README
+  - Copy to home: `cp -r _numchuck ~/.numchuck`
+
+- **Snippet Support** with local/global precedence:
+  - Snippets stored in `.numchuck/snippets/` directory
+  - Local snippets (`./.numchuck/snippets/`) take precedence over global (`~/.numchuck/snippets/`)
+  - CLI commands: `numchuck snippets list`, `snippets show <name>`, `snippets path`
+  - REPL command: `@<name>` to load a snippet with tab completion
+
+- **File Watch Mode** (`src/numchuck/watcher.py`):
+  - `FileWatcher` class for auto-reloading ChucK files on modification
+  - Debouncing to prevent rapid reloads during saves
+  - Callbacks for reload and error events
+  - CLI command: `numchuck watch file1.ck file2.ck`
+  - REPL commands: `watch <file>`, `unwatch <file>`, `watching`
+
+- **Theme Support** (`src/numchuck/tui/themes.py`):
+  - Built-in themes: `dark`, `light`, `solarized`
+  - `ThemeConfig` and `ThemeColors` dataclasses in config
+  - `create_style(theme_config)` generates prompt_toolkit Style
+  - Configurable via `~/.numchuck/config.toml`
+
+- **Configurable Key Bindings** (`src/numchuck/config.py`):
+  - `KeybindingsConfig` dataclass with all key bindings
+  - `create_keybinding(kb, key, handler)` with safe validation
+  - Customizable via `~/.numchuck/config.toml`
+
+- **Waveform Display** (`src/numchuck/tui/waveform.py`):
+  - `samples_to_waveform()` - Convert audio samples to Unicode/ASCII waveform
+  - `WaveformBuffer` - Circular buffer for real-time waveform display
+  - `format_waveform_bar()`, `format_stereo_meters()` - Level meter formatting
+  - `calculate_rms()`, `calculate_peak()` - Audio level calculations
+  - `db_to_linear()`, `linear_to_db()` - Decibel conversions
+  - REPL commands: `wave`, `wave on`, `wave off` (toggle with F4)
+
+- **Session Recording/Playback** (`src/numchuck/recording.py`):
+  - `SessionRecorder` - Record REPL sessions with timestamps
+  - `SessionPlayer` - Playback recorded sessions with speed control
+  - `RecordedAction`, `RecordedSession` dataclasses
+  - JSON-based session storage in `~/.numchuck/recordings/`
+  - REPL commands: `record start`, `record stop`, `record save <name>`, `playback <name>`
+
+- **MIDI Learn Support** (`src/numchuck/midi.py`):
+  - `MIDIMapping` - Map MIDI CC to ChucK global variables with min/max scaling
+  - `MIDIMappings` - Collection of MIDI mappings
+  - `MIDILearnState` - State machine for MIDI learn mode
+  - `generate_midi_listener_code()` - Generate ChucK code for MIDI control
+  - `generate_midi_monitor_code()` - Generate MIDI monitor code
+  - REPL commands: `midi learn <var>`, `midi list`, `midi start`, `midi stop`
+
+- **OSC Integration** (`src/numchuck/osc.py`):
+  - `OSCServer` - UDP server for receiving OSC messages
+  - `OSCClient` - UDP client for sending OSC messages
+  - `OSCController` - Map OSC addresses to REPL actions
+  - `generate_osc_listener_code()` - Generate ChucK code using native liblo
+  - `generate_osc_sender_code()` - Generate ChucK OSC sender code
+  - OSC address patterns: `/numchuck/set/<var>`, `/numchuck/event/<name>`, `/numchuck/spork`
+  - REPL commands: `osc start [port]`, `osc stop`, `osc status`
+
 - **Context Manager Support** (`src/numchuck/api.py`):
   - `Chuck` class now supports `with` statement for automatic cleanup
   - `__enter__` and `__exit__` methods ensure `close()` is called on exit
@@ -94,16 +170,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ### Changed
 
+- **API Refactoring** - Moved general-purpose modules from `tui/` to top level for library use:
+  - `numchuck.render` - Offline rendering API (new, from `cli/export.py`)
+  - `numchuck.osc` - OSC server/client (from `tui/osc_server.py`)
+  - `numchuck.midi` - MIDI mappings (from `tui/midi.py`)
+  - `numchuck.watcher` - File watcher (from `tui/watcher.py`)
+  - `numchuck.recorder` - Session recording (from `tui/recording.py`)
+  - `numchuck.paths` - Path utilities (from `tui/paths.py`)
+
+- **New `numchuck.lang` Subpackage** - ChucK language support:
+  - `numchuck.lang.constants` - Keywords, types, UGens, operators (from `chuck_lang.py`)
+  - `numchuck.lang.lexer` - Pygments lexer for syntax highlighting (from `lexer.py`)
+  - Convenience imports: `from numchuck.lang import ChuckLexer, KEYWORDS, UGENS`
+
+- **Package Exports** (`src/numchuck/__init__.py`):
+  - Core: `Chuck`, `Shred`, `GlobalInt`, `GlobalFloat`, `GlobalString`
+  - Rendering: `render`, `render_file`, `to_wav`, `RenderError`
+  - Config: `Config`, `load_config`, `get_config`, `save_config`
+  - Specialized modules require explicit imports:
+    - `from numchuck.osc import OSCServer, OSCClient, ...`
+    - `from numchuck.midi import MIDIMapping, MIDIMappings, ...`
+    - `from numchuck.watcher import FileWatcher, ...`
+    - `from numchuck.recorder import SessionRecorder, ...`
+    - `from numchuck.lang import ChuckLexer, KEYWORDS, ...`
+
 - **Python Version Support**:
   - Dropped Python 3.8 support (EOL October 2024)
   - Now requires Python 3.9+
   - Added Python 3.13 classifier
 
-- **Package Exports** (`src/numchuck/__init__.py`):
-  - Now exports: `Chuck`, `Shred`, `GlobalInt`, `GlobalFloat`, `GlobalString`
-  - Now exports: `Config`, `load_config`, `get_config`, `save_config`
-
-- **Test Count**: 280 tests (up from 253)
+- **Test Count**: 588 tests (up from 280)
 
 ## [0.1.8]
 

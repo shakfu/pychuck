@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from .paths import get_projects_dir
+from ..paths import get_projects_dir
 from .project import Project
 from .logging import get_logger, TUILogger
 

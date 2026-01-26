@@ -1,0 +1,58 @@
+# Default keybindings for numchuck TUI
+# Copy and modify to create custom keybindings
+#
+# Key format: "c-x" for Ctrl+X, "f1" for F1, "c-s-x" for Ctrl+Shift+X
+
+[global]
+# Exit application
+exit = "c-q"
+
+# Toggle help window
+toggle_help = "f1"
+
+# Toggle shreds panel
+toggle_shreds = "f2"
+
+# Toggle log window
+toggle_log = "f3"
+
+# Toggle waveform display
+toggle_waveform = "f4"
+
+[editor]
+# Spork current buffer
+spork = "f5"
+
+# Replace shred with current buffer
+replace = "f6"
+
+# Save file
+save = "c-s"
+
+# Open file
+open = "c-o"
+
+# New tab
+new_tab = "c-t"
+
+# Close tab
+close_tab = "c-w"
+
+# Next tab
+next_tab = "c-pagedown"
+
+# Previous tab
+prev_tab = "c-pageup"
+
+[repl]
+# Submit input (when smart-enter is disabled)
+submit = "enter"
+
+# Force submit (ignores smart-enter)
+force_submit = "c-enter"
+
+# Clear input
+clear = "c-c"
+
+# History search
+history_search = "c-r"

@@ -32,6 +32,7 @@ from .._numchuck import (
 )
 from .session import ChuckSession
 from .logging import TUILogger, LogLevel, get_logger
+from ..config import get_config, KeybindingsConfig
 
 if TYPE_CHECKING:
     from prompt_toolkit.key_binding.key_processor import KeyPressEvent
@@ -232,6 +233,91 @@ def generate_shreds_table(
     return "\n".join(lines)
 
 
+# =============================================================================
+# Keybinding Helpers
+# =============================================================================
+
+
+def parse_key_binding(key_str: str) -> str:
+    """Parse a key binding string into prompt_toolkit format.
+
+    Args:
+        key_str: Key binding string like 'c-q', 'f1', 'c-s-f', 'escape'
+
+    Returns:
+        Validated key binding string for prompt_toolkit
+    """
+    # Normalize the key string
+    key_str = key_str.lower().strip()
+
+    # Valid modifier prefixes
+    valid_prefixes = {"c-", "s-", "a-", "m-"}  # ctrl, shift, alt, meta
+
+    # Valid function keys
+    valid_fkeys = {f"f{i}" for i in range(1, 25)}  # F1-F24
+
+    # Valid special keys
+    valid_special = {
+        "escape", "enter", "tab", "backspace", "delete", "insert",
+        "home", "end", "pageup", "pagedown", "left", "right", "up", "down",
+        "space",
+    }
+
+    # Remove and count modifiers
+    modifiers = []
+    remaining = key_str
+    while remaining[:2] in valid_prefixes:
+        modifiers.append(remaining[:2])
+        remaining = remaining[2:]
+
+    # Validate the key
+    if remaining in valid_fkeys or remaining in valid_special or len(remaining) == 1:
+        # Valid key
+        return key_str
+    else:
+        # Return original, let prompt_toolkit handle validation
+        return key_str
+
+
+def create_keybinding(
+    kb: KeyBindings,
+    key: str,
+    handler: Callable[["KeyPressEvent"], None],
+    description: str = "",
+) -> None:
+    """Safely create a keybinding with validation.
+
+    Args:
+        kb: KeyBindings instance to add to
+        key: Key binding string
+        handler: Handler function for the key press
+        description: Optional description for documentation
+    """
+    parsed_key = parse_key_binding(key)
+    try:
+        # Use decorator syntax but call it manually
+        kb.add(parsed_key)(handler)
+    except ValueError as e:
+        # Log error but don't crash
+        import warnings
+        warnings.warn(f"Invalid keybinding '{key}': {e}", stacklevel=2)
+
+
+def get_keybinding(name: str, keybindings: KeybindingsConfig | None = None) -> str:
+    """Get a keybinding value by name from config.
+
+    Args:
+        name: Keybinding name (e.g., 'exit', 'toggle_help')
+        keybindings: Optional KeybindingsConfig, uses global config if None
+
+    Returns:
+        Key binding string
+    """
+    if keybindings is None:
+        keybindings = get_config().keybindings
+    return getattr(keybindings, name, "")
+
+
 class ChuckApplication:
     """Base application managing ChucK instance and shared state.
 
@@ -345,36 +431,46 @@ class ChuckApplication:
         self._audio_manager.stop()
         self.session.audio_running = False
 
-    def get_common_key_bindings(self) -> KeyBindings:
+    def get_common_key_bindings(
+        self, keybindings: KeybindingsConfig | None = None
+    ) -> KeyBindings:
         """Common key bindings shared across editor and REPL.
 
+        Args:
+            keybindings: Optional keybindings config, uses global config if None
+
         Returns:
-            KeyBindings with F1/F2/F3/Ctrl-Q handlers
+            KeyBindings with configurable handlers
         """
+        if keybindings is None:
+            keybindings = get_config().keybindings
+
         kb = KeyBindings()
 
-        @kb.add("c-q")
         def exit_app(event: KeyPressEvent) -> None:
             """Exit application"""
             event.app.exit()
 
-        @kb.add("f1")
         def toggle_help(event: KeyPressEvent) -> None:
             """Toggle help window"""
             self.show_help = not self.show_help
             event.app.invalidate()
 
-        @kb.add("f2")
         def toggle_shreds(event: KeyPressEvent) -> None:
             """Toggle shreds table"""
             self.show_shreds = not self.show_shreds
             event.app.invalidate()
 
-        @kb.add("f3")
         def toggle_log(event: KeyPressEvent) -> None:
             """Toggle log window"""
             self.show_log = not self.show_log
             event.app.invalidate()
+
+        # Create keybindings from config
+        create_keybinding(kb, keybindings.exit, exit_app, "Exit application")
+        create_keybinding(kb, keybindings.toggle_help, toggle_help, "Toggle help")
+        create_keybinding(kb, keybindings.toggle_shreds, toggle_shreds, "Toggle shreds")
+        create_keybinding(kb, keybindings.toggle_log, toggle_log, "Toggle log")
 
         return kb
 

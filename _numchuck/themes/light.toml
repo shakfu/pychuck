@@ -1,0 +1,33 @@
+# Light theme for numchuck TUI
+
+[colors]
+# Bottom toolbar
+bottom_toolbar_fg = "#333333"
+bottom_toolbar_bg = "#e0e0e0"
+
+# Prompt
+prompt_fg = "#007700"
+prompt_bg = ""
+
+# Input area
+input_fg = "#333333"
+input_bg = "#ffffff"
+
+# Syntax highlighting
+keyword = "#d73a49"
+type = "#005cc5"
+ugen = "#22863a"
+string = "#032f62"
+number = "#005cc5"
+comment = "#6a737d"
+operator = "#d73a49"
+
+# Status indicators
+error_fg = "#cb2431"
+warning_fg = "#b08800"
+success_fg = "#22863a"
+
+# Shred display
+shred_id = "#6f42c1"
+shred_name = "#24292e"
+shred_time = "#6a737d"

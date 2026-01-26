@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from .parser import CommandParser
 from .commands import CommandExecutor
-from .paths import get_history_file, ensure_numchuck_directories
+from ..paths import get_history_file, ensure_numchuck_directories
 from .common import ChuckApplication, generate_shreds_table
 from .completer import ChuckCompleter
 
@@ -54,7 +54,7 @@ class ChuckREPL:
 
         # Try to import ChucK lexer, fall back to C lexer
         try:
-            from .chuck_lexer import ChuckLexer
+            from ..lang import ChuckLexer
 
             lexer_class = ChuckLexer
         except ImportError:

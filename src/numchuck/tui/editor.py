@@ -49,7 +49,7 @@ class EditorTab:
 
         # Try to load ChucK lexer
         try:
-            from .chuck_lexer import ChuckLexer
+            from ..lang import ChuckLexer
 
             lexer = PygmentsLexer(ChuckLexer)
         except ImportError:

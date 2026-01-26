@@ -126,6 +126,10 @@ python -m numchuck repl --no-sidebar
 * `replace <id> <file>` - Replace shred with file
 * `status` - Show VM status
 * `time` - Show ChucK time
+* `@<name>` - Load a snippet (e.g., `@sine`, `@drum`)
+* `watch <file>` - Auto-reload file on changes
+* `record start/stop/save <name>` - Record session
+* `playback <name>` - Replay recorded session
 * Type `help` or press F1 for full command reference
 
 #### 3. Command-Line Execution
@@ -147,7 +151,34 @@ python -m numchuck run myfile.ck --silent
 python -m numchuck run myfile.ck --srate 48000
 ```
 
-#### 4. Version and Info
+#### 4. Snippet Management
+
+```sh
+# List all available snippets
+python -m numchuck snippets list
+
+# Show snippet content
+python -m numchuck snippets show sine
+
+# Show snippets directory path
+python -m numchuck snippets path
+```
+
+#### 5. File Watch Mode
+
+```sh
+# Watch files and auto-reload on changes
+python -m numchuck watch bass.ck melody.ck
+```
+
+#### 6. WAV Export
+
+```sh
+# Export ChucK files to WAV
+python -m numchuck export output.wav --files sine.ck --duration 10
+```
+
+#### 7. Version and Info
 
 ```sh
 # Show version
@@ -187,6 +218,75 @@ python -m numchuck info
 * `Tab` - Command and ChucK code completion
 * `Up/Down` - Navigate command history
 
+### User Directory (`.numchuck`)
+
+numchuck uses a `.numchuck` directory for user configuration, snippets, and customization.
+
+**Search Order:**
+1. Local: `./.numchuck` (current working directory)
+2. Global: `~/.numchuck` (home directory)
+
+Local configuration takes precedence over global. This allows project-specific settings.
+
+**Directory Structure:**
+```
+.numchuck/
+  snippets/     # Code snippets loaded with @<name>
+  themes/       # Color theme configurations (.toml)
+  keybindings/  # Custom key binding configurations (.toml)
+  examples/     # Example ChucK files
+  chugins/      # User chugins (.chug plugins)
+  config.toml   # Main configuration file
+```
+
+**Template Directory:**
+
+The `_numchuck/` directory in the repository contains a template with examples:
+
+```
+_numchuck/
+  snippets/
+    sine.ck     # Simple sine wave oscillator
+    fm.ck       # FM synthesis with modulation
+    drum.ck     # Basic drum machine pattern
+    noise.ck    # Noise generator with filter
+    delay.ck    # Delay effect with feedback
+  themes/
+    dark.toml   # Dark theme colors
+    light.toml  # Light theme colors
+  keybindings/
+    default.toml  # Default key bindings
+  examples/
+    hello.ck    # Hello world sine wave
+    arpeggio.ck # Simple arpeggiator
+    lfo.ck      # LFO modulation example
+  chugins/
+    README.md   # Chugins installation guide
+```
+
+Copy to your home directory to use globally:
+```bash
+cp -r _numchuck ~/.numchuck
+```
+
+Or copy to a project directory for project-specific settings:
+```bash
+cp -r _numchuck .numchuck
+```
+
+### Snippets
+
+Snippets are reusable ChucK code files that can be loaded with `@<name>` in the REPL.
+
+**Usage in REPL:**
+```
+[=>] @sine        # Loads snippets/sine.ck
+[=>] @drum        # Loads snippets/drum.ck
+[=>] @<TAB>       # Tab completion for available snippets
+```
+
+Snippets are searched in `.numchuck/snippets/` (local first, then global).
+
 ### Project Versioning
 
 When using `--project <name>`, numchuck automatically versions your files as you livecode:
@@ -207,6 +307,39 @@ This creates a complete history of your livecoding session, making it easy to:
 * Recover previous versions
 * Replay session timeline
 * Share reproducible livecoding performances
+
+### Offline Rendering API
+
+numchuck provides a simple API for rendering ChucK code to audio files or numpy arrays:
+
+```python
+from numchuck import render, render_file, to_wav
+
+# Render code to numpy array
+audio = render("SinOsc s => dac; 1::second => now;", duration=1.0)
+print(audio.shape)  # (88200,) - 1 second of stereo audio
+
+# Render files to numpy array
+audio = render_file(["bass.ck", "melody.ck"], duration=5.0)
+
+# Export directly to WAV file
+to_wav("output.wav", code="SinOsc s => dac; 2::second => now;", duration=2.0)
+to_wav("output.wav", files=["sine.ck"], duration=10.0, sample_rate=48000)
+```
+
+#### Rendering Functions
+
+| Function | Description |
+|----------|-------------|
+| `render(code, duration, sample_rate, channels, dtype)` | Render ChucK code string to numpy array |
+| `render_file(files, duration, sample_rate, channels, dtype)` | Render ChucK files to numpy array |
+| `to_wav(output, code, files, duration, ...)` | Export to WAV file (provide either `code` or `files`) |
+
+All functions support:
+- `duration` - Seconds to render (default: 10.0)
+- `sample_rate` - Sample rate in Hz (default: 44100)
+- `channels` - Output channels (default: 2)
+- `dtype` - Output type: `np.float32` or `np.int16` (default: float32)
 
 ### High-Level API (Recommended)
 
@@ -691,6 +824,110 @@ from numchuck._numchuck import ChucK
 * `PARAM_COMPILER_HIGHLIGHT_ON_ERROR` - Syntax highlighting in error messages
 * `PARAM_TTY_COLOR` - Enable color output in terminal
 * `PARAM_TTY_WIDTH_HINT` - Terminal width hint for formatting
+
+### Rendering API (`numchuck.render`)
+
+* **`render(code, duration=10.0, sample_rate=44100, channels=2, dtype=np.float32) -> np.ndarray`** - Render ChucK code to numpy array
+* **`render_file(files, duration=10.0, sample_rate=44100, channels=2, dtype=np.float32) -> np.ndarray`** - Render ChucK files to numpy array
+* **`to_wav(output, code=None, files=None, duration=10.0, sample_rate=44100, channels=2) -> Path`** - Export to WAV file
+* **`RenderError`** - Exception raised for rendering failures
+
+### File Watcher (`numchuck.watcher`)
+
+```python
+from numchuck.watcher import FileWatcher, WatchedFile
+```
+
+* **`FileWatcher(chuck, session, on_reload=None, on_error=None)`** - Watch files for changes and auto-reload
+* **`watch_file(filepath, shred_id=None) -> bool`** - Start watching a file
+* **`unwatch_file(filepath) -> bool`** - Stop watching a file
+* **`start() -> None`** - Start the file watcher
+* **`stop() -> None`** - Stop the file watcher
+* **`WatchedFile`** - Dataclass for watched file info
+
+### MIDI Support (`numchuck.midi`)
+
+```python
+from numchuck.midi import MIDIMapping, MIDIMappings, generate_midi_listener_code
+```
+
+* **`MIDIMapping(channel, cc_number, global_name, min_value=0.0, max_value=1.0)`** - Map MIDI CC to ChucK global
+* **`MIDIMappings`** - Collection of MIDI mappings with `add()`, `remove()`, `get()`, `to_dict()` methods
+* **`MIDILearnState`** - State machine for MIDI learn mode
+* **`generate_midi_listener_code(mappings) -> str`** - Generate ChucK code for MIDI control
+* **`generate_midi_monitor_code() -> str`** - Generate MIDI monitor code
+
+### OSC Support (`numchuck.osc`)
+
+```python
+from numchuck.osc import OSCServer, OSCClient, generate_osc_listener_code
+```
+
+* **`OSCServer(port=9000)`** - UDP server for receiving OSC messages
+* **`OSCClient(host, port)`** - UDP client for sending OSC messages
+* **`OSCController(executor, port=9000)`** - Map OSC addresses to REPL actions
+* **`OSCHandler`** - Dataclass for OSC address handlers
+* **`generate_osc_listener_code(address, port, global_type, global_name) -> str`** - Generate ChucK OSC listener
+* **`generate_osc_sender_code(host, port, address) -> str`** - Generate ChucK OSC sender
+
+### Waveform Display (`numchuck.tui.waveform`)
+
+```python
+from numchuck.tui.waveform import samples_to_waveform, WaveformBuffer
+```
+
+* **`samples_to_waveform(samples, width=80, height=8, use_unicode=True) -> str`** - Convert audio to waveform string
+* **`WaveformBuffer(size, channels=2)`** - Circular buffer for real-time waveform display
+* **`format_waveform_bar(level, width=40, use_unicode=True) -> str`** - Format a level meter bar
+* **`format_stereo_meters(left, right, width=20) -> str`** - Format stereo level meters
+* **`calculate_rms(samples) -> float`** - Calculate RMS level
+* **`calculate_peak(samples) -> float`** - Calculate peak level
+* **`db_to_linear(db) -> float`** / **`linear_to_db(linear) -> float`** - Decibel conversions
+
+### Session Recording (`numchuck.recorder`)
+
+```python
+from numchuck.recorder import SessionRecorder, SessionPlayer, list_recordings
+```
+
+* **`SessionRecorder()`** - Record REPL sessions with timestamps
+  * `start(name) -> None` - Start recording
+  * `stop() -> RecordedSession` - Stop and return session
+  * `record_action(action_type, content) -> None` - Record an action
+* **`SessionPlayer(session)`** - Playback recorded sessions
+  * `start(speed=1.0) -> None` - Start playback
+  * `tick() -> bool` - Advance playback, returns True if still playing
+* **`RecordedAction(timestamp, action_type, content)`** - A recorded action
+* **`RecordedSession(name, actions)`** - A complete recorded session
+* **`get_recording_path(name) -> Path`** - Get path to recording file
+* **`list_recordings() -> list[str]`** - List saved recordings
+
+### ChucK Language Support (`numchuck.lang`)
+
+The `lang` subpackage provides ChucK language constants and syntax highlighting:
+
+```python
+from numchuck.lang import ChuckLexer, KEYWORDS, TYPES, UGENS, REPL_COMMANDS
+
+# Check if an identifier is a ChucK keyword
+from numchuck.lang import is_keyword, is_ugen, get_category
+is_keyword("while")  # True
+is_ugen("SinOsc")    # True
+get_category("LPF")  # "ugen"
+```
+
+**Constants:**
+- `KEYWORDS` - ChucK keywords (if, while, class, fun, etc.)
+- `TYPES` - ChucK types (int, float, time, dur, etc.)
+- `OPERATORS` - ChucK operators (=>, +, -, etc.)
+- `TIME_UNITS` - Time units (samp, ms, second, etc.)
+- `UGENS` - Unit generators (SinOsc, LPF, ADSR, etc.)
+- `STD_CLASSES` - Standard library classes (Std, Math, Machine, etc.)
+- `REPL_COMMANDS` - REPL command prefixes (+, -, ~, etc.)
+- `ALL_IDENTIFIERS` - All ChucK identifiers combined
+
+**Lexer:**
+- `ChuckLexer` - Pygments lexer for ChucK syntax highlighting
 
 ### Module Functions
 

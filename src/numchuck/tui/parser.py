@@ -55,6 +55,37 @@ class CommandParser:
             (r"^edit\s*(\d+)$", self._edit_shred),  # Accept "edit 1" or "edit1"
             (r"^edit$", self._open_editor),
             (r"^watch$", self._watch),
+            (r"^watch\s+(.+\.ck)$", self._watch_file),
+            (r"^unwatch\s+(.+\.ck)$", self._unwatch_file),
+            (r"^unwatch\s+all$", self._unwatch_all),
+            (r"^watching$", self._list_watched),
+            (r"^wave$", self._toggle_waveform),
+            (r"^wave\s+on$", self._waveform_on),
+            (r"^wave\s+off$", self._waveform_off),
+            # Recording commands
+            (r"^record\s+start(?:\s+(\w+))?$", self._record_start),
+            (r"^record\s+stop$", self._record_stop),
+            (r"^record\s+save\s+(\w+)$", self._record_save),
+            (r"^record\s+discard$", self._record_discard),
+            (r"^record\s+status$", self._record_status),
+            # Playback specific commands must come before general pattern
+            (r"^playback\s+pause$", self._playback_pause),
+            (r"^playback\s+resume$", self._playback_resume),
+            (r"^playback\s+stop$", self._playback_stop),
+            (r"^playback\s+(\w+)(?:\s+(\d*\.?\d+))?$", self._playback),
+            (r"^recordings$", self._list_recordings),
+            # MIDI commands
+            (r"^midi\s+learn\s+(\w+)(?:\s+(\d*\.?\d+)\s+(\d*\.?\d+))?$", self._midi_learn),
+            (r"^midi\s+list$", self._midi_list),
+            (r"^midi\s+remove\s+(\w+)$", self._midi_remove),
+            (r"^midi\s+start$", self._midi_start),
+            (r"^midi\s+stop$", self._midi_stop),
+            (r"^midi\s+status$", self._midi_status),
+            (r"^midi\s+monitor$", self._midi_monitor),
+            # OSC commands
+            (r"^osc\s+start(?:\s+(\d+))?$", self._osc_start),
+            (r"^osc\s+stop$", self._osc_stop),
+            (r"^osc\s+status$", self._osc_status),
             (r"^@(\w+)$", self._load_snippet),
         ]
 
@@ -158,8 +189,96 @@ class CommandParser:
     def _watch(self, m):
         return Command("watch", {})
 
+    def _watch_file(self, m):
+        return Command("watch_file", {"path": m.group(1)})
+
+    def _unwatch_file(self, m):
+        return Command("unwatch_file", {"path": m.group(1)})
+
+    def _unwatch_all(self, m):
+        return Command("unwatch_all", {})
+
+    def _list_watched(self, m):
+        return Command("list_watched", {})
+
+    def _toggle_waveform(self, m):
+        return Command("toggle_waveform", {})
+
+    def _waveform_on(self, m):
+        return Command("waveform_on", {})
+
+    def _waveform_off(self, m):
+        return Command("waveform_off", {})
+
+    def _record_start(self, m):
+        name = m.group(1) if m.group(1) else None
+        return Command("record_start", {"name": name})
+
+    def _record_stop(self, m):
+        return Command("record_stop", {})
+
+    def _record_save(self, m):
+        return Command("record_save", {"name": m.group(1)})
+
+    def _record_discard(self, m):
+        return Command("record_discard", {})
+
+    def _record_status(self, m):
+        return Command("record_status", {})
+
+    def _playback(self, m):
+        name = m.group(1)
+        speed = float(m.group(2)) if m.group(2) else 1.0
+        return Command("playback", {"name": name, "speed": speed})
+
+    def _playback_pause(self, m):
+        return Command("playback_pause", {})
+
+    def _playback_resume(self, m):
+        return Command("playback_resume", {})
+
+    def _playback_stop(self, m):
+        return Command("playback_stop", {})
+
+    def _list_recordings(self, m):
+        return Command("list_recordings", {})
+
     def _load_snippet(self, m):
         return Command("load_snippet", {"name": m.group(1)})
+
+    def _midi_learn(self, m):
+        name = m.group(1)
+        min_val = float(m.group(2)) if m.group(2) else 0.0
+        max_val = float(m.group(3)) if m.group(3) else 1.0
+        return Command("midi_learn", {"name": name, "min": min_val, "max": max_val})
+
+    def _midi_list(self, m):
+        return Command("midi_list", {})
+
+    def _midi_remove(self, m):
+        return Command("midi_remove", {"name": m.group(1)})
+
+    def _midi_start(self, m):
+        return Command("midi_start", {})
+
+    def _midi_stop(self, m):
+        return Command("midi_stop", {})
+
+    def _midi_status(self, m):
+        return Command("midi_status", {})
+
+    def _midi_monitor(self, m):
+        return Command("midi_monitor", {})
+
+    def _osc_start(self, m):
+        port = int(m.group(1)) if m.group(1) else 9000
+        return Command("osc_start", {"port": port})
+
+    def _osc_stop(self, m):
+        return Command("osc_stop", {})
+
+    def _osc_status(self, m):
+        return Command("osc_status", {})
 
     def _parse_value(self, s):
         """Parse value from string"""

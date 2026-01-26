@@ -9,11 +9,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .._numchuck import start_audio, stop_audio, shutdown_audio, audio_info
-from .paths import (
+from ..paths import (
     get_snippet_path,
+    get_snippet_path_with_source,
     get_snippets_dir,
     ensure_numchuck_directories,
     list_snippets,
+    list_all_snippets,
 )
 from .logging import get_logger, TUILogger
 
@@ -485,32 +487,39 @@ class CommandExecutor:
         return None
 
     def _cmd_load_snippet(self, args: dict[str, Any]) -> str | None:
-        """Load and spork a code snippet from ~/.numchuck/snippets/."""
-        name = args["name"]
-        snippet_path = get_snippet_path(name)
+        """Load and spork a code snippet.
 
-        if not snippet_path.exists():
-            # Try to create snippets directory if it doesn't exist
+        Searches local snippets (./.numchuck/snippets/) first, then global
+        snippets (~/.numchuck/snippets/). Local snippets take precedence.
+        """
+        name = args["name"]
+        snippet_path, source = get_snippet_path_with_source(name)
+
+        if snippet_path is None:
+            # Snippet not found - show available snippets
             snippets_dir = get_snippets_dir()
             if not snippets_dir.exists():
                 try:
                     ensure_numchuck_directories()
                     self._log(f"Created snippets directory: {snippets_dir}")
-                    self._log("Add .ck files to this directory to use @<name> syntax")
                 except OSError as e:
                     return f"Could not create snippets directory: {e}"
 
-            self._log(f"Snippet '{name}' not found at {snippet_path}")
-            self._log(f"Available snippets in {snippets_dir}:")
-            snippets = list_snippets()
-            if snippets:
-                for s in snippets:
-                    self._log(f"  @{s}")
+            self._log(f"Snippet '{name}' not found")
+            self._log("")
+            self._log("Available snippets:")
+
+            all_snippets = list_all_snippets()
+            if all_snippets:
+                for snippet_name, snippet_source in all_snippets:
+                    source_tag = " (global)" if snippet_source == "global" else ""
+                    self._log(f"  @{snippet_name}{source_tag}")
             else:
                 self._log("  (none)")
+                self._log("")
+                self._log(f"Add .ck files to {snippets_dir} to create snippets")
             return None
 
-        # Spork the snippet
         # Read snippet content for project versioning
         try:
             content = snippet_path.read_text()
@@ -518,13 +527,144 @@ class CommandExecutor:
             self._logger.warning(f"Could not read snippet content: {e}")
             content = None
 
+        # Spork the snippet
         success, shred_ids = self.chuck.compile_file(str(snippet_path))
         if success:
+            source_tag = " (global)" if source == "global" else ""
             for sid in shred_ids:
                 self.session.add_shred(
                     sid, f"@{name}", content=content, shred_type="file"
                 )
-                self._log(f"sporked snippet @{name} -> shred {sid}")
+                self._log(f"sporked snippet @{name}{source_tag} -> shred {sid}")
             return None
         else:
             return f"Failed to spork snippet @{name}"
+
+    # -------------------------------------------------------------------------
+    # File watching commands
+    # -------------------------------------------------------------------------
+
+    def _get_or_create_watcher(self):
+        """Get or create the file watcher instance."""
+        if not hasattr(self.session, "_file_watcher") or self.session._file_watcher is None:
+            from ..watcher import FileWatcher
+
+            def on_reload(path: Path, shred_id: int) -> None:
+                self._log(f"[reload] {path.name} -> shred {shred_id}")
+
+            def on_error(path: Path, error: str) -> None:
+                self._logger.error(f"[watch error] {path.name}: {error}")
+
+            self.session._file_watcher = FileWatcher(
+                chuck=self.chuck,
+                session=self.session,
+                on_reload=on_reload,
+                on_error=on_error,
+            )
+
+        return self.session._file_watcher
+
+    def _cmd_watch_file(self, args: dict[str, Any]) -> str | None:
+        """Start watching a file for auto-reload."""
+        filepath = args["path"]
+        path = Path(filepath).resolve()
+
+        if not path.exists():
+            return f"File not found: {filepath}"
+
+        watcher = self._get_or_create_watcher()
+
+        # First, compile the file if not already running
+        shred_id = None
+        success, shred_ids = self.chuck.compile_file(str(path))
+        if success and shred_ids:
+            shred_id = shred_ids[0]
+            try:
+                content = path.read_text()
+            except (OSError, UnicodeDecodeError):
+                content = None
+            self.session.add_shred(
+                shred_id, str(path), content=content, shred_type="file"
+            )
+            self._log(f"sporked {path.name} -> shred {shred_id}")
+
+        # Add to watch list
+        try:
+            added = watcher.watch_file(path, shred_id=shred_id)
+            if added:
+                self._log(f"watching {path.name}")
+            else:
+                self._log(f"already watching {path.name}")
+
+            # Start watcher if not running
+            if not watcher.is_running:
+                watcher.start()
+                self._log("file watcher started")
+
+        except FileNotFoundError:
+            return f"File not found: {filepath}"
+
+        return None
+
+    def _cmd_unwatch_file(self, args: dict[str, Any]) -> str | None:
+        """Stop watching a file."""
+        filepath = args["path"]
+        path = Path(filepath).resolve()
+
+        if not hasattr(self.session, "_file_watcher") or self.session._file_watcher is None:
+            return "No files are being watched"
+
+        watcher = self.session._file_watcher
+        removed = watcher.unwatch_file(path)
+
+        if removed:
+            self._log(f"stopped watching {path.name}")
+        else:
+            self._log(f"not watching {path.name}")
+
+        return None
+
+    def _cmd_unwatch_all(self, args: dict[str, Any]) -> str | None:
+        """Stop watching all files."""
+        if not hasattr(self.session, "_file_watcher") or self.session._file_watcher is None:
+            return "No files are being watched"
+
+        watcher = self.session._file_watcher
+        watched = watcher.get_watched_files()
+
+        for wf in watched:
+            watcher.unwatch_file(wf.filepath)
+
+        if watcher.is_running:
+            watcher.stop()
+
+        self._log(f"stopped watching {len(watched)} file(s)")
+        return None
+
+    def _cmd_list_watched(self, args: dict[str, Any]) -> str | None:
+        """List all watched files."""
+        if not hasattr(self.session, "_file_watcher") or self.session._file_watcher is None:
+            self._log("no files being watched")
+            self._log("")
+            self._log("Use 'watch file.ck' to start watching a file")
+            return None
+
+        watcher = self.session._file_watcher
+        watched = watcher.get_watched_files()
+
+        if not watched:
+            self._log("no files being watched")
+            return None
+
+        self._log(f"{'File':<40} {'Shred':<8}")
+        self._log("-" * 50)
+        for wf in watched:
+            shred_str = str(wf.shred_id) if wf.shred_id is not None else "-"
+            name = wf.filepath.name
+            if len(name) > 38:
+                name = "..." + name[-35:]
+            self._log(f"{name:<40} {shred_str:<8}")
+
+        self._log("")
+        self._log(f"Watcher: {'running' if watcher.is_running else 'stopped'}")
+        return None

@@ -87,6 +87,88 @@ def create_parser():
     # info subcommand
     subparsers.add_parser("info", help="Show ChucK and numchuck info")
 
+    # export subcommand
+    export_parser = subparsers.add_parser(
+        "export", help="Export ChucK files to WAV audio"
+    )
+    export_parser.add_argument("output", help="Output WAV file path")
+    export_parser.add_argument(
+        "--files",
+        "-f",
+        nargs="+",
+        required=True,
+        help="ChucK files to render",
+    )
+    export_parser.add_argument(
+        "--duration",
+        "-d",
+        type=float,
+        default=10.0,
+        help="Duration in seconds (default: 10.0)",
+    )
+    export_parser.add_argument(
+        "--srate",
+        type=int,
+        default=44100,
+        help="Sample rate in Hz (default: 44100)",
+    )
+    export_parser.add_argument(
+        "--channels",
+        "-c",
+        type=int,
+        default=2,
+        help="Number of output channels (default: 2)",
+    )
+
+    # snippets subcommand
+    snippets_parser = subparsers.add_parser(
+        "snippets", help="Manage code snippets"
+    )
+    snippets_subparsers = snippets_parser.add_subparsers(
+        dest="snippets_command", help="Snippets commands"
+    )
+
+    # snippets list
+    snippets_subparsers.add_parser("list", help="List all available snippets")
+
+    # snippets show
+    snippets_show_parser = snippets_subparsers.add_parser(
+        "show", help="Show snippet content"
+    )
+    snippets_show_parser.add_argument("name", help="Snippet name (without .ck)")
+
+    # snippets path
+    snippets_subparsers.add_parser("path", help="Show snippets directory path")
+
+    # watch subcommand
+    watch_parser = subparsers.add_parser(
+        "watch", help="Watch ChucK files and auto-reload on changes"
+    )
+    watch_parser.add_argument(
+        "files",
+        nargs="+",
+        help="ChucK files to watch",
+    )
+    watch_parser.add_argument(
+        "--srate",
+        type=int,
+        default=44100,
+        help="Sample rate in Hz (default: 44100)",
+    )
+    watch_parser.add_argument(
+        "--channels",
+        "-c",
+        type=int,
+        default=2,
+        help="Number of output channels (default: 2)",
+    )
+    watch_parser.add_argument(
+        "--quiet",
+        "-q",
+        action="store_true",
+        help="Suppress status messages",
+    )
+
     # tui subcommand (backward compatibility - maps to repl)
     tui_parser = subparsers.add_parser(
         "tui", help="Launch interactive REPL (alias for repl)"
@@ -168,6 +250,61 @@ def cmd_info(args):
     print(f"Active VMs: {ChucK.num_vms()}")
 
 
+def cmd_export(args):
+    """Export ChucK files to WAV audio."""
+    from .. import RenderError, to_wav
+
+    try:
+        output_path = to_wav(
+            output=args.output,
+            files=args.files,
+            duration=args.duration,
+            sample_rate=args.srate,
+            channels=args.channels,
+        )
+        print(f"Exported to {output_path}")
+        print(f"  Duration: {args.duration}s")
+        print(f"  Sample rate: {args.srate} Hz")
+        print(f"  Channels: {args.channels}")
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+    except RenderError as e:
+        print(f"Export failed: {e}")
+        sys.exit(1)
+
+
+def cmd_snippets(args):
+    """Manage code snippets."""
+    from .snippets import (
+        cmd_snippets_list,
+        cmd_snippets_path,
+        cmd_snippets_show,
+    )
+
+    if args.snippets_command == "list" or args.snippets_command is None:
+        cmd_snippets_list()
+    elif args.snippets_command == "show":
+        cmd_snippets_show(args.name)
+    elif args.snippets_command == "path":
+        cmd_snippets_path()
+    else:
+        # Default to list if no subcommand
+        cmd_snippets_list()
+
+
+def cmd_watch(args):
+    """Watch ChucK files and auto-reload on changes."""
+    from .watcher import cmd_watch as run_watch
+
+    run_watch(
+        files=args.files,
+        sample_rate=args.srate,
+        channels=args.channels,
+        quiet=args.quiet,
+    )
+
+
 def main():
     """Main CLI entry point."""
     parser = create_parser()
@@ -181,6 +318,9 @@ def main():
         "run": cmd_run,
         "version": cmd_version,
         "info": cmd_info,
+        "export": cmd_export,
+        "snippets": cmd_snippets,
+        "watch": cmd_watch,
     }
 
     # Execute command
