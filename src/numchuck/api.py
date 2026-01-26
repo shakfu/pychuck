@@ -85,7 +85,7 @@ class Chuck:
         tty_color: bool = False,
         tty_width_hint: int = 80,
         auto_init: bool = True,
-    ):
+    ) -> None:
         self._chuck = _numchuck.ChucK()
 
         # Set parameters before init
@@ -118,6 +118,30 @@ class Chuck:
         self._reuse_input_buf: NDArray[np.float32] | None = None
         self._reuse_output_buf: NDArray[np.float32] | None = None
         self._reuse_num_frames: int = 0
+
+    # -------------------------------------------------------------------------
+    # Context manager support
+    # -------------------------------------------------------------------------
+
+    def __enter__(self) -> "Chuck":
+        """Enter context manager.
+
+        Example:
+            >>> with Chuck() as chuck:
+            ...     chuck.compile("SinOsc s => dac;")
+            ...     output = chuck.run(44100)
+            ... # Automatically calls close() on exit
+        """
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Exit context manager, ensuring proper cleanup.
+
+        Calls close() to shutdown the ChucK instance. This is especially
+        important on Windows where explicit cleanup is required for proper
+        thread termination.
+        """
+        self.close()
 
     # -------------------------------------------------------------------------
     # Core operations

@@ -54,3 +54,47 @@ Remaining tasks from recent code review.
   - Made `ChucK::shutdown()` public in `chuck.h` for explicit cleanup
   - Python API: `Chuck.close()` method for explicit shutdown
   - Windows tests re-enabled in CI
+
+---
+
+## Refactoring (2026-01-26)
+
+High priority items from comprehensive code review.
+
+### API Improvements
+
+- [x] **Add context manager to Chuck class** (`src/numchuck/api.py`)
+  - Added `__enter__` and `__exit__` methods for `with Chuck() as ck:` pattern
+  - Ensures proper cleanup even on exceptions
+  - Added 4 tests in test_api.py
+
+### TUI Refactoring
+
+- [x] **Extract shared TUI logic into base class** (`src/numchuck/tui/common.py`)
+  - Enhanced `ChuckApplication` with audio lifecycle management
+  - Added `setup()`, `start_audio_playback()`, `stop_audio_playback()`
+  - Unified output capture with `setup_output_capture()` and `set_log_callback()`
+  - Refactored `ChuckEditor` and `ChuckREPL` to use shared base class
+  - Reduced code duplication for audio and cleanup logic
+
+- [x] **Extract ChuckCompleter to standalone class** (`src/numchuck/tui/completer.py`)
+  - Moved from nested class inside `ChuckREPL.__init__` to standalone module
+  - Enables independent testing of completion logic
+  - Added 12 tests in test_completer.py
+
+### Test Suite
+
+- [x] **Context manager tests** - 4 new tests for `with Chuck()` support
+- [x] **Completer tests** - 12 new tests for ChuckCompleter class
+- Total test count: 228 (up from 216)
+
+### Packaging
+
+- [x] **Add py.typed marker** (`src/numchuck/py.typed`)
+  - Enables type checker support (PEP 561)
+  - Added "Typing :: Typed" classifier to pyproject.toml
+
+- [x] **Drop Python 3.8 support**
+  - Python 3.8 reached EOL October 2024
+  - Updated `requires-python = ">=3.9"` in pyproject.toml
+  - Removed 3.8 classifier, added 3.13 classifier

@@ -35,16 +35,9 @@ ZIP = $(DIST_NAME).zip
 
 
 .PHONY: all build clean test install repl snap typecheck lint format \
-		check publish publish-test
+		qa check publish publish-test
 
 all: build
-
-# build:
-# 	@mkdir -p build && \
-# 		cd build && \
-# 		cmake $(GENERATOR) .. $(EXTRA_OPTIONS) && \
-# 		cmake --build . --config '$(CONFIG)' && \
-# 		cmake --install . --config '$(CONFIG)'
 
 build:
 	@uv sync --reinstall-package numchuck
@@ -69,6 +62,8 @@ lint:
 
 format:
 	@uv run ruff format src/
+
+qa: test lint typecheck format
 
 check:
 	@uv run twine check dist/*.whl

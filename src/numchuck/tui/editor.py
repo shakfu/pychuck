@@ -102,24 +102,11 @@ class ChuckEditor:
     """
 
     def __init__(self, project_name=None, start_audio=False):
-        self.app_state = ChuckApplication(project_name=project_name)
+        self.app_state = ChuckApplication(project_name=project_name, auto_init=True)
         self.tabs = []
         self.current_tab_index = 0  # Safe: prompt_toolkit is single-threaded
         self.start_audio_flag = start_audio
-        self.audio_started = False
         self.status_message = ""
-
-        # Initialize ChucK
-        from .._numchuck import (
-            PARAM_SAMPLE_RATE,
-            PARAM_OUTPUT_CHANNELS,
-            PARAM_INPUT_CHANNELS,
-        )
-
-        self.app_state.chuck.set_param(PARAM_SAMPLE_RATE, 44100)
-        self.app_state.chuck.set_param(PARAM_OUTPUT_CHANNELS, 2)
-        self.app_state.chuck.set_param(PARAM_INPUT_CHANNELS, 0)
-        self.app_state.chuck.init()
 
         # Create application
         self.app = None
@@ -253,17 +240,13 @@ class ChuckEditor:
                 event.app.invalidate()
 
         @kb.add("c-a")
-        def start_audio(event):
+        def start_audio_handler(event):
             """Start audio (Ctrl-A)"""
-            if not self.audio_started:
-                try:
-                    from .._numchuck import start_audio
-
-                    start_audio(self.app_state.chuck)
-                    self.audio_started = True
+            if not self.app_state.audio_running:
+                if self.app_state.start_audio_playback():
                     self.status_message = "Audio started"
-                except Exception as e:
-                    self.status_message = f"Audio start failed: {e}"
+                else:
+                    self.status_message = "Audio start failed"
                 event.app.invalidate()
 
         return kb
@@ -501,7 +484,7 @@ Versioning: file.ck → file-1.ck (spork) → file-1-1.ck (replace)
         """Get status bar text."""
         # Shred count
         shred_count = len(self.app_state.session.shreds)
-        audio_status = "♪" if self.audio_started else "⏸"
+        audio_status = "♪" if self.app_state.audio_running else "⏸"
 
         # Current file info
         if self.tabs:
@@ -514,17 +497,7 @@ Versioning: file.ck → file-1.ck (spork) → file-1-1.ck (replace)
 
     def cleanup(self):
         """Cleanup on exit."""
-        # Stop audio if running
-        if self.audio_started:
-            try:
-                from .._numchuck import stop_audio, shutdown_audio
-
-                stop_audio()
-                shutdown_audio(500)
-            except (RuntimeError, ImportError):
-                pass
-
-        # Clean up app state (ChucK instance and session)
+        # Clean up app state (handles audio stop and ChucK cleanup)
         self.app_state.cleanup()
 
         # Break circular references
@@ -552,14 +525,10 @@ Versioning: file.ck → file-1.ck (spork) → file-1-1.ck (replace)
 
         # Start audio if requested
         if self.start_audio_flag:
-            try:
-                from .._numchuck import start_audio
-
-                start_audio(self.app_state.chuck)
-                self.audio_started = True
+            if self.app_state.start_audio_playback():
                 self.status_message = "Audio started"
-            except Exception as e:
-                self.status_message = f"Audio start failed: {e}"
+            else:
+                self.status_message = "Audio start failed"
 
         # Create application
         self.app = Application(

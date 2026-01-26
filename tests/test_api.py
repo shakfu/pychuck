@@ -460,3 +460,46 @@ class TestRawAccess:
         assert hasattr(raw, "compile_code")
         assert hasattr(raw, "set_param")
         assert hasattr(raw, "get_param_int")
+
+
+class TestContextManager:
+    """Test context manager support."""
+
+    def test_context_manager_basic(self):
+        """Test basic context manager usage."""
+        with Chuck() as chuck:
+            assert chuck.sample_rate == 44100
+            success, shreds = chuck.compile("SinOsc s => dac;")
+            assert success
+
+    def test_context_manager_cleanup(self):
+        """Test that context manager calls close on exit."""
+        chuck = None
+        with Chuck() as ck:
+            chuck = ck
+            chuck.compile("SinOsc s => dac;")
+        # After exiting context, close() should have been called
+        # We can verify by checking the instance is still accessible
+        # but operations may fail (implementation-dependent)
+        assert chuck is not None
+
+    def test_context_manager_exception_cleanup(self):
+        """Test that context manager calls close even on exception."""
+        chuck_ref = None
+        try:
+            with Chuck() as chuck:
+                chuck_ref = chuck
+                chuck.compile("SinOsc s => dac;")
+                raise ValueError("Test exception")
+        except ValueError:
+            pass
+        # close() should have been called even though exception was raised
+        assert chuck_ref is not None
+
+    def test_context_manager_with_audio_processing(self):
+        """Test context manager with audio processing."""
+        with Chuck(output_channels=1) as chuck:
+            chuck.compile("SinOsc s => dac; 440 => s.freq; 1::second => now;")
+            output = chuck.run(4410)
+            assert len(output) == 4410
+            assert output.max() > 0

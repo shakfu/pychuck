@@ -1,25 +1,18 @@
 import sys
-import os
-from .._numchuck import (
-    ChucK,
-    stop_audio,
-    shutdown_audio,
-    PARAM_SAMPLE_RATE,
-    PARAM_OUTPUT_CHANNELS,
-    PARAM_INPUT_CHANNELS,
-)
-from ..chuck_lang import REPL_COMMANDS, ALL_IDENTIFIERS
+
 from .parser import CommandParser
-from .session import REPLSession
 from .commands import CommandExecutor
 from .paths import get_history_file, ensure_numchuck_directories
-from .common import generate_shreds_table
+from .common import ChuckApplication, generate_shreds_table
+from .completer import ChuckCompleter
 
 
 class ChuckREPL:
     def __init__(self, smart_enter=True, show_sidebar=True, project_name=None):
-        self.chuck = ChucK()
-        self.session = REPLSession(self.chuck, project_name=project_name)
+        # Use ChuckApplication for shared ChucK management
+        self.app_state = ChuckApplication(project_name=project_name)
+        self.chuck = self.app_state.chuck  # Convenience reference
+        self.session = self.app_state.session  # Convenience reference
         self.parser = CommandParser()
         self.executor = CommandExecutor(self.session)
         self.smart_enter = smart_enter  # Enable smart Enter behavior
@@ -30,15 +23,9 @@ class ChuckREPL:
         from prompt_toolkit.buffer import Buffer
         from prompt_toolkit.history import FileHistory
         from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
-        from prompt_toolkit.completion import (
-            PathCompleter,
-            Completer,
-            Completion,
-        )
         from prompt_toolkit.key_binding import KeyBindings
         from prompt_toolkit.lexers import PygmentsLexer
         from prompt_toolkit.styles import Style
-        from prompt_toolkit.document import Document
         from prompt_toolkit.formatted_text import HTML
         from prompt_toolkit.layout.containers import (
             HSplit,
@@ -62,127 +49,8 @@ class ChuckREPL:
 
             lexer_class = CLexer
 
-        # Context-aware completer
-        class ChuckCompleter(Completer):
-            def __init__(self, repl_instance):
-                self.repl = repl_instance
-                self.path_completer = PathCompleter(
-                    file_filter=lambda filename: filename.endswith(".ck")
-                    or os.path.isdir(filename),
-                    expanduser=True,
-                )
-                # Use REPL_COMMANDS from chuck_lang as source of truth
-                self.commands = sorted(REPL_COMMANDS)
-
-            def get_completions(self, document, complete_event):
-                text = document.text.strip()
-
-                # Get the word before cursor for ChucK code completion
-                word_before_cursor = document.get_word_before_cursor(WORD=True)
-
-                # After '+', suggest .ck files
-                if text.startswith("+ ") and len(text) > 2:
-                    # Create new document with just the path part
-                    path_text = text[2:].strip()
-                    path_doc = Document(path_text, len(path_text))
-                    for completion in self.path_completer.get_completions(
-                        path_doc, complete_event
-                    ):
-                        yield completion
-
-                # After '-', suggest shred IDs or 'all'
-                elif text.startswith("- ") and len(text) > 2:
-                    prefix = text[2:].strip()
-                    # Suggest 'all'
-                    if "all".startswith(prefix):
-                        yield Completion("all", start_position=-len(prefix))
-                    # Suggest active shred IDs
-                    try:
-                        for sid in self.repl.session.shreds.keys():
-                            sid_str = str(sid)
-                            if sid_str.startswith(prefix):
-                                yield Completion(sid_str, start_position=-len(prefix))
-                    except (AttributeError, RuntimeError):
-                        pass
-
-                # After '~', suggest shred IDs
-                elif text.startswith("~ ") and len(text) > 2:
-                    parts = text[2:].strip()
-                    if " " not in parts:  # Still typing shred ID
-                        try:
-                            for sid in self.repl.session.shreds.keys():
-                                sid_str = str(sid)
-                                if sid_str.startswith(parts):
-                                    yield Completion(
-                                        sid_str, start_position=-len(parts)
-                                    )
-                        except (AttributeError, RuntimeError):
-                            pass
-
-                # After '? ', suggest shred IDs
-                elif text.startswith("? ") and len(text) > 2:
-                    prefix = text[2:].strip()
-                    try:
-                        for sid in self.repl.session.shreds.keys():
-                            sid_str = str(sid)
-                            if sid_str.startswith(prefix):
-                                yield Completion(sid_str, start_position=-len(prefix))
-                    except (AttributeError, RuntimeError):
-                        pass
-
-                # After '<name>?' or '<name>::', suggest known globals
-                elif "?" in text and not text.startswith("?"):
-                    prefix = text.split("?")[0]
-                    try:
-                        globals_list = self.repl.chuck.get_all_globals()
-                        for typ, name in globals_list:
-                            if name.startswith(prefix):
-                                yield Completion(name + "?", start_position=-len(text))
-                    except (AttributeError, RuntimeError):
-                        pass
-
-                elif "::" in text:
-                    prefix = text.split("::")[0]
-                    try:
-                        globals_list = self.repl.chuck.get_all_globals()
-                        for typ, name in globals_list:
-                            if name.startswith(prefix):
-                                yield Completion(name + "::", start_position=-len(text))
-                    except (AttributeError, RuntimeError):
-                        pass
-
-                # After ': ', suggest .ck files (compile mode)
-                elif text.startswith(": ") and len(text) > 2:
-                    path_text = text[2:].strip()
-                    path_doc = Document(path_text, len(path_text))
-                    for completion in self.path_completer.get_completions(
-                        path_doc, complete_event
-                    ):
-                        yield completion
-
-                # Default: suggest REPL commands or ChucK identifiers
-                else:
-                    # First priority: REPL commands (if text matches command patterns)
-                    repl_command_matched = False
-                    for cmd in self.commands:
-                        if cmd.startswith(text):
-                            yield Completion(cmd, start_position=-len(text))
-                            repl_command_matched = True
-
-                    # Second priority: ChucK language identifiers (keywords, types, UGens, etc.)
-                    # Only suggest ChucK completions if:
-                    # 1. No REPL commands matched, OR
-                    # 2. We're completing a word within ChucK code (word_before_cursor exists)
-                    if not repl_command_matched or word_before_cursor:
-                        for identifier in sorted(ALL_IDENTIFIERS):
-                            if identifier.startswith(word_before_cursor):
-                                yield Completion(
-                                    identifier,
-                                    start_position=-len(word_before_cursor),
-                                    display_meta="ChucK",
-                                )
-
-        chuck_completer = ChuckCompleter(self)
+        # Create context-aware completer using the session and chuck instance
+        chuck_completer = ChuckCompleter(self.session, self.chuck)
 
         # Error message state
         self.error_message = ""
@@ -531,18 +399,18 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
 
     def setup(self):
         """Initialize ChucK with sensible defaults"""
+        from .._numchuck import ChucK as ChucKClass
+
         # Use ChucK's stdout callback to capture VM messages (must be set before init)
-        ChucK.set_stdout_callback(self.add_to_log)
-        ChucK.set_stderr_callback(self.add_to_log)
+        ChucKClass.set_stdout_callback(self.add_to_log)
+        ChucKClass.set_stderr_callback(self.add_to_log)
 
-        self.chuck.set_param(PARAM_SAMPLE_RATE, 44100)
-        self.chuck.set_param(PARAM_OUTPUT_CHANNELS, 2)
-        self.chuck.set_param(PARAM_INPUT_CHANNELS, 0)
-        self.chuck.init()
+        # Initialize ChucK through app_state
+        self.app_state.setup()
 
-        # Capture ChucK output (chout/cherr from user code)
-        self.chuck.set_chout_callback(lambda msg: self.add_to_log(f"[out] {msg}"))
-        self.chuck.set_cherr_callback(lambda msg: self.add_to_log(f"[err] {msg}"))
+        # Set up output capture with our log function
+        self.app_state.set_log_callback(lambda msg: self.add_to_log(f"[out] {msg}"))
+        self.app_state.setup_output_capture()
 
     def process_input(self, buff):
         """Process input when user presses Enter"""
@@ -616,13 +484,7 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
 
             # Start audio if requested
             if start_audio:
-                from .._numchuck import start_audio as start_audio_func
-
-                try:
-                    start_audio_func(self.chuck)
-                    self.session.audio_running = True
-                except Exception as e:
-                    print(f"Warning: Could not start audio: {e}", file=sys.stderr)
+                self.app_state.start_audio_playback()
 
             # Load files if provided
             if files:
@@ -653,31 +515,20 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
         """Shutdown cleanly"""
         print("\nShutting down...")
 
-        # Remove all shreds first
-        try:
-            self.chuck.remove_all_shreds()
-        except RuntimeError as e:
-            print(f"Warning: Error removing shreds: {e}", file=sys.stderr)
+        # Use app_state cleanup (handles shreds, audio, and references)
+        if hasattr(self, "app_state"):
+            self.app_state.cleanup()
 
-        # Stop audio properly if running
-        if hasattr(self, "session") and self.session.audio_running:
-            try:
-                stop_audio()  # Stop audio stream first
-            except (RuntimeError, OSError) as e:
-                print(f"Warning: Error stopping audio: {e}", file=sys.stderr)
-
-            try:
-                shutdown_audio(500)  # Then clean up audio resources
-            except (RuntimeError, OSError) as e:
-                print(f"Warning: Error shutting down audio: {e}", file=sys.stderr)
-
-        # Break circular references to allow proper garbage collection
-        if hasattr(self, "session"):
-            self.session.chuck = None
-            del self.session
+        # Break additional circular references
         if hasattr(self, "executor"):
             self.executor.chuck = None
             self.executor.session = None
             del self.executor
+
+        # Clear convenience references
         if hasattr(self, "chuck"):
-            del self.chuck
+            self.chuck = None
+        if hasattr(self, "session"):
+            self.session = None
+        if hasattr(self, "app_state"):
+            del self.app_state
