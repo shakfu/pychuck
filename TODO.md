@@ -98,3 +98,37 @@ High priority items from comprehensive code review.
   - Python 3.8 reached EOL October 2024
   - Updated `requires-python = ">=3.9"` in pyproject.toml
   - Removed 3.8 classifier, added 3.13 classifier
+
+---
+
+## Medium-Term Enhancements (2026-01-26)
+
+### API Enhancements
+
+- [x] **Async/await API variants** (`src/numchuck/api.py`)
+  - Added `get_int_awaitable()`, `get_float_awaitable()`, `get_string_awaitable()`
+  - Uses asyncio with executor for non-blocking VM execution
+  - Added 4 async tests
+
+- [x] **Typed global variable proxies** (`src/numchuck/api.py`)
+  - Added `GlobalInt`, `GlobalFloat`, `GlobalString` classes
+  - Property-based access: `tempo.value = 120` instead of `chuck.set_int("tempo", 120)`
+  - Factory methods: `chuck.global_int("tempo")`, etc.
+  - Added 5 proxy tests
+
+- [x] **Shred handle objects** (`src/numchuck/api.py`)
+  - Added `Shred` class wrapping shred IDs
+  - Methods: `shred.remove()`, `shred.replace()`, `shred.info`
+  - Properties: `shred.id`, `shred.is_running`
+  - Factory methods: `chuck.spork()`, `chuck.spork_file()`
+  - Added 9 shred tests
+
+- [x] **Configuration file support** (`src/numchuck/config.py`)
+  - Support for `~/.numchuck/config.toml`
+  - Dataclasses: `Config`, `AudioConfig`, `REPLConfig`, `EditorConfig`, `PathsConfig`, `ChuckConfig`
+  - Functions: `load_config()`, `save_config()`, `get_config()`
+  - Added 7 config tests
+
+### Test Suite
+
+- Total test count: 253 (up from 228)

@@ -30,7 +30,8 @@ Thread Safety:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import asyncio
+from typing import TYPE_CHECKING, Generic, TypeVar
 
 import numpy as np
 
@@ -40,6 +41,8 @@ if TYPE_CHECKING:
     from typing import Callable
 
     from numpy.typing import NDArray
+
+T = TypeVar("T", int, float, str)
 
 
 class Chuck:
@@ -598,3 +601,376 @@ class Chuck:
     def raw(self) -> _numchuck.ChucK:
         """Access the underlying low-level ChucK instance."""
         return self._chuck
+
+    # -------------------------------------------------------------------------
+    # Async/await API
+    # -------------------------------------------------------------------------
+
+    async def get_int_awaitable(self, name: str, run_frames: int = 256) -> int:
+        """Get a global int variable using async/await.
+
+        This method runs the VM in a background thread to avoid blocking
+        the event loop.
+
+        Args:
+            name: Variable name
+            run_frames: Number of frames to run for callback to execute
+
+        Returns:
+            The variable value
+
+        Example:
+            >>> value = await chuck.get_int_awaitable("tempo")
+        """
+        loop = asyncio.get_event_loop()
+        future: asyncio.Future[int] = loop.create_future()
+
+        def callback(value: int) -> None:
+            if not future.done():
+                loop.call_soon_threadsafe(future.set_result, value)
+
+        self._chuck.get_global_int(name, callback)
+
+        # Run VM in executor to avoid blocking
+        await loop.run_in_executor(None, self.run, run_frames)
+
+        if not future.done():
+            raise RuntimeError(
+                f"Failed to get global int '{name}' - callback not invoked. "
+                f"Try increasing run_frames (currently {run_frames})."
+            )
+        return await future
+
+    async def get_float_awaitable(self, name: str, run_frames: int = 256) -> float:
+        """Get a global float variable using async/await.
+
+        Args:
+            name: Variable name
+            run_frames: Number of frames to run for callback to execute
+
+        Returns:
+            The variable value
+        """
+        loop = asyncio.get_event_loop()
+        future: asyncio.Future[float] = loop.create_future()
+
+        def callback(value: float) -> None:
+            if not future.done():
+                loop.call_soon_threadsafe(future.set_result, value)
+
+        self._chuck.get_global_float(name, callback)
+        await loop.run_in_executor(None, self.run, run_frames)
+
+        if not future.done():
+            raise RuntimeError(
+                f"Failed to get global float '{name}' - callback not invoked. "
+                f"Try increasing run_frames (currently {run_frames})."
+            )
+        return await future
+
+    async def get_string_awaitable(self, name: str, run_frames: int = 256) -> str:
+        """Get a global string variable using async/await.
+
+        Args:
+            name: Variable name
+            run_frames: Number of frames to run for callback to execute
+
+        Returns:
+            The variable value
+        """
+        loop = asyncio.get_event_loop()
+        future: asyncio.Future[str] = loop.create_future()
+
+        def callback(value: str) -> None:
+            if not future.done():
+                loop.call_soon_threadsafe(future.set_result, value)
+
+        self._chuck.get_global_string(name, callback)
+        await loop.run_in_executor(None, self.run, run_frames)
+
+        if not future.done():
+            raise RuntimeError(
+                f"Failed to get global string '{name}' - callback not invoked. "
+                f"Try increasing run_frames (currently {run_frames})."
+            )
+        return await future
+
+    # -------------------------------------------------------------------------
+    # Typed global variable proxies
+    # -------------------------------------------------------------------------
+
+    def global_int(self, name: str) -> "GlobalInt":
+        """Get a typed proxy for a global int variable.
+
+        Example:
+            >>> tempo = chuck.global_int("tempo")
+            >>> tempo.value = 120
+            >>> print(tempo.value)
+            120
+        """
+        return GlobalInt(self, name)
+
+    def global_float(self, name: str) -> "GlobalFloat":
+        """Get a typed proxy for a global float variable.
+
+        Example:
+            >>> gain = chuck.global_float("gain")
+            >>> gain.value = 0.8
+        """
+        return GlobalFloat(self, name)
+
+    def global_string(self, name: str) -> "GlobalString":
+        """Get a typed proxy for a global string variable.
+
+        Example:
+            >>> msg = chuck.global_string("message")
+            >>> msg.value = "hello"
+        """
+        return GlobalString(self, name)
+
+    # -------------------------------------------------------------------------
+    # Shred handles
+    # -------------------------------------------------------------------------
+
+    def spork(self, code: str, args: str = "") -> "Shred":
+        """Compile code and return a Shred handle.
+
+        This is an alternative to compile() that returns a Shred object
+        for easier management.
+
+        Args:
+            code: ChucK source code
+            args: Optional arguments string
+
+        Returns:
+            Shred handle object
+
+        Raises:
+            RuntimeError: If compilation fails
+
+        Example:
+            >>> shred = chuck.spork("SinOsc s => dac; 1::second => now;")
+            >>> shred.id
+            1
+            >>> shred.replace("TriOsc t => dac; 1::second => now;")
+            >>> shred.remove()
+        """
+        success, shred_ids = self.compile(code, args)
+        if not success or not shred_ids:
+            raise RuntimeError("Failed to compile code")
+        return Shred(self, shred_ids[0])
+
+    def spork_file(self, path: str, args: str = "") -> "Shred":
+        """Compile a file and return a Shred handle.
+
+        Args:
+            path: Path to .ck file
+            args: Optional arguments string
+
+        Returns:
+            Shred handle object
+
+        Raises:
+            RuntimeError: If compilation fails
+        """
+        success, shred_ids = self.compile_file(path, args)
+        if not success or not shred_ids:
+            raise RuntimeError(f"Failed to compile file: {path}")
+        return Shred(self, shred_ids[0])
+
+
+# =============================================================================
+# Global Variable Proxies
+# =============================================================================
+
+
+class GlobalVar(Generic[T]):
+    """Base class for typed global variable proxies."""
+
+    def __init__(self, chuck: Chuck, name: str):
+        self._chuck = chuck
+        self._name = name
+
+    @property
+    def name(self) -> str:
+        """The variable name."""
+        return self._name
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({self._name!r})"
+
+
+class GlobalInt(GlobalVar[int]):
+    """Typed proxy for a global int variable.
+
+    Example:
+        >>> tempo = chuck.global_int("tempo")
+        >>> tempo.value = 120
+        >>> print(tempo.value)
+        120
+        >>> tempo.set(140)  # alternative
+    """
+
+    @property
+    def value(self) -> int:
+        """Get the current value."""
+        return self._chuck.get_int(self._name)
+
+    @value.setter
+    def value(self, val: int) -> None:
+        """Set the value."""
+        self._chuck.set_int(self._name, val)
+
+    def get(self, run_frames: int = 256) -> int:
+        """Get the value with custom run_frames."""
+        return self._chuck.get_int(self._name, run_frames)
+
+    def set(self, val: int) -> None:
+        """Set the value."""
+        self._chuck.set_int(self._name, val)
+
+    async def get_async(self, run_frames: int = 256) -> int:
+        """Get the value asynchronously."""
+        return await self._chuck.get_int_awaitable(self._name, run_frames)
+
+
+class GlobalFloat(GlobalVar[float]):
+    """Typed proxy for a global float variable.
+
+    Example:
+        >>> gain = chuck.global_float("gain")
+        >>> gain.value = 0.8
+        >>> print(gain.value)
+        0.8
+    """
+
+    @property
+    def value(self) -> float:
+        """Get the current value."""
+        return self._chuck.get_float(self._name)
+
+    @value.setter
+    def value(self, val: float) -> None:
+        """Set the value."""
+        self._chuck.set_float(self._name, val)
+
+    def get(self, run_frames: int = 256) -> float:
+        """Get the value with custom run_frames."""
+        return self._chuck.get_float(self._name, run_frames)
+
+    def set(self, val: float) -> None:
+        """Set the value."""
+        self._chuck.set_float(self._name, val)
+
+    async def get_async(self, run_frames: int = 256) -> float:
+        """Get the value asynchronously."""
+        return await self._chuck.get_float_awaitable(self._name, run_frames)
+
+
+class GlobalString(GlobalVar[str]):
+    """Typed proxy for a global string variable.
+
+    Example:
+        >>> msg = chuck.global_string("message")
+        >>> msg.value = "hello"
+        >>> print(msg.value)
+        hello
+    """
+
+    @property
+    def value(self) -> str:
+        """Get the current value."""
+        return self._chuck.get_string(self._name)
+
+    @value.setter
+    def value(self, val: str) -> None:
+        """Set the value."""
+        self._chuck.set_string(self._name, val)
+
+    def get(self, run_frames: int = 256) -> str:
+        """Get the value with custom run_frames."""
+        return self._chuck.get_string(self._name, run_frames)
+
+    def set(self, val: str) -> None:
+        """Set the value."""
+        self._chuck.set_string(self._name, val)
+
+    async def get_async(self, run_frames: int = 256) -> str:
+        """Get the value asynchronously."""
+        return await self._chuck.get_string_awaitable(self._name, run_frames)
+
+
+# =============================================================================
+# Shred Handle
+# =============================================================================
+
+
+class Shred:
+    """Handle for a running ChucK shred.
+
+    Provides an object-oriented interface to shred management instead
+    of tracking IDs manually.
+
+    Example:
+        >>> shred = chuck.spork("SinOsc s => dac; 1::second => now;")
+        >>> print(f"Running shred {shred.id}")
+        >>> shred.replace("TriOsc t => dac; 1::second => now;")
+        >>> print(f"Now running shred {shred.id}")
+        >>> shred.remove()
+    """
+
+    def __init__(self, chuck: Chuck, shred_id: int):
+        self._chuck = chuck
+        self._id = shred_id
+
+    @property
+    def id(self) -> int:
+        """The shred ID."""
+        return self._id
+
+    @property
+    def is_running(self) -> bool:
+        """Check if the shred is still running."""
+        return self._id in self._chuck.shreds
+
+    @property
+    def info(self) -> dict | None:
+        """Get information about the shred."""
+        return self._chuck.shred_info(self._id)
+
+    def remove(self) -> None:
+        """Remove this shred from the VM."""
+        self._chuck.remove_shred(self._id)
+
+    def replace(self, code: str, args: str = "") -> "Shred":
+        """Replace this shred with new code.
+
+        Args:
+            code: New ChucK source code
+            args: Optional arguments string
+
+        Returns:
+            Self with updated ID (for chaining)
+
+        Raises:
+            RuntimeError: If replacement fails
+        """
+        new_id = self._chuck.replace_shred(self._id, code, args)
+        if new_id == 0:
+            raise RuntimeError(f"Failed to replace shred {self._id}")
+        self._id = new_id
+        return self
+
+    def __repr__(self) -> str:
+        status = "running" if self.is_running else "stopped"
+        return f"Shred({self._id}, {status})"
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, Shred):
+            return self._id == other._id
+        if isinstance(other, int):
+            return self._id == other
+        return NotImplemented
+
+    def __hash__(self) -> int:
+        return hash(self._id)

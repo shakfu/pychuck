@@ -15,6 +15,67 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- **Context Manager Support** (`src/numchuck/api.py`):
+  - `Chuck` class now supports `with` statement for automatic cleanup
+  - `__enter__` and `__exit__` methods ensure `close()` is called on exit
+  - Example: `with Chuck() as ck: ck.compile("SinOsc s => dac;")`
+  - 4 new tests for context manager behavior
+
+- **Async/Await API** (`src/numchuck/api.py`):
+  - `get_int_awaitable(name, run_frames=256) -> int` - Async get global int
+  - `get_float_awaitable(name, run_frames=256) -> float` - Async get global float
+  - `get_string_awaitable(name, run_frames=256) -> str` - Async get global string
+  - Uses asyncio with executor for non-blocking VM execution
+  - 4 new async tests
+
+- **Typed Global Variable Proxies** (`src/numchuck/api.py`):
+  - `GlobalInt`, `GlobalFloat`, `GlobalString` classes for property-based access
+  - Factory methods: `chuck.global_int("name")`, `chuck.global_float("name")`, `chuck.global_string("name")`
+  - Property access: `tempo.value = 120` instead of `chuck.set_int("tempo", 120)`
+  - Methods: `get()`, `set(value)`, `get_async()` (awaitable)
+  - 5 new proxy tests
+
+- **Shred Handle Objects** (`src/numchuck/api.py`):
+  - `Shred` class wrapping shred IDs with methods for control
+  - Factory methods: `chuck.spork(code, args="")`, `chuck.spork_file(path, args="")`
+  - Methods: `remove()`, `replace(code, args="")`, `info` property
+  - Properties: `id`, `is_running`
+  - Equality comparison with int shred IDs
+  - 9 new shred tests
+
+- **Configuration File Support** (`src/numchuck/config.py`):
+  - Support for `~/.numchuck/config.toml` user configuration
+  - Dataclasses: `Config`, `AudioConfig`, `REPLConfig`, `EditorConfig`, `PathsConfig`, `ChuckConfig`
+  - Functions: `load_config()`, `save_config()`, `get_config()`, `reload_config()`
+  - Automatic defaults for missing values
+  - 7 new config tests
+
+- **PEP 561 Type Checker Support**:
+  - Added `py.typed` marker file (`src/numchuck/py.typed`)
+  - Added "Typing :: Typed" classifier to pyproject.toml
+
+- **TUI Refactoring**:
+  - Extracted `ChuckCompleter` to standalone class (`src/numchuck/tui/completer.py`)
+  - Enhanced `ChuckApplication` base class with audio lifecycle management
+  - Added `setup()`, `start_audio_playback()`, `stop_audio_playback()` methods
+  - Unified output capture with `setup_output_capture()` and `set_log_callback()`
+  - 12 new completer tests
+
+### Changed
+
+- **Python Version Support**:
+  - Dropped Python 3.8 support (EOL October 2024)
+  - Now requires Python 3.9+
+  - Added Python 3.13 classifier
+
+- **Package Exports** (`src/numchuck/__init__.py`):
+  - Now exports: `Chuck`, `Shred`, `GlobalInt`, `GlobalFloat`, `GlobalString`
+  - Now exports: `Config`, `load_config`, `get_config`, `save_config`
+
+- **Test Count**: 253 tests (up from 213)
+
 ## [0.1.8]
 
 ### Fixed

@@ -245,6 +245,101 @@ chuck.on_event("response", my_callback)
 chuck.raw.set_param(...)
 ```
 
+#### Context Manager Support
+
+The `Chuck` class supports the context manager protocol for automatic cleanup:
+
+```python
+from numchuck import Chuck
+
+# Automatic cleanup on exit (calls close())
+with Chuck() as chuck:
+    chuck.compile("SinOsc s => dac; 1::second => now;")
+    output = chuck.run(44100)
+# chuck.close() is called automatically, even on exceptions
+```
+
+#### Shred Handle Objects
+
+Use `Shred` objects for more intuitive shred management:
+
+```python
+from numchuck import Chuck
+
+chuck = Chuck()
+
+# spork() returns a Shred object
+shred = chuck.spork("SinOsc s => dac; 1::second => now;")
+print(shred.id)          # 1
+print(shred.is_running)  # True
+
+# Methods for shred control
+shred.replace("TriOsc t => dac; 1::second => now;")  # Hot-swap code
+shred.remove()           # Remove the shred
+
+# Load from file
+shred = chuck.spork_file("melody.ck")
+
+# Get detailed info
+print(shred.info)  # {'id': 1, 'name': '...', 'is_running': True, ...}
+```
+
+#### Typed Global Variable Proxies
+
+Property-based access to global variables:
+
+```python
+from numchuck import Chuck
+
+chuck = Chuck()
+chuck.compile("global int tempo; global float gain; global string mode;")
+chuck.run(100)
+
+# Create typed proxies
+tempo = chuck.global_int("tempo")
+gain = chuck.global_float("gain")
+mode = chuck.global_string("mode")
+
+# Property-based access
+tempo.value = 120        # Instead of chuck.set_int("tempo", 120)
+print(tempo.value)       # 120
+
+gain.value = 0.8
+mode.value = "minor"
+
+# Also supports method-style access
+tempo.set(140)
+print(tempo.get())       # 140
+```
+
+#### Async/Await API
+
+For integration with asyncio applications:
+
+```python
+import asyncio
+from numchuck import Chuck
+
+async def main():
+    chuck = Chuck()
+    chuck.compile("global int counter; 42 => counter;")
+    chuck.run(100)
+
+    # Async global variable access
+    value = await chuck.get_int_awaitable("counter")
+    print(value)  # 42
+
+    # Also available for float and string
+    # await chuck.get_float_awaitable("gain")
+    # await chuck.get_string_awaitable("mode")
+
+    # Proxies also support async
+    counter = chuck.global_int("counter")
+    value = await counter.get_async()
+
+asyncio.run(main())
+```
+
 ### Low-Level API
 
 For fine-grained control, use the low-level API via `numchuck._numchuck`:
@@ -369,6 +464,9 @@ Chuck(
 #### Core Methods
 
 * **`init() -> bool`** - Initialize ChucK (called automatically if `auto_init=True`)
+* **`close() -> None`** - Shutdown ChucK instance (important on Windows)
+* **`__enter__() -> Chuck`** - Context manager entry (returns self)
+* **`__exit__(...) -> None`** - Context manager exit (calls close())
 * **`compile(code, args="", count=1, immediate=False) -> tuple[bool, list[int]]`** - Compile ChucK code
 * **`compile_file(path, args="", count=1, immediate=False) -> tuple[bool, list[int]]`** - Compile from file
 * **`run(num_frames, *, output=None, input=None, reuse=False) -> np.ndarray`** - Run VM and return output audio
@@ -377,6 +475,8 @@ Chuck(
   * `input=buf`: uses provided input buffer
   * `reuse=True`: uses internal buffer (zero GC without manual management)
 * **`advance(num_frames) -> None`** - Advance VM time without returning audio (for callbacks/events)
+* **`spork(code, args="") -> Shred`** - Compile code and return Shred handle
+* **`spork_file(path, args="") -> Shred`** - Compile file and return Shred handle
 
 #### Shred Management
 
@@ -397,6 +497,12 @@ Chuck(
 * **`get_int_async(name, callback)`** - Get global int via callback
 * **`get_float_async(name, callback)`** - Get global float via callback
 * **`get_string_async(name, callback)`** - Get global string via callback
+* **`get_int_awaitable(name, run_frames=256) -> Awaitable[int]`** - Get global int (async/await)
+* **`get_float_awaitable(name, run_frames=256) -> Awaitable[float]`** - Get global float (async/await)
+* **`get_string_awaitable(name, run_frames=256) -> Awaitable[str]`** - Get global string (async/await)
+* **`global_int(name) -> GlobalInt`** - Create typed int proxy
+* **`global_float(name) -> GlobalFloat`** - Create typed float proxy
+* **`global_string(name) -> GlobalString`** - Create typed string proxy
 
 #### Events
 
@@ -969,9 +1075,70 @@ chuck.compile_code('''
 print("ChucK output:", output_log)
 ```
 
+## Configuration
+
+numchuck supports user configuration via `~/.numchuck/config.toml`:
+
+```python
+from numchuck import Config, load_config, save_config, get_config
+
+# Load config (from ~/.numchuck/config.toml or defaults)
+config = get_config()
+
+# Access settings
+print(config.audio.sample_rate)   # 44100
+print(config.repl.smart_enter)    # True
+
+# Modify and save
+config.audio.sample_rate = 48000
+config.repl.show_sidebar = False
+save_config(config)
+```
+
+Example `~/.numchuck/config.toml`:
+
+```toml
+[audio]
+sample_rate = 48000
+output_channels = 2
+input_channels = 0
+buffer_size = 512
+
+[repl]
+smart_enter = true
+show_sidebar = true
+start_audio = false
+max_log_lines = 100
+
+[editor]
+start_audio = false
+tab_size = 4
+wrap_lines = false
+
+[paths]
+working_directory = "~/chuck"
+chugin_paths = ["~/.chuck/chugins"]
+
+[chuck]
+chugin_enable = true
+vm_adaptive = false
+deprecate_level = 1
+```
+
+### Configuration Classes
+
+| Class | Description |
+|-------|-------------|
+| `Config` | Complete configuration (contains all sections) |
+| `AudioConfig` | Audio settings (sample_rate, channels, buffer_size, etc.) |
+| `REPLConfig` | REPL settings (smart_enter, show_sidebar, max_log_lines) |
+| `EditorConfig` | Editor settings (start_audio, tab_size, wrap_lines) |
+| `PathsConfig` | Path settings (working_directory, chugin_paths) |
+| `ChuckConfig` | ChucK VM settings (chugin_enable, vm_adaptive, etc.) |
+
 ## Requirements
 
-* Python 3.8+
+* Python 3.9+
 * CMake 3.15+
 * C++17 compatible compiler
 * macOS: Xcode with CoreAudio/CoreMIDI frameworks

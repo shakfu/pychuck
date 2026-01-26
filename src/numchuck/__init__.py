@@ -21,10 +21,19 @@ Error Handling:
 """
 
 from ._version import __version__, __version_info__
-from .api import Chuck
+from .api import Chuck, GlobalFloat, GlobalInt, GlobalString, Shred
+from .config import Config, load_config, get_config, save_config
 
 __all__ = [
     "__version__",
     "__version_info__",
     "Chuck",
+    "Shred",
+    "GlobalInt",
+    "GlobalFloat",
+    "GlobalString",
+    "Config",
+    "load_config",
+    "get_config",
+    "save_config",
 ]
