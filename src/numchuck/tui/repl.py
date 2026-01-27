@@ -683,7 +683,7 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
 
         print("\nShutting down...")
 
-        # Clear convenience references FIRST (before app_state.cleanup closes ChucK)
+        # Clear convenience references (before app_state.cleanup closes ChucK)
         self.chuck = None  # type: ignore[assignment]
         self.session = None  # type: ignore[assignment]
 

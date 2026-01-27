@@ -329,9 +329,15 @@ class TestChuckREPLProcessInput:
 
     @pytest.fixture
     def repl(self):
-        """Create a REPL instance with mocked app."""
+        """Create a REPL instance with mocked app.
+
+        Note: We call app_state.setup() directly instead of repl.setup()
+        to avoid setting static stdout/stderr callbacks which cause
+        segfaults at interpreter shutdown.
+        """
         repl = ChuckREPL()
-        repl.setup()
+        # Initialize ChucK without setting static callbacks
+        repl.app_state.setup()
         # Mock app methods
         repl.app.invalidate = MagicMock()
         repl.app.exit = MagicMock()
@@ -473,10 +479,15 @@ class TestChuckREPLSetup:
     """Tests for setup method."""
 
     def test_setup_initializes_chuck(self):
-        """Test setup initializes ChucK."""
+        """Test setup initializes ChucK.
+
+        Note: We call app_state.setup() directly instead of repl.setup()
+        to avoid setting static stdout/stderr callbacks which cause
+        segfaults at interpreter shutdown.
+        """
         repl = ChuckREPL()
         try:
-            repl.setup()
+            repl.app_state.setup()
             # ChucK should be initialized
             assert repl.app_state.chuck is not None
         finally:
@@ -549,9 +560,14 @@ class TestChuckREPLErrorHandling:
 
     @pytest.fixture
     def repl(self):
-        """Create a REPL instance."""
+        """Create a REPL instance.
+
+        Note: We call app_state.setup() directly instead of repl.setup()
+        to avoid setting static stdout/stderr callbacks which cause
+        segfaults at interpreter shutdown.
+        """
         repl = ChuckREPL()
-        repl.setup()
+        repl.app_state.setup()
         repl.app.invalidate = MagicMock()
         repl.app.exit = MagicMock()
         yield repl

@@ -320,6 +320,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Added `is not None` checks before accessing completer, executor, and app_state
   - Prevents `AttributeError` when cleanup is called on already-cleaned instance
 
+- **Segfault on test suite exit** (`src/numchuck/tui/repl.py`):
+  - Removed problematic static callback clearing from `ChuckREPL.cleanup()`
+  - Setting `set_stdout_callback`/`set_stderr_callback` to lambdas during cleanup caused segfault at interpreter shutdown
+  - Tests now use `app_state.setup()` instead of `repl.setup()` to avoid setting static callbacks
+
 ## [0.1.8]
 
 ### Fixed
