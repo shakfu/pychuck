@@ -579,7 +579,8 @@ class ChuckApplication:
         This method:
         1. Removes all shreds
         2. Stops audio if running
-        3. Breaks circular references for garbage collection
+        3. Closes ChucK instance (calls shutdown on C++ object)
+        4. Breaks circular references for garbage collection
         """
         # Remove all shreds first
         try:
@@ -591,9 +592,15 @@ class ChuckApplication:
         if self.audio_running:
             self.stop_audio_playback()
 
+        # Close ChucK instance (required for proper C++ cleanup)
+        try:
+            self.chuck.close()
+        except (RuntimeError, AttributeError):
+            pass
+
         # Break circular references to allow proper garbage collection
         if hasattr(self, "session"):
             self.session.chuck = None
-            del self.session
+            self.session = None
         if hasattr(self, "chuck"):
-            del self.chuck
+            self.chuck = None

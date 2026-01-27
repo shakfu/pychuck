@@ -162,7 +162,9 @@ class Chuck:
 
         Safe to call multiple times.
         """
-        self._chuck.shutdown()
+        if self._chuck is not None:
+            self._chuck.shutdown()
+            self._chuck = None
 
     def compile(
         self,

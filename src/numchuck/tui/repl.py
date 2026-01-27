@@ -64,7 +64,7 @@ class ChuckREPL:
             lexer_class = CLexer
 
         # Create context-aware completer using the session and chuck instance
-        chuck_completer = ChuckCompleter(self.session, self.chuck)
+        self.completer = ChuckCompleter(self.session, self.chuck)
 
         # Error message state
         self.error_message = ""
@@ -295,7 +295,7 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
         self.input_buffer = Buffer(
             history=FileHistory(str(get_history_file())),
             auto_suggest=AutoSuggestFromHistory(),
-            completer=chuck_completer,
+            completer=self.completer,
             complete_while_typing=False,
             multiline=should_continue_multiline,
             on_text_insert=lambda _: None,  # Could be used for live updates
@@ -542,20 +542,33 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
 
     def cleanup(self) -> None:
         """Shutdown cleanly."""
+        import gc
+
         print("\nShutting down...")
 
-        # Use app_state cleanup (handles shreds, audio, and references)
-        if hasattr(self, "app_state"):
-            self.app_state.cleanup()
+        # Clear convenience references FIRST (before app_state.cleanup closes ChucK)
+        self.chuck = None  # type: ignore[assignment]
+        self.session = None  # type: ignore[assignment]
 
-        # Break additional circular references
+        # Break completer references (it holds chuck and session)
+        if hasattr(self, "completer"):
+            self.completer.chuck = None  # type: ignore[assignment]
+            self.completer.session = None  # type: ignore[assignment]
+            self.completer = None  # type: ignore[assignment]
+
+        # Break executor references
         if hasattr(self, "executor"):
             self.executor._chuck = None  # type: ignore[assignment]
             self.executor.session = None  # type: ignore[assignment]
-            del self.executor
+            self.executor = None  # type: ignore[assignment]
 
-        # Clear convenience references (assigned in __init__)
-        self.chuck = None  # type: ignore[assignment]
-        self.session = None  # type: ignore[assignment]
+        # Now cleanup app_state (this closes ChucK instance)
         if hasattr(self, "app_state"):
-            del self.app_state
+            self.app_state.cleanup()
+            self.app_state = None  # type: ignore[assignment]
+
+        # Force garbage collection multiple times to break all cycles
+        # and release C++ objects before interpreter shutdown
+        gc.collect()
+        gc.collect()
+        gc.collect()

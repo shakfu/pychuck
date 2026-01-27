@@ -218,6 +218,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 - **Test Count**: 588 tests (up from 280)
 
+### Removed
+
+- **`tui` CLI subcommand** - Use `numchuck repl` instead (the `tui` alias is no longer supported)
+
+### Fixed
+
+- **Nanobind memory leak warnings on REPL exit**:
+  - `ChuckCompleter` was holding references to `chuck` and `session` that weren't cleaned up
+  - Added proper cleanup of completer references before ChucK instance is closed
+  - Added `gc.collect()` calls to ensure C++ objects are released before interpreter shutdown
+  - REPL now exits cleanly without "leaked instances/types/functions" warnings
+
 ## [0.1.8]
 
 ### Fixed
