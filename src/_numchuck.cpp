@@ -1,3 +1,8 @@
+// Prevent Windows min/max macros from interfering with std::min/std::max
+#ifdef _WIN32
+#define NOMINMAX
+#endif
+
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
