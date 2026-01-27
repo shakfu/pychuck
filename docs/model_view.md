@@ -242,14 +242,8 @@ AudioService.start() / .stop()
 | `GlobalsService` | Global vars/events | `Chuck` |
 | `FileService` | Snippets/projects | `ChuckSession`, `paths` |
 | `CommandExecutor` | Command dispatch | All services |
-| `ChuckApplication` | TUI base class | `AudioService`, `ChuckSession` |
-
-## Backward Compatibility
-
-- `AudioManager` is aliased to `AudioService` in `tui/common.py`
-- All existing public APIs unchanged
-- CLI commands work identically
-- TUI behavior preserved
+| `ChuckApplication` | TUI base class | `AudioService`, services, `widgets` |
+| `widgets` | UI component factories | `prompt_toolkit` |
 
 ## Test Coverage
 
@@ -258,7 +252,13 @@ Tests in `tests/test_services.py` cover:
 - ShredService: spork/replace/remove, session integration
 - GlobalsService: set/get operations, events, listing
 - FileService: snippet loading, directory management
-- Widgets: all factory functions
+
+Tests in `tests/test_widgets.py` cover:
+- `create_help_window`: container creation, visibility conditions, custom heights
+- `create_shreds_table`: container creation, visibility conditions, custom heights
+- `create_log_window`: container and textarea creation, provided vs new textarea
+- `create_status_bar`: window creation, default/custom styles, height
+- `create_message_area`: textarea creation, read-only settings, focusability
 
 ## Design Principles
 

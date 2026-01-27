@@ -195,13 +195,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - `create_status_bar()` - Status bar with dynamic content
   - `create_message_area()` - Text area for messages
 
-- **AudioManager Class** (now `AudioService` in `src/numchuck/services/audio.py`):
+- **AudioService Class** (`src/numchuck/services/audio.py`):
   - RAII-style audio lifecycle management
-  - Methods: `start()`, `stop()`, `restart()`
+  - Methods: `start()`, `stop()`, `restart()`, `shutdown()`
   - Property: `is_running`
+  - Optional callbacks: `set_callbacks(on_start=..., on_stop=...)`
   - Logger integration for consistent error reporting
-  - ChuckApplication now uses AudioService internally
-  - Backward compatibility alias: `AudioManager = AudioService`
+  - Used by CLI (`executor.py`, `watcher.py`) and TUI (`common.py`)
   - 8 new AudioService tests
 
 - **TUI Type Hints Completion**:
@@ -220,13 +220,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 ### Changed
 
 - **CommandExecutor Refactoring** (`src/numchuck/tui/commands.py`):
-  - Now uses `ShredService` and `GlobalsService` for all operations
-  - Added `shred_service` and `globals_service` properties with proper None handling
+  - Now uses `ShredService`, `GlobalsService`, and `FileService` for all operations
+  - Added `shred_service`, `globals_service`, and `file_service` properties with proper None handling
+  - Snippet loading (`@name`) now uses `FileService` instead of direct path functions
   - Simplified command methods to delegate to services
 
 - **ChuckApplication Service Integration** (`src/numchuck/tui/common.py`):
-  - Added `shred_service` and `globals_service` lazily-created properties
+  - Added `shred_service`, `globals_service`, and `file_service` lazily-created properties
   - Services are cached after first access for reuse
+  - UI factory methods now delegate to `tui/widgets.py` module
   - `chuck` and `session` are now properties that raise `RuntimeError` if accessed after cleanup
   - Cleanup method properly handles None state and circular reference breaking
   - Fixed `close()` to `shutdown()` for ChucK instance cleanup
@@ -281,6 +283,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 ### Removed
 
 - **`tui` CLI subcommand** - Use `numchuck repl` instead (the `tui` alias is no longer supported)
+- **`AudioManager` backward compatibility alias** - Use `AudioService` directly from `numchuck.services`
 
 ### Fixed
 
