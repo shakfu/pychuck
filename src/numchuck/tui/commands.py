@@ -9,13 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .._numchuck import start_audio, stop_audio, shutdown_audio, audio_info
-from ..paths import (
-    get_snippet_path_with_source,
-    get_snippets_dir,
-    ensure_numchuck_directories,
-    list_all_snippets,
-)
-from ..services import ShredService, GlobalsService
+from ..services import ShredService, GlobalsService, FileService
 from .logging import get_logger, TUILogger
 
 if TYPE_CHECKING:
@@ -39,6 +33,7 @@ class CommandExecutor:
         logger: TUILogger | None = None,
         shred_service: ShredService | None = None,
         globals_service: GlobalsService | None = None,
+        file_service: FileService | None = None,
     ) -> None:
         """Initialize CommandExecutor.
 
@@ -47,6 +42,7 @@ class CommandExecutor:
             logger: Optional logger (uses global logger if None)
             shred_service: Optional ShredService (created if None)
             globals_service: Optional GlobalsService (created if None)
+            file_service: Optional FileService (created if None)
         """
         self.session = session
         self._chuck = session.chuck
@@ -65,6 +61,13 @@ class CommandExecutor:
             self._globals_service = GlobalsService(self._chuck, self._logger)
         else:
             self._globals_service = globals_service
+
+        # Create FileService if not provided
+        self._file_service: FileService | None
+        if file_service is None:
+            self._file_service = FileService(session, self._logger)
+        else:
+            self._file_service = file_service
 
     @property
     def chuck(self) -> ChucK:
@@ -86,6 +89,13 @@ class CommandExecutor:
         if self._globals_service is None:
             raise RuntimeError("GlobalsService not available")
         return self._globals_service
+
+    @property
+    def file_service(self) -> FileService:
+        """Get FileService, raising if not available."""
+        if self._file_service is None:
+            raise RuntimeError("FileService not available")
+        return self._file_service
 
     def execute(self, cmd: Command) -> str | None:
         """Execute command and return error message if any.
@@ -420,27 +430,25 @@ class CommandExecutor:
         snippets (~/.numchuck/snippets/). Local snippets take precedence.
         """
         name = args["name"]
-        snippet_path, source = get_snippet_path_with_source(name)
+        snippet = self.file_service.load_snippet(name)
 
-        if snippet_path is None:
+        if snippet is None:
             # Snippet not found - show available snippets
-            snippets_dir = get_snippets_dir()
+            snippets_dir = self.file_service.get_snippets_dir()
             if not snippets_dir.exists():
-                try:
-                    ensure_numchuck_directories()
-                    self._log(f"Created snippets directory: {snippets_dir}")
-                except OSError as e:
-                    return f"Could not create snippets directory: {e}"
+                if not self.file_service.ensure_directories():
+                    return "Could not create snippets directory"
+                self._log(f"Created snippets directory: {snippets_dir}")
 
             self._log(f"Snippet '{name}' not found")
             self._log("")
             self._log("Available snippets:")
 
-            all_snippets = list_all_snippets()
+            all_snippets = self.file_service.list_snippets()
             if all_snippets:
-                for snippet_name, snippet_source in all_snippets:
-                    source_tag = " (global)" if snippet_source == "global" else ""
-                    self._log(f"  @{snippet_name}{source_tag}")
+                for info in all_snippets:
+                    source_tag = " (global)" if info.source == "global" else ""
+                    self._log(f"  @{info.name}{source_tag}")
             else:
                 self._log("  (none)")
                 self._log("")
@@ -449,9 +457,9 @@ class CommandExecutor:
 
         # Spork the snippet using ShredService
         # Note: we use the custom name @{name} for the snippet
-        result = self.shred_service.spork_file(snippet_path)
+        result = self.shred_service.spork_file(snippet.path)
         if result.success:
-            source_tag = " (global)" if source == "global" else ""
+            source_tag = " (global)" if snippet.source == "global" else ""
             # Update session with snippet name instead of path
             for sid in result.shred_ids:
                 if self.session and sid in self.session.shreds:

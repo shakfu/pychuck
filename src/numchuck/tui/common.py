@@ -37,7 +37,7 @@ AudioManager = AudioService
 
 if TYPE_CHECKING:
     from prompt_toolkit.key_binding.key_processor import KeyPressEvent
-    from ..services import ShredService, GlobalsService
+    from ..services import ShredService, GlobalsService, FileService
 
 
 def format_elapsed_time(elapsed_sec: float) -> str:
@@ -289,6 +289,7 @@ class ChuckApplication:
         # Service instances (lazily created)
         self._shred_service: ShredService | None = None
         self._globals_service: GlobalsService | None = None
+        self._file_service: FileService | None = None
 
         # Shared UI state
         self.show_help = False
@@ -339,6 +340,18 @@ class ChuckApplication:
 
             self._globals_service = GlobalsService(self.chuck, self._logger)
         return self._globals_service
+
+    @property
+    def file_service(self) -> "FileService":
+        """Get the FileService for file operations.
+
+        Lazily creates the service on first access.
+        """
+        if not hasattr(self, "_file_service") or self._file_service is None:
+            from ..services import FileService
+
+            self._file_service = FileService(self.session, self._logger)
+        return self._file_service
 
     def setup(self) -> None:
         """Initialize ChucK with configured parameters.

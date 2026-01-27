@@ -841,6 +841,39 @@ class TestChuckApplicationServices:
 
         assert service1 is service2
 
+    @patch("numchuck.tui.common.ChucK")
+    @patch("numchuck.tui.common.get_logger")
+    def test_file_service_lazy_creation(self, mock_get_logger, mock_chuck_class):
+        """Test file_service is lazily created on first access."""
+        mock_chuck = MagicMock()
+        mock_chuck_class.return_value = mock_chuck
+
+        app = ChuckApplication()
+
+        # Service should not exist yet
+        assert app._file_service is None
+
+        # Access service triggers creation
+        service = app.file_service
+
+        # Now it should exist
+        assert app._file_service is not None
+        assert service is app._file_service
+
+    @patch("numchuck.tui.common.ChucK")
+    @patch("numchuck.tui.common.get_logger")
+    def test_file_service_cached(self, mock_get_logger, mock_chuck_class):
+        """Test file_service returns same instance on subsequent accesses."""
+        mock_chuck = MagicMock()
+        mock_chuck_class.return_value = mock_chuck
+
+        app = ChuckApplication()
+
+        service1 = app.file_service
+        service2 = app.file_service
+
+        assert service1 is service2
+
 
 class TestOutputCaptureCallback:
     """Test output capture callback behavior."""

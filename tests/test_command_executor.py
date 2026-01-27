@@ -4,7 +4,8 @@ import pytest
 from unittest.mock import MagicMock, patch, PropertyMock
 
 from numchuck.tui.commands import CommandExecutor
-from numchuck.services import ShredService, GlobalsService, ShredResult, GlobalInfo
+from numchuck.services import ShredService, GlobalsService, FileService, ShredResult, GlobalInfo
+from numchuck.services.files import SnippetInfo
 
 
 class TestCommandExecutorInit:
@@ -117,6 +118,28 @@ class TestCommandExecutorProperties:
 
         with pytest.raises(RuntimeError, match="GlobalsService not available"):
             _ = executor.globals_service
+
+    def test_file_service_property_returns_service(self):
+        """Test file_service property returns the service."""
+        session = MagicMock()
+        session.chuck = MagicMock()
+        file_service = MagicMock(spec=FileService)
+
+        executor = CommandExecutor(session, file_service=file_service)
+
+        assert executor.file_service is file_service
+
+    def test_file_service_property_raises_when_none(self):
+        """Test file_service property raises RuntimeError when None."""
+        session = MagicMock()
+        session.chuck = None
+
+        # Create executor and force _file_service to None
+        executor = CommandExecutor(session)
+        executor._file_service = None
+
+        with pytest.raises(RuntimeError, match="FileService not available"):
+            _ = executor.file_service
 
 
 class TestCommandExecutorExecute:
@@ -594,37 +617,45 @@ class TestSnippetCommands:
     @pytest.fixture
     def executor(self):
         """Create executor with mocked services."""
+        from pathlib import Path
+
         session = MagicMock()
         session.chuck = MagicMock()
         session.shreds = {}
         shred_service = MagicMock(spec=ShredService)
         globals_service = MagicMock(spec=GlobalsService)
+        file_service = MagicMock(spec=FileService)
 
         return CommandExecutor(
             session,
             shred_service=shred_service,
             globals_service=globals_service,
+            file_service=file_service,
         )
 
-    @patch("numchuck.tui.commands.get_snippet_path_with_source")
-    def test_load_snippet_not_found(self, mock_get_snippet, executor):
+    def test_load_snippet_not_found(self, executor):
         """Test load_snippet when snippet not found."""
-        mock_get_snippet.return_value = (None, None)
+        from pathlib import Path
 
-        with patch("numchuck.tui.commands.get_snippets_dir") as mock_dir:
-            mock_dir.return_value = MagicMock(exists=MagicMock(return_value=True))
-            with patch("numchuck.tui.commands.list_all_snippets") as mock_list:
-                mock_list.return_value = []
-                result = executor._cmd_load_snippet({"name": "missing"})
+        executor._file_service.load_snippet.return_value = None
+        executor._file_service.get_snippets_dir.return_value = MagicMock(
+            exists=MagicMock(return_value=True)
+        )
+        executor._file_service.list_snippets.return_value = []
+
+        result = executor._cmd_load_snippet({"name": "missing"})
 
         assert result is None  # Returns None but logs error message
+        executor._file_service.load_snippet.assert_called_once_with("missing")
 
-    @patch("numchuck.tui.commands.get_snippet_path_with_source")
-    def test_load_snippet_success(self, mock_get_snippet, executor):
+    def test_load_snippet_success(self, executor):
         """Test load_snippet when snippet found."""
         from pathlib import Path
+
         mock_path = Path("/test/snippets/sine.ck")
-        mock_get_snippet.return_value = (mock_path, "local")
+        executor._file_service.load_snippet.return_value = SnippetInfo(
+            name="sine", path=mock_path, source="local"
+        )
 
         executor._shred_service.spork_file.return_value = ShredResult(
             success=True, shred_ids=[1], error=None
@@ -635,12 +666,14 @@ class TestSnippetCommands:
         assert result is None
         executor._shred_service.spork_file.assert_called_once_with(mock_path)
 
-    @patch("numchuck.tui.commands.get_snippet_path_with_source")
-    def test_load_snippet_failure(self, mock_get_snippet, executor):
+    def test_load_snippet_failure(self, executor):
         """Test load_snippet when sporking fails."""
         from pathlib import Path
+
         mock_path = Path("/test/snippets/broken.ck")
-        mock_get_snippet.return_value = (mock_path, "local")
+        executor._file_service.load_snippet.return_value = SnippetInfo(
+            name="broken", path=mock_path, source="local"
+        )
 
         executor._shred_service.spork_file.return_value = ShredResult(
             success=False, shred_ids=[], error="Syntax error"
