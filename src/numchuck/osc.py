@@ -13,6 +13,13 @@ import threading
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
 
+from .constants import (
+    DEFAULT_OSC_PORT,
+    OSC_ALIGNMENT,
+    OSC_SOCKET_TIMEOUT,
+    OSC_THREAD_SHUTDOWN_TIMEOUT,
+)
+
 if TYPE_CHECKING:
     pass
 
@@ -20,13 +27,13 @@ if TYPE_CHECKING:
 def _pad_string(s: str) -> bytes:
     """Pad a string to 4-byte boundary with null terminator."""
     s_bytes = s.encode("utf-8") + b"\x00"
-    padding = (4 - len(s_bytes) % 4) % 4
+    padding = (OSC_ALIGNMENT - len(s_bytes) % OSC_ALIGNMENT) % OSC_ALIGNMENT
     return s_bytes + b"\x00" * padding
 
 
 def _pad_bytes(b: bytes) -> bytes:
     """Pad bytes to 4-byte boundary."""
-    padding = (4 - len(b) % 4) % 4
+    padding = (OSC_ALIGNMENT - len(b) % OSC_ALIGNMENT) % OSC_ALIGNMENT
     return b + b"\x00" * padding
 
 
@@ -164,14 +171,14 @@ class OSCServer:
     Listens for incoming OSC messages and dispatches to registered handlers.
 
     Example:
-        >>> server = OSCServer(port=9000)
+        >>> server = OSCServer(port=DEFAULT_OSC_PORT)
         >>> server.register_handler("/test", lambda addr, args: print(args))
         >>> server.start()
         >>> # ... later ...
         >>> server.stop()
     """
 
-    port: int = 9000
+    port: int = DEFAULT_OSC_PORT
     host: str = "0.0.0.0"
     handlers: list[OSCHandler] = field(default_factory=list)
     _socket: socket.socket | None = field(default=None, repr=False)
@@ -217,7 +224,7 @@ class OSCServer:
             self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self._socket.bind((self.host, self.port))
-            self._socket.settimeout(0.5)  # For clean shutdown
+            self._socket.settimeout(OSC_SOCKET_TIMEOUT)  # For clean shutdown
             self._running = True
             self._thread = threading.Thread(target=self._run, daemon=True)
             self._thread.start()
@@ -232,7 +239,7 @@ class OSCServer:
         """Stop the OSC server."""
         self._running = False
         if self._thread:
-            self._thread.join(timeout=1.0)
+            self._thread.join(timeout=OSC_THREAD_SHUTDOWN_TIMEOUT)
             self._thread = None
         if self._socket:
             self._socket.close()
@@ -275,12 +282,12 @@ class OSCClient:
     """Simple OSC client for sending messages.
 
     Example:
-        >>> client = OSCClient(host="localhost", port=9000)
+        >>> client = OSCClient(host="localhost", port=DEFAULT_OSC_PORT)
         >>> client.send("/test", 1, 2.0, "hello")
     """
 
     host: str = "localhost"
-    port: int = 9000
+    port: int = DEFAULT_OSC_PORT
     _socket: socket.socket | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
@@ -399,7 +406,7 @@ def generate_osc_listener_code(
 
 def generate_osc_sender_code(
     host: str = "localhost",
-    port: int = 9000,
+    port: int = DEFAULT_OSC_PORT,
 ) -> str:
     """Generate ChucK code for sending OSC messages.
 

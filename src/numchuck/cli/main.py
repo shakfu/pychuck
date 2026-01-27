@@ -398,10 +398,11 @@ def cmd_web(args: argparse.Namespace) -> None:
             webbrowser.open(server.url)
 
         # Keep running until interrupted
-        while server.is_running and not shutdown_requested:
-            import time
+        from ..constants import SHUTDOWN_DELAY
+        import time
 
-            time.sleep(0.5)
+        while server.is_running and not shutdown_requested:
+            time.sleep(SHUTDOWN_DELAY)
 
     except Exception as e:
         print(f"Error: {e}")

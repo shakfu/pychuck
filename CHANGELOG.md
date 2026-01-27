@@ -43,8 +43,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Embedded HTML/CSS/JS frontend with code editor
   - CLI command: `numchuck web [--port 8080] [files...]`
   - CMake option: `-DNUMCHUCK_ENABLE_WEB=ON` (enabled by default)
+  - **Enhanced UI Features**:
+    - Multi-file tabs with local storage persistence
+    - Examples dropdown with built-in ChucK examples
+    - Globals panel with auto-discovery and interactive sliders for int/float variables
+    - Shred management: replace shred, preview code, elapsed time display
+    - MIDI panel for device listing (Web MIDI API)
+    - Theme toggle (dark/light mode) with system preference detection
+    - Keyboard shortcuts: Ctrl+Enter (spork), Ctrl+S (save), Ctrl+N (new tab)
+  - **New REST API Endpoints**:
+    - `GET /api/globals` - List all global variables with types
+    - `POST /api/shred/:id/replace` - Replace running shred with new code
+    - `GET /api/shred/:id/code` - Get shred source code
 
 ### Fixed
+
+- **Web IDE Server Crash on Page Load** (`src/_numchuck.cpp`):
+  - Fixed segfault (exit code 139) when browser connects to Web IDE
+  - Root cause: `get_all_globals()` called `self.globals()->get_all_global_variables()` without null check
+  - When no globals are defined, `self.globals()` returns nullptr
+  - Browser's JavaScript polls `/api/globals` every 2 seconds, triggering crash on page load
+  - Added null pointer check to return empty list when globals manager is unavailable
+
+- **Web IDE Audio Status Incorrect** (`src/_numchuck.cpp`, `src/numchuck/web/__init__.py`):
+  - Fixed audio toggle showing "Running" when audio was actually stopped
+  - Root cause: `_is_audio_running()` checked `audio_info()["sample_rate"] > 0` which is always true
+  - ChucK always has a sample rate configured regardless of audio running state
+  - Added new `is_audio_running()` C++ function that checks actual audio context state
+  - Updated Python wrapper to use new function for accurate status
 
 - **Windows File Compilation** (`src/_numchuck.cpp`):
   - Normalize Windows backslash paths to forward slashes before passing to ChucK

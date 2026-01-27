@@ -37,6 +37,13 @@ from typing import TYPE_CHECKING, Any, Generic, Iterator, TypeVar
 import numpy as np
 
 from . import _numchuck
+from .constants import (
+    DEFAULT_INPUT_CHANNELS,
+    DEFAULT_OTF_PORT,
+    DEFAULT_OUTPUT_CHANNELS,
+    DEFAULT_RUN_FRAMES,
+    DEFAULT_SAMPLE_RATE,
+)
 from .paths import get_numchuck_home
 
 if TYPE_CHECKING:
@@ -75,9 +82,9 @@ class Chuck:
 
     def __init__(
         self,
-        sample_rate: int = 44100,
-        input_channels: int = 2,
-        output_channels: int = 2,
+        sample_rate: int = DEFAULT_SAMPLE_RATE,
+        input_channels: int = DEFAULT_INPUT_CHANNELS,
+        output_channels: int = DEFAULT_OUTPUT_CHANNELS,
         working_directory: str = "",
         chugin_enable: bool = True,
         user_chugins: list[str] | None = None,
@@ -87,7 +94,7 @@ class Chuck:
         deprecate_level: int = 1,
         dump_instructions: bool = False,
         otf_enable: bool = False,
-        otf_port: int = 8888,
+        otf_port: int = DEFAULT_OTF_PORT,
         tty_color: bool = False,
         tty_width_hint: int = 80,
         auto_init: bool = True,
@@ -579,7 +586,7 @@ class Chuck:
         """Set a global int variable."""
         self._chuck.set_global_int(name, value)
 
-    def get_int(self, name: str, run_frames: int = 256) -> int:
+    def get_int(self, name: str, run_frames: int = DEFAULT_RUN_FRAMES) -> int:
         """Get a global int variable.
 
         Args:
@@ -603,7 +610,7 @@ class Chuck:
         """Set a global float variable."""
         self._chuck.set_global_float(name, value)
 
-    def get_float(self, name: str, run_frames: int = 256) -> float:
+    def get_float(self, name: str, run_frames: int = DEFAULT_RUN_FRAMES) -> float:
         """Get a global float variable.
 
         Args:
@@ -627,7 +634,7 @@ class Chuck:
         """Set a global string variable."""
         self._chuck.set_global_string(name, value)
 
-    def get_string(self, name: str, run_frames: int = 256) -> str:
+    def get_string(self, name: str, run_frames: int = DEFAULT_RUN_FRAMES) -> str:
         """Get a global string variable.
 
         Args:
@@ -729,7 +736,7 @@ class Chuck:
     # Async/await API
     # -------------------------------------------------------------------------
 
-    async def get_int_awaitable(self, name: str, run_frames: int = 256) -> int:
+    async def get_int_awaitable(self, name: str, run_frames: int = DEFAULT_RUN_FRAMES) -> int:
         """Get a global int variable using async/await.
 
         This method runs the VM in a background thread to avoid blocking
@@ -764,7 +771,7 @@ class Chuck:
             )
         return await future
 
-    async def get_float_awaitable(self, name: str, run_frames: int = 256) -> float:
+    async def get_float_awaitable(self, name: str, run_frames: int = DEFAULT_RUN_FRAMES) -> float:
         """Get a global float variable using async/await.
 
         Args:
@@ -791,7 +798,7 @@ class Chuck:
             )
         return await future
 
-    async def get_string_awaitable(self, name: str, run_frames: int = 256) -> str:
+    async def get_string_awaitable(self, name: str, run_frames: int = DEFAULT_RUN_FRAMES) -> str:
         """Get a global string variable using async/await.
 
         Args:
@@ -944,7 +951,7 @@ class GlobalInt(GlobalVar[int]):
         """Set the value."""
         self._chuck.set_int(self._name, val)
 
-    def get(self, run_frames: int = 256) -> int:
+    def get(self, run_frames: int = DEFAULT_RUN_FRAMES) -> int:
         """Get the value with custom run_frames."""
         return self._chuck.get_int(self._name, run_frames)
 
@@ -952,7 +959,7 @@ class GlobalInt(GlobalVar[int]):
         """Set the value."""
         self._chuck.set_int(self._name, val)
 
-    async def get_async(self, run_frames: int = 256) -> int:
+    async def get_async(self, run_frames: int = DEFAULT_RUN_FRAMES) -> int:
         """Get the value asynchronously."""
         return await self._chuck.get_int_awaitable(self._name, run_frames)
 
@@ -977,7 +984,7 @@ class GlobalFloat(GlobalVar[float]):
         """Set the value."""
         self._chuck.set_float(self._name, val)
 
-    def get(self, run_frames: int = 256) -> float:
+    def get(self, run_frames: int = DEFAULT_RUN_FRAMES) -> float:
         """Get the value with custom run_frames."""
         return self._chuck.get_float(self._name, run_frames)
 
@@ -985,7 +992,7 @@ class GlobalFloat(GlobalVar[float]):
         """Set the value."""
         self._chuck.set_float(self._name, val)
 
-    async def get_async(self, run_frames: int = 256) -> float:
+    async def get_async(self, run_frames: int = DEFAULT_RUN_FRAMES) -> float:
         """Get the value asynchronously."""
         return await self._chuck.get_float_awaitable(self._name, run_frames)
 
@@ -1010,7 +1017,7 @@ class GlobalString(GlobalVar[str]):
         """Set the value."""
         self._chuck.set_string(self._name, val)
 
-    def get(self, run_frames: int = 256) -> str:
+    def get(self, run_frames: int = DEFAULT_RUN_FRAMES) -> str:
         """Get the value with custom run_frames."""
         return self._chuck.get_string(self._name, run_frames)
 
@@ -1018,7 +1025,7 @@ class GlobalString(GlobalVar[str]):
         """Set the value."""
         self._chuck.set_string(self._name, val)
 
-    async def get_async(self, run_frames: int = 256) -> str:
+    async def get_async(self, run_frames: int = DEFAULT_RUN_FRAMES) -> str:
         """Get the value asynchronously."""
         return await self._chuck.get_string_awaitable(self._name, run_frames)
 

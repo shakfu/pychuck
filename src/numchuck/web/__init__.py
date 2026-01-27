@@ -10,6 +10,8 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
+from ..constants import DEFAULT_WEB_PORT, MAX_CONSOLE_LINES
+
 if TYPE_CHECKING:
     from ..api import Chuck
 
@@ -42,7 +44,7 @@ class WebChuckServer:
     def __init__(
         self,
         chuck: Chuck,
-        port: int = 8080,
+        port: int = DEFAULT_WEB_PORT,
         static_dir: str | Path | None = None,
     ) -> None:
         """Initialize web server.
@@ -71,9 +73,16 @@ class WebChuckServer:
         # Track shred start times for elapsed display
         self._shred_times: dict[int, float] = {}
 
+        # Track shred source code for preview
+        self._shred_code: dict[int, str] = {}
+
         # Console output buffer
         self._console_lines: list[dict[str, str]] = []
-        self._max_console_lines = 100
+        self._max_console_lines = MAX_CONSOLE_LINES
+
+        # Recording state
+        self._recording = False
+        self._recorded_samples: list[float] = []
 
         # Set up console capture
         self._setup_console_capture()
@@ -139,9 +148,18 @@ class WebChuckServer:
             return self._api_stop_audio()
         elif uri == "/api/globals" and method == "GET":
             return self._api_list_globals()
+        elif uri.startswith("/api/global/") and method == "GET":
+            name = uri.split("/")[-1]
+            return self._api_get_global(name, data)
         elif uri.startswith("/api/global/") and method == "POST":
             name = uri.split("/")[-1]
             return self._api_set_global(name, data)
+        elif uri.startswith("/api/shred/") and uri.endswith("/code") and method == "GET":
+            shred_id = int(uri.split("/")[-2])
+            return self._api_get_shred_code(shred_id)
+        elif uri.startswith("/api/shred/") and uri.endswith("/replace") and method == "POST":
+            shred_id = int(uri.split("/")[-2])
+            return self._api_replace_shred(shred_id, data)
         elif method == "WS":
             # WebSocket message
             return self._handle_ws_message(data)
@@ -168,10 +186,13 @@ class WebChuckServer:
         try:
             success, shred_ids = self._chuck.compile(code)
             if success:
-                # Track shred start times
+                # Track shred start times and code
                 now = time.time()
+                # Truncate code for preview (first 500 chars)
+                preview = code[:500] + ("..." if len(code) > 500 else "")
                 for sid in shred_ids:
                     self._shred_times[sid] = now
+                    self._shred_code[sid] = preview
 
                 self._broadcast_shreds_update()
                 return json.dumps({"success": True, "shred_ids": shred_ids})
@@ -185,6 +206,7 @@ class WebChuckServer:
         try:
             self._chuck.remove_shred(shred_id)
             self._shred_times.pop(shred_id, None)
+            self._shred_code.pop(shred_id, None)
             self._broadcast_shreds_update()
             return json.dumps({"success": True})
         except Exception as e:
@@ -195,6 +217,7 @@ class WebChuckServer:
         try:
             self._chuck.clear()
             self._shred_times.clear()
+            self._shred_code.clear()
             self._broadcast_shreds_update()
             return json.dumps({"success": True})
         except Exception as e:
@@ -223,14 +246,74 @@ class WebChuckServer:
             return json.dumps({"success": False, "error": str(e)})
 
     def _api_list_globals(self) -> str:
-        """List all global variables."""
+        """List all global variables with their values."""
         try:
             globals_list = self._chuck.raw.get_all_globals()
-            return json.dumps(
-                {"globals": [{"type": t, "name": n} for t, n in globals_list]}
-            )
+            result = []
+            for var_type, name in globals_list:
+                entry = {"type": var_type, "name": name}
+                # Try to get the value
+                try:
+                    if var_type == "int":
+                        entry["value"] = self._chuck.get_int(name)
+                    elif var_type == "float":
+                        entry["value"] = self._chuck.get_float(name)
+                    elif var_type == "string":
+                        entry["value"] = self._chuck.get_string(name)
+                except Exception:
+                    entry["value"] = None
+                result.append(entry)
+            return json.dumps({"globals": result})
         except Exception as e:
             return json.dumps({"error": str(e)})
+
+    def _api_get_global(self, name: str, data: dict[str, Any]) -> str:
+        """Get a global variable value."""
+        var_type = data.get("type", "float")
+        try:
+            if var_type == "int":
+                value = self._chuck.get_int(name)
+            elif var_type == "float":
+                value = self._chuck.get_float(name)
+            elif var_type == "string":
+                value = self._chuck.get_string(name)
+            else:
+                return json.dumps({"error": f"Unknown type: {var_type}"})
+            return json.dumps({"name": name, "type": var_type, "value": value})
+        except Exception as e:
+            return json.dumps({"error": str(e)})
+
+    def _api_get_shred_code(self, shred_id: int) -> str:
+        """Get the code associated with a shred."""
+        code = self._shred_code.get(shred_id, "")
+        return json.dumps({"shred_id": shred_id, "code": code})
+
+    def _api_replace_shred(self, shred_id: int, data: dict[str, Any]) -> str:
+        """Replace a shred with new code."""
+        code = data.get("code", "")
+        if not code:
+            return json.dumps({"success": False, "error": "No code provided"})
+
+        try:
+            # Remove old shred
+            self._chuck.remove_shred(shred_id)
+            self._shred_times.pop(shred_id, None)
+            self._shred_code.pop(shred_id, None)
+
+            # Compile new code
+            success, shred_ids = self._chuck.compile(code)
+            if success:
+                now = time.time()
+                preview = code[:500] + ("..." if len(code) > 500 else "")
+                for sid in shred_ids:
+                    self._shred_times[sid] = now
+                    self._shred_code[sid] = preview
+                self._broadcast_shreds_update()
+                return json.dumps({"success": True, "shred_ids": shred_ids})
+            else:
+                return json.dumps({"success": False, "error": "Compilation failed"})
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)})
 
     def _api_set_global(self, name: str, data: dict[str, Any]) -> str:
         """Set a global variable."""
@@ -278,20 +361,20 @@ class WebChuckServer:
                         "id": sid,
                         "name": info.get("name", "code") if info else "code",
                         "time": f"{minutes:02d}:{seconds:02d}",
+                        "code": self._shred_code.get(sid, ""),
                     }
                 )
             except Exception:
-                shreds.append({"id": sid, "name": "code", "time": "00:00"})
+                shreds.append({"id": sid, "name": "code", "time": "00:00", "code": ""})
 
         return shreds
 
     def _is_audio_running(self) -> bool:
         """Check if audio is running."""
         try:
-            from .._numchuck import audio_info
+            from .._numchuck import is_audio_running
 
-            info = audio_info()
-            return info.get("sample_rate", 0) > 0
+            return is_audio_running()
         except Exception:
             return False
 

@@ -14,6 +14,8 @@ from pathlib import Path
 from types import FrameType
 from typing import List, Optional
 
+from ..constants import DEFAULT_OUTPUT_CHANNELS, DEFAULT_SAMPLE_RATE, POLL_INTERVAL
+
 
 class ExecutionError(Exception):
     """Raised when ChucK file execution fails."""
@@ -23,8 +25,8 @@ class ExecutionError(Exception):
 
 def execute_files(
     files: List[str],
-    srate: int = 44100,
-    channels: int = 2,
+    srate: int = DEFAULT_SAMPLE_RATE,
+    channels: int = DEFAULT_OUTPUT_CHANNELS,
     silent: bool = False,
     duration: Optional[float] = None,
 ) -> None:
@@ -118,12 +120,12 @@ def execute_files(
             while time.time() - start_time < duration:
                 if shutdown_requested[0]:
                     break
-                time.sleep(0.1)
+                time.sleep(POLL_INTERVAL)
         else:
             # Run indefinitely
             print("Running... (Ctrl-C to stop)")
             while not shutdown_requested[0]:
-                time.sleep(0.1)
+                time.sleep(POLL_INTERVAL)
 
     finally:
         # Cleanup

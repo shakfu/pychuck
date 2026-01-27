@@ -12,6 +12,12 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..constants import (
+    DEFAULT_OUTPUT_CHANNELS,
+    DEFAULT_SAMPLE_RATE,
+    WATCHER_POLL_INTERVAL,
+)
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -22,8 +28,8 @@ class WatchError(Exception):
 
 def watch_files(
     files: Sequence[str | Path],
-    sample_rate: int = 44100,
-    channels: int = 2,
+    sample_rate: int = DEFAULT_SAMPLE_RATE,
+    channels: int = DEFAULT_OUTPUT_CHANNELS,
     verbose: bool = True,
 ) -> None:
     """Watch ChucK files and auto-reload on changes.
@@ -129,7 +135,7 @@ def watch_files(
 
         # Main loop - wait for Ctrl+C
         while True:
-            time.sleep(0.5)
+            time.sleep(WATCHER_POLL_INTERVAL)
 
             # Print status periodically if verbose
             if verbose:

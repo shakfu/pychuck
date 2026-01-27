@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Callable, Protocol
 
+from ..constants import AUDIO_SHUTDOWN_TIMEOUT_MS
 from .._numchuck import start_audio, stop_audio, shutdown_audio
 
 if TYPE_CHECKING:
@@ -58,7 +59,7 @@ class AudioService:
         self,
         chuck: ChucK,
         logger: Logger | None = None,
-        shutdown_timeout_ms: int = 500,
+        shutdown_timeout_ms: int = AUDIO_SHUTDOWN_TIMEOUT_MS,
     ) -> None:
         """Initialize AudioService.
 

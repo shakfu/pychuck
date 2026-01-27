@@ -17,6 +17,8 @@ from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 from watchdog.observers.api import BaseObserver
 
+from .constants import FILE_DEBOUNCE_MS, FILE_OBSERVER_SHUTDOWN_TIMEOUT
+
 if TYPE_CHECKING:
     from .tui.session import ChuckSession
     from .api import Chuck
@@ -63,7 +65,7 @@ class FileWatcher:
     session: ChuckSession
     on_reload: Callable[[Path, int], None] | None = None
     on_error: Callable[[Path, str], None] | None = None
-    debounce_ms: int = 100
+    debounce_ms: int = FILE_DEBOUNCE_MS
     _watched_files: dict[str, WatchedFile] = field(default_factory=dict)
     _observer: BaseObserver | None = field(default=None, repr=False)
     _handler: _FileChangeHandler | None = field(default=None, repr=False)
@@ -187,7 +189,7 @@ class FileWatcher:
 
         if self._observer is not None:
             self._observer.stop()
-            self._observer.join(timeout=2.0)
+            self._observer.join(timeout=FILE_OBSERVER_SHUTDOWN_TIMEOUT)
             self._observer = None
 
         self._handler = None

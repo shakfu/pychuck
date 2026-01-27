@@ -199,11 +199,24 @@ numchuck web --no-browser
 **Web IDE Features:**
 
 * Browser-based code editor with syntax highlighting
-* Spork, remove, and replace shreds from the browser
+* Multi-file tabs with local storage persistence (files saved automatically)
+* Examples dropdown with built-in ChucK examples (click to load)
+* Globals panel with auto-discovery of ChucK global variables
+  - Interactive sliders for int/float globals with real-time control
+  - Event buttons to signal/broadcast global events
+* Shred management panel:
+  - View all running shreds with elapsed time
+  - Replace shred with current editor code
+  - Preview shred source code
+  - Remove individual shreds
+* MIDI panel showing available MIDI devices (Web MIDI API)
+* Theme toggle (dark/light mode) with system preference detection
 * Real-time console output via WebSocket
-* Shred status panel with elapsed time
 * Audio start/stop controls
-* Keyboard shortcut: Ctrl+Enter to spork code
+* Keyboard shortcuts:
+  - Ctrl+Enter: Spork code
+  - Ctrl+S: Save current tab
+  - Ctrl+N: New tab
 
 **REST API Endpoints:**
 
@@ -212,6 +225,9 @@ numchuck web --no-browser
 | `/api/status` | GET | Get VM status, shreds, audio state |
 | `/api/compile` | POST | Compile and spork code |
 | `/api/shred/:id` | DELETE | Remove a shred |
+| `/api/shred/:id/replace` | POST | Replace shred with new code |
+| `/api/shred/:id/code` | GET | Get shred source code |
+| `/api/globals` | GET | List all global variables with types |
 | `/api/clear` | POST | Clear all shreds |
 | `/api/audio/start` | POST | Start real-time audio |
 | `/api/audio/stop` | POST | Stop real-time audio |

@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Iterator
 
+from .constants import MIDI_CC_NORMALIZE, MIDI_MAX_CC, MIDI_MAX_CHANNEL
+
 if TYPE_CHECKING:
     pass
 
@@ -33,10 +35,10 @@ class MIDIMapping:
 
     def __post_init__(self) -> None:
         """Validate the mapping parameters."""
-        if not 0 <= self.channel <= 15:
-            raise ValueError(f"MIDI channel must be 0-15, got {self.channel}")
-        if not 0 <= self.cc_number <= 127:
-            raise ValueError(f"MIDI CC number must be 0-127, got {self.cc_number}")
+        if not 0 <= self.channel <= MIDI_MAX_CHANNEL:
+            raise ValueError(f"MIDI channel must be 0-{MIDI_MAX_CHANNEL}, got {self.channel}")
+        if not 0 <= self.cc_number <= MIDI_MAX_CC:
+            raise ValueError(f"MIDI CC number must be 0-{MIDI_MAX_CC}, got {self.cc_number}")
         if not self.global_name:
             raise ValueError("Global name cannot be empty")
 
@@ -70,7 +72,7 @@ class MIDIMapping:
         Returns:
             Scaled value in [min_value, max_value] range
         """
-        normalized = cc_value / 127.0
+        normalized = cc_value / MIDI_CC_NORMALIZE
         return self.min_value + normalized * (self.max_value - self.min_value)
 
 

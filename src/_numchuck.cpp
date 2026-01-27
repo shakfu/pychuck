@@ -11,6 +11,7 @@
 #include "chuck_globals.h"
 #include "chuck_vm.h"
 #include "util_platforms.h"  // For ck_usleep
+#include "constants.h"
 
 #include <algorithm>
 #include <mutex>
@@ -103,7 +104,7 @@ public:
             if (msWait > 0) {
                 ck_usleep(msWait * 1000);  // Convert ms to us
             } else {
-                ck_usleep(100 * 1000);  // Default 100ms wait on Windows
+                ck_usleep(numchuck::WINDOWS_AUDIO_SHUTDOWN_WAIT_MS * 1000);
             }
 #endif
             m_started = false;
@@ -732,10 +733,16 @@ NB_MODULE(_numchuck, m) {
         // Introspection
         .def("get_all_globals",
             [](ChucK& self) {
+                std::vector<std::pair<std::string, std::string>> result;
+
+                // Check if globals manager is available
+                if (!self.globals()) {
+                    return result;  // Return empty list
+                }
+
                 std::vector<Chuck_Globals_TypeValue> globals_list;
                 self.globals()->get_all_global_variables(globals_list);
 
-                std::vector<std::pair<std::string, std::string>> result;
                 for (const auto& gv : globals_list) {
                     result.push_back({gv.type, gv.name});
                 }
@@ -1008,9 +1015,14 @@ NB_MODULE(_numchuck, m) {
 
             return success;
         },
-        "chuck"_a, "sample_rate"_a = 44100, "num_dac_channels"_a = 2,
-        "num_adc_channels"_a = 0, "dac_device"_a = 0, "adc_device"_a = 0,
-        "buffer_size"_a = 512, "num_buffers"_a = 8,
+        "chuck"_a,
+        "sample_rate"_a = numchuck::DEFAULT_SAMPLE_RATE,
+        "num_dac_channels"_a = numchuck::DEFAULT_OUTPUT_CHANNELS,
+        "num_adc_channels"_a = numchuck::DEFAULT_INPUT_CHANNELS,
+        "dac_device"_a = numchuck::DEFAULT_DAC_DEVICE,
+        "adc_device"_a = numchuck::DEFAULT_ADC_DEVICE,
+        "buffer_size"_a = numchuck::DEFAULT_BUFFER_SIZE,
+        "num_buffers"_a = numchuck::DEFAULT_NUM_BUFFERS,
         "Start real-time audio playback with ChucK instance");
 
     m.def("stop_audio",
@@ -1044,6 +1056,13 @@ NB_MODULE(_numchuck, m) {
             return info;
         },
         "Get current audio system info");
+
+    m.def("is_audio_running",
+        []() {
+            std::lock_guard<std::mutex> lock(g_audio_mutex);
+            return g_audio_context && g_audio_context->is_started();
+        },
+        "Check if real-time audio is currently running");
 
     // Cleanup function to be called during module teardown
     m.def("_cleanup_callbacks",

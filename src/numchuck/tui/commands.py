@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from ..constants import POLL_INTERVAL
 from .._numchuck import start_audio, stop_audio, shutdown_audio, audio_info
 from ..services import ShredService, GlobalsService, FileService
 from .logging import get_logger, TUILogger
@@ -445,7 +446,7 @@ class CommandExecutor:
                     end="",
                     flush=True,
                 )
-                time.sleep(0.1)
+                time.sleep(POLL_INTERVAL)
         except KeyboardInterrupt:
             print("\n")
         return None

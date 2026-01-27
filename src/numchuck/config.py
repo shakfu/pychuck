@@ -30,6 +30,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .constants import (
+    DEFAULT_BUFFER_SIZE,
+    DEFAULT_NUM_BUFFERS,
+    DEFAULT_OSC_PORT,
+    DEFAULT_OUTPUT_CHANNELS,
+    DEFAULT_SAMPLE_RATE,
+    MAX_CONSOLE_LINES,
+)
+
 if sys.version_info >= (3, 11):
     import tomllib
 else:
@@ -44,11 +53,11 @@ else:
 class AudioConfig:
     """Audio configuration settings."""
 
-    sample_rate: int = 44100
-    output_channels: int = 2
+    sample_rate: int = DEFAULT_SAMPLE_RATE
+    output_channels: int = DEFAULT_OUTPUT_CHANNELS
     input_channels: int = 0
-    buffer_size: int = 512
-    num_buffers: int = 8
+    buffer_size: int = DEFAULT_BUFFER_SIZE
+    num_buffers: int = DEFAULT_NUM_BUFFERS
     dac_device: int = 0
     adc_device: int = 0
 
@@ -60,7 +69,7 @@ class REPLConfig:
     smart_enter: bool = True
     show_sidebar: bool = True
     start_audio: bool = False
-    max_log_lines: int = 100
+    max_log_lines: int = MAX_CONSOLE_LINES
 
 
 @dataclass
@@ -190,7 +199,7 @@ class KeybindingsConfig:
 class OSCConfig:
     """OSC (Open Sound Control) configuration."""
 
-    port: int = 9000
+    port: int = DEFAULT_OSC_PORT
     enabled: bool = False
 
 
