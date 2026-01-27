@@ -6,12 +6,14 @@ Provides a browser-based IDE for ChucK live coding.
 from __future__ import annotations
 
 import json
+import re
 import threading
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ..constants import DEFAULT_WEB_PORT, MAX_CONSOLE_LINES
+from ..tui.parser import CommandParser
 
 # Broadcast interval for meters and globals (seconds)
 METER_BROADCAST_INTERVAL = 0.1  # 100ms for smooth meter updates
@@ -99,6 +101,9 @@ class WebChuckServer:
         self._broadcast_thread: threading.Thread | None = None
         self._broadcast_stop_event = threading.Event()
         self._last_globals_json = ""
+
+        # REPL support
+        self._parser = CommandParser()
 
         # Set up console capture
         self._setup_console_capture()
@@ -369,8 +374,363 @@ class WebChuckServer:
             return json.dumps({"type": "pong"})
         elif msg_type == "status":
             return self._api_status()
+        elif msg_type == "repl":
+            return self._handle_repl_command(data.get("command", ""))
 
         return ""
+
+    def _handle_repl_command(self, input_text: str) -> str:
+        """Handle REPL command from web terminal."""
+        input_text = input_text.strip()
+        if not input_text:
+            return ""
+
+        # Handle help command directly
+        if input_text.lower() == "help":
+            return self._repl_help()
+
+        # Try to parse as a command
+        cmd = self._parser.parse(input_text)
+
+        if cmd:
+            return self._execute_repl_command(cmd)
+        else:
+            # Not a recognized command - try to compile as ChucK code
+            return self._compile_repl_code(input_text)
+
+    def _execute_repl_command(self, cmd: Any) -> str:
+        """Execute a parsed REPL command."""
+        cmd_type = cmd.type
+        args = cmd.args
+
+        try:
+            # Shred management
+            if cmd_type == "spork_file":
+                path = args.get("path", "")
+                success, shred_ids = self._chuck.compile_file(path)
+                if success:
+                    now = time.time()
+                    for sid in shred_ids:
+                        self._shred_times[sid] = now
+                        self._shred_code[sid] = f"file: {path}"
+                    self._broadcast_shreds_update()
+                    return self._repl_output(f"[shred {shred_ids}]: sporking file: {path}", "success")
+                else:
+                    return self._repl_error(f"Failed to compile: {path}")
+
+            elif cmd_type == "spork_code":
+                code = args.get("code", "")
+                return self._compile_repl_code(code)
+
+            elif cmd_type == "remove_shred":
+                sid = args.get("id")
+                self._chuck.remove_shred(sid)
+                self._shred_times.pop(sid, None)
+                self._shred_code.pop(sid, None)
+                self._broadcast_shreds_update()
+                return self._repl_output(f"[shred {sid}]: removed", "info")
+
+            elif cmd_type == "abort_shred":
+                sid = args.get("id")
+                self._chuck.remove_shred(sid)
+                self._shred_times.pop(sid, None)
+                self._shred_code.pop(sid, None)
+                self._broadcast_shreds_update()
+                return self._repl_output(f"[shred {sid}]: abort", "info")
+
+            elif cmd_type == "remove_all":
+                self._chuck.clear()
+                self._shred_times.clear()
+                self._shred_code.clear()
+                self._broadcast_shreds_update()
+                return self._repl_output("Removed all shreds", "info")
+
+            elif cmd_type == "clear_vm":
+                self._chuck.clear()
+                self._shred_times.clear()
+                self._shred_code.clear()
+                self._broadcast_shreds_update()
+                return self._repl_output("VM cleared", "info")
+
+            elif cmd_type == "reset_id":
+                self._chuck.reset_id()
+                return self._repl_output("Shred ID counter reset", "info")
+
+            elif cmd_type == "replace_shred":
+                sid = args.get("id")
+                code = args.get("code", "")
+                try:
+                    new_id = self._chuck.replace_shred(sid, code)
+                    self._shred_times.pop(sid, None)
+                    self._shred_code.pop(sid, None)
+                    now = time.time()
+                    self._shred_times[new_id] = now
+                    self._shred_code[new_id] = code[:100] + ("..." if len(code) > 100 else "")
+                    self._broadcast_shreds_update()
+                    return self._repl_output(f"[shred {sid}]: replaced with [shred {new_id}]", "success")
+                except Exception as e:
+                    return self._repl_error(f"Failed to replace shred {sid}: {e}")
+
+            elif cmd_type == "replace_shred_file":
+                sid = args.get("id")
+                path = args.get("path", "")
+                try:
+                    # Read file and replace
+                    with open(path) as f:
+                        code = f.read()
+                    new_id = self._chuck.replace_shred(sid, code)
+                    self._shred_times.pop(sid, None)
+                    self._shred_code.pop(sid, None)
+                    now = time.time()
+                    self._shred_times[new_id] = now
+                    self._shred_code[new_id] = f"file: {path}"
+                    self._broadcast_shreds_update()
+                    return self._repl_output(f"[shred {sid}]: replaced with {path} [shred {new_id}]", "success")
+                except FileNotFoundError:
+                    return self._repl_error(f"File not found: {path}")
+                except Exception as e:
+                    return self._repl_error(f"Failed to replace shred {sid}: {e}")
+
+            # Status commands
+            elif cmd_type == "status":
+                return self._repl_status()
+
+            elif cmd_type == "list_shreds":
+                return self._repl_list_shreds()
+
+            elif cmd_type == "shred_info":
+                sid = args.get("id")
+                info = self._chuck.shred_info(sid)
+                if info:
+                    return self._repl_output(f"Shred {sid}: {info}", "info")
+                else:
+                    return self._repl_error(f"Shred {sid} not found")
+
+            elif cmd_type == "current_time":
+                now_time = self._chuck.raw.now()
+                srate = self._chuck.sample_rate
+                seconds = now_time / srate
+                return self._repl_output(f"now: {now_time:.0f} samples ({seconds:.3f}s)", "info")
+
+            elif cmd_type == "list_globals":
+                return self._repl_list_globals()
+
+            elif cmd_type == "audio_info":
+                from .._numchuck import audio_info, is_audio_running
+                running = is_audio_running()
+                info = audio_info()
+                status = "running" if running else "stopped"
+                return self._repl_output(
+                    f"Audio: {status}\n"
+                    f"  Sample rate: {info.get('sample_rate', 0)} Hz\n"
+                    f"  Output channels: {info.get('num_channels_out', 0)}\n"
+                    f"  Input channels: {info.get('num_channels_in', 0)}\n"
+                    f"  Buffer size: {info.get('buffer_size', 0)}",
+                    "info"
+                )
+
+            # Global variables
+            elif cmd_type == "set_global":
+                name = args.get("name", "")
+                value = args.get("value", "")
+                # Try to determine type and set
+                try:
+                    if "." in value:
+                        self._chuck.set_float(name, float(value))
+                    else:
+                        self._chuck.set_int(name, int(value))
+                    return self._repl_output(f"{name} = {value}", "success")
+                except ValueError:
+                    self._chuck.set_string(name, value)
+                    return self._repl_output(f'{name} = "{value}"', "success")
+
+            elif cmd_type == "get_global":
+                name = args.get("name", "")
+                # Try to get value (try int, then float, then string)
+                try:
+                    value = self._chuck.get_int(name)
+                    return self._repl_output(f"{name} = {value}", "info")
+                except Exception:
+                    pass
+                try:
+                    value = self._chuck.get_float(name)
+                    return self._repl_output(f"{name} = {value}", "info")
+                except Exception:
+                    pass
+                try:
+                    value = self._chuck.get_string(name)
+                    return self._repl_output(f'{name} = "{value}"', "info")
+                except Exception:
+                    return self._repl_error(f"Global '{name}' not found")
+
+            # Events
+            elif cmd_type == "signal_event":
+                name = args.get("name", "")
+                self._chuck.signal_event(name)
+                return self._repl_output(f"Signaled event: {name}", "info")
+
+            elif cmd_type == "broadcast_event":
+                name = args.get("name", "")
+                self._chuck.broadcast_event(name)
+                return self._repl_output(f"Broadcast event: {name}", "info")
+
+            # Audio control
+            elif cmd_type == "start_audio":
+                from .._numchuck import start_audio
+                start_audio(self._chuck.raw)
+                self._broadcast_audio_status(True)
+                return self._repl_output("Audio started", "success")
+
+            elif cmd_type == "stop_audio":
+                from .._numchuck import stop_audio
+                stop_audio()
+                self._broadcast_audio_status(False)
+                return self._repl_output("Audio stopped", "info")
+
+            elif cmd_type == "shutdown_audio":
+                from .._numchuck import shutdown_audio
+                shutdown_audio()
+                self._broadcast_audio_status(False)
+                return self._repl_output("Audio shutdown", "info")
+
+            # Help
+            elif cmd_type == "help":
+                return self._repl_help()
+
+            # Exit (no-op in web)
+            elif cmd_type == "exit":
+                return self._repl_output("Use browser to close the page", "info")
+
+            # Clear screen (handled client-side, but acknowledge)
+            elif cmd_type == "clear_screen":
+                return self._repl_output("", "info")
+
+            else:
+                return self._repl_error(f"Unknown command: {cmd_type}")
+
+        except Exception as e:
+            return self._repl_error(str(e))
+
+    def _compile_repl_code(self, code: str) -> str:
+        """Compile ChucK code from REPL input."""
+        try:
+            success, shred_ids = self._chuck.compile(code)
+            if success:
+                now = time.time()
+                preview = code[:100] + ("..." if len(code) > 100 else "")
+                for sid in shred_ids:
+                    self._shred_times[sid] = now
+                    self._shred_code[sid] = preview
+                self._broadcast_shreds_update()
+                return self._repl_output(f"[shred {shred_ids}]: sporking code", "success")
+            else:
+                return self._repl_error("Compilation failed")
+        except Exception as e:
+            return self._repl_error(str(e))
+
+    def _repl_output(self, text: str, style: str = "info") -> str:
+        """Create REPL output message."""
+        return json.dumps({"type": "repl_output", "text": text, "style": style})
+
+    def _repl_error(self, text: str) -> str:
+        """Create REPL error message."""
+        return json.dumps({"type": "repl_error", "text": text})
+
+    def _repl_status(self) -> str:
+        """Get REPL status output."""
+        shreds = self._chuck.shreds
+        running = self._is_audio_running()
+        now_time = self._chuck.raw.now()
+        srate = self._chuck.sample_rate
+
+        lines = [
+            f"Audio: {'running' if running else 'stopped'}",
+            f"Shreds: {len(shreds)} running",
+            f"Now: {now_time:.0f} samples ({now_time/srate:.3f}s)",
+        ]
+        if shreds:
+            lines.append("Active shreds: " + ", ".join(str(s) for s in shreds))
+
+        return self._repl_output("\n".join(lines), "info")
+
+    def _repl_list_shreds(self) -> str:
+        """List shreds for REPL."""
+        shreds = self._get_shreds_info()
+        if not shreds:
+            return self._repl_output("No shreds running", "info")
+
+        lines = ["ID    Name                 Time"]
+        lines.append("-" * 40)
+        for s in shreds:
+            name = s.get("name", "code")[:20]
+            lines.append(f"{s['id']:<5} {name:<20} {s['time']}")
+
+        return self._repl_output("\n".join(lines), "info")
+
+    def _repl_list_globals(self) -> str:
+        """List global variables for REPL."""
+        try:
+            globals_list = self._chuck.raw.get_all_globals()
+            if not globals_list:
+                return self._repl_output("No global variables", "info")
+
+            lines = ["Type    Name                 Value"]
+            lines.append("-" * 45)
+            for var_type, name in globals_list:
+                try:
+                    if var_type == "int":
+                        value = self._chuck.get_int(name)
+                    elif var_type == "float":
+                        value = f"{self._chuck.get_float(name):.4f}"
+                    elif var_type == "string":
+                        value = f'"{self._chuck.get_string(name)}"'
+                    else:
+                        value = "?"
+                except Exception:
+                    value = "?"
+                lines.append(f"{var_type:<7} {name:<20} {value}")
+
+            return self._repl_output("\n".join(lines), "info")
+        except Exception as e:
+            return self._repl_error(str(e))
+
+    def _repl_help(self) -> str:
+        """Show REPL help."""
+        help_text = """numchuck REPL Commands:
+
+Shred Management (ChucK-compatible):
+  + file.ck          Spork/add a file
+  + "code"           Spork inline code
+  - <id>             Remove shred
+  - all              Remove all shreds
+  = <id> file.ck     Replace shred with file
+  = <id> "code"      Replace shred with code
+  status / ^         Show VM status
+  ? / ?<id>          List shreds / shred info
+  abort <id>         Abort shred (same as remove)
+
+Global Variables:
+  name::value        Set global (int/float)
+  name?              Get global value
+  ?g                 List all globals
+
+Events:
+  name!              Signal event
+  name!!             Broadcast event
+
+Audio:
+  >                  Start audio
+  ||                 Stop audio
+  ?a                 Audio info
+
+VM Control:
+  .                  Show current time
+  clear              Clear VM (clear.vm)
+  reset              Reset shred ID counter (reset.id)
+  help               Show this help
+
+Or enter ChucK code directly to compile and run."""
+        return self._repl_output(help_text, "info")
 
     def _get_shreds_info(self) -> list[dict[str, Any]]:
         """Get information about running shreds."""

@@ -49,7 +49,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
     - Globals panel with auto-discovery and interactive sliders for int/float variables
     - Shred management: replace shred, preview code, elapsed time display
     - Theme toggle (dark/light mode) with system preference detection
-    - Keyboard shortcuts: Ctrl+Enter (spork), Ctrl+S (save), Ctrl+N (new tab)
+    - Open file from disk (Ctrl+O) and download/save-as (Ctrl+Shift+S)
+    - Keyboard shortcuts: Ctrl+Enter (spork), Ctrl+S (save), Ctrl+N (new tab), Ctrl+O (open), Ctrl+Shift+S (download)
   - **Real-time Audio Metering**:
     - RMS and peak level meters for left/right channels
     - Calculated in C++ audio callback for accuracy
@@ -60,6 +61,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
     - Push-based globals updates (every 500ms when changed)
     - Reduced polling to 10s fallback
     - Real-time slider sync in browser UI
+  - **Bundled Static Assets** (offline support):
+    - CodeMirror 5.65.16 editor bundled locally (`css/`, `js/`)
+    - xterm.js 5.3.0 terminal emulator for REPL
+    - No external CDN dependencies required
+    - Works completely offline
+  - **Interactive Web REPL**:
+    - Full terminal emulator using xterm.js
+    - Toggle between Editor and REPL views
+    - Full command parity with TUI REPL (all ChucK commands supported)
+    - Supports all REPL commands: +, -, =, status, globals, events, etc.
+    - Command history with up/down arrows
+    - Copy/paste support (Ctrl+C/V or Cmd+C/V)
+    - Right-click to select word
+    - Ctrl+C to cancel (when no selection), Ctrl+L to clear
+    - ChucK code can be entered directly
+    - Clicking files in sidebar switches to Editor view
   - **New REST API Endpoints**:
     - `GET /api/globals` - List all global variables with types
     - `POST /api/shred/:id/replace` - Replace running shred with new code

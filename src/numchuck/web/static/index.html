@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>numchuck Web IDE</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/default.min.css">
+    <link rel="stylesheet" href="css/codemirror.min.css">
+    <link rel="stylesheet" href="css/material-darker.min.css">
+    <link rel="stylesheet" href="css/xterm.css">
     <style>
         :root {
             --bg-primary: #1a1a1a;
@@ -103,6 +103,21 @@
         .editor-tab.modified::after { content: '*'; margin-left: 2px; color: var(--accent); }
         .editor-container { flex: 1; overflow: hidden; position: relative; }
         .CodeMirror { height: 100% !important; font-size: 14px; line-height: 1.6; background: var(--bg-primary) !important; }
+
+        /* View tabs (Editor/REPL toggle) */
+        .view-tabs { display: flex; background: var(--bg-tertiary); border-bottom: 1px solid var(--border-color); }
+        .view-tab { padding: 8px 20px; font-size: 12px; font-weight: 600; color: var(--text-secondary); cursor: pointer; border-right: 1px solid var(--border-color); text-transform: uppercase; letter-spacing: 0.5px; }
+        .view-tab:hover { background: var(--bg-secondary); }
+        .view-tab.active { background: var(--bg-primary); color: var(--accent); border-bottom: 2px solid var(--accent); }
+
+        /* REPL container */
+        .repl-container { flex: 1; display: none; flex-direction: column; background: #000; }
+        .repl-container.active { display: flex; }
+        .editor-container.hidden { display: none; }
+        .editor-tabs.hidden { display: none; }
+        #repl-terminal { flex: 1; }
+        .xterm { height: 100%; }
+        .xterm-viewport { overflow-y: auto !important; }
 
         /* Right sidebar */
         .right-sidebar { width: 340px; display: flex; flex-direction: column; border-left: 1px solid var(--border-color); background: var(--bg-tertiary); }
@@ -240,15 +255,27 @@
         <div class="file-sidebar">
             <div class="sidebar-header">
                 Files
-                <button onclick="createNewFile()" title="New File">+</button>
+                <span>
+                    <button onclick="openFileFromDisk()" title="Open File">&#128194;</button>
+                    <button onclick="downloadCurrentFile()" title="Download File">&#128190;</button>
+                    <button onclick="createNewFile()" title="New File">+</button>
+                </span>
             </div>
             <div class="file-list" id="file-list"></div>
+            <input type="file" id="file-input" accept=".ck,.txt" style="display:none" onchange="handleFileOpen(event)">
         </div>
 
         <div class="editor-area">
+            <div class="view-tabs">
+                <div class="view-tab active" onclick="switchView('editor')">Editor</div>
+                <div class="view-tab" onclick="switchView('repl')">REPL</div>
+            </div>
             <div class="editor-tabs" id="editor-tabs"></div>
             <div class="editor-container">
                 <textarea id="editor"></textarea>
+            </div>
+            <div class="repl-container" id="repl-container">
+                <div id="repl-terminal"></div>
             </div>
         </div>
 
@@ -285,10 +312,12 @@
 
     <div id="shred-tooltip" class="shred-tooltip"></div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/mode/simple.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+    <script src="js/codemirror.min.js"></script>
+    <script src="js/simple.min.js"></script>
+    <script src="js/matchbrackets.min.js"></script>
+    <script src="js/closebrackets.min.js"></script>
+    <script src="js/xterm.min.js"></script>
+    <script src="js/xterm-addon-fit.min.js"></script>
     <script>
         // ChucK syntax mode
         CodeMirror.defineSimpleMode("chuck", {
@@ -363,7 +392,11 @@
                     'Cmd-Shift-Enter': function() { replaceLastShred(); },
                     'Ctrl-Shift-Enter': function() { replaceLastShred(); },
                     'Cmd-S': function(cm) { saveState(); return false; },
-                    'Ctrl-S': function(cm) { saveState(); return false; }
+                    'Ctrl-S': function(cm) { saveState(); return false; },
+                    'Cmd-O': function(cm) { openFileFromDisk(); return false; },
+                    'Ctrl-O': function(cm) { openFileFromDisk(); return false; },
+                    'Cmd-Shift-S': function(cm) { downloadCurrentFile(); return false; },
+                    'Ctrl-Shift-S': function(cm) { downloadCurrentFile(); return false; }
                 }
             });
             editor.on('change', function() {
@@ -414,11 +447,63 @@
             saveState();
         }
 
+        function openFileFromDisk() {
+            document.getElementById('file-input').click();
+        }
+
+        function handleFileOpen(event) {
+            var file = event.target.files[0];
+            if (!file) return;
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                var name = file.name;
+                // Avoid overwriting existing file with same name
+                if (files[name]) {
+                    var base = name.replace(/\.ck$/, '');
+                    var num = 1;
+                    while (files[base + '-' + num + '.ck']) num++;
+                    name = base + '-' + num + '.ck';
+                }
+                files[name] = e.target.result;
+                currentFile = name;
+                editor.setValue(files[name]);
+                renderFiles();
+                renderTabs();
+                saveState();
+                log('Opened: ' + name, 'info');
+                // Switch to editor view if in REPL
+                if (currentView !== 'editor') {
+                    switchView('editor');
+                }
+            };
+            reader.readAsText(file);
+            // Reset input so same file can be opened again
+            event.target.value = '';
+        }
+
+        function downloadCurrentFile() {
+            var content = editor.getValue();
+            var blob = new Blob([content], { type: 'text/plain' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = currentFile;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            log('Downloaded: ' + currentFile, 'info');
+        }
+
         function openFile(name) {
             currentFile = name;
             editor.setValue(files[name] || '');
             renderFiles();
             renderTabs();
+            // Switch to editor view if in REPL
+            if (currentView !== 'editor') {
+                switchView('editor');
+            }
         }
 
         function closeFile(name, e) {
@@ -737,6 +822,264 @@
                 }).catch(function() {});
             }, 10000);  // Fallback polling every 10 seconds (reduced from 2s)
         }
+
+        // === REPL Terminal ===
+        var term = null;
+        var fitAddon = null;
+        var replInput = '';
+        var replHistory = [];
+        var historyIndex = -1;
+        var replInitialized = false;
+        var currentView = 'editor';
+
+        function switchView(view) {
+            currentView = view;
+            var tabs = document.querySelectorAll('.view-tab');
+            tabs.forEach(function(tab) {
+                tab.classList.toggle('active', tab.textContent.toLowerCase() === view);
+            });
+
+            var editorContainer = document.querySelector('.editor-container');
+            var editorTabs = document.getElementById('editor-tabs');
+            var replContainer = document.getElementById('repl-container');
+
+            if (view === 'editor') {
+                editorContainer.classList.remove('hidden');
+                editorTabs.classList.remove('hidden');
+                replContainer.classList.remove('active');
+                editor.refresh();
+            } else {
+                editorContainer.classList.add('hidden');
+                editorTabs.classList.add('hidden');
+                replContainer.classList.add('active');
+                if (!replInitialized) {
+                    initREPL();
+                }
+                if (term && fitAddon) {
+                    fitAddon.fit();
+                    term.focus();
+                }
+            }
+        }
+
+        function initREPL() {
+            if (replInitialized) return;
+            replInitialized = true;
+
+            term = new Terminal({
+                cursorBlink: true,
+                fontSize: 14,
+                fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+                allowProposedApi: true,
+                rightClickSelectsWord: true,
+                theme: {
+                    background: '#1a1a1a',
+                    foreground: '#e0e0e0',
+                    cursor: '#4fc3f7',
+                    cursorAccent: '#1a1a1a',
+                    selection: 'rgba(79, 195, 247, 0.3)',
+                    black: '#000000',
+                    red: '#c62828',
+                    green: '#4caf50',
+                    yellow: '#fb8c00',
+                    blue: '#1e88e5',
+                    magenta: '#ab47bc',
+                    cyan: '#4fc3f7',
+                    white: '#e0e0e0',
+                    brightBlack: '#666666',
+                    brightRed: '#ef5350',
+                    brightGreen: '#66bb6a',
+                    brightYellow: '#ffca28',
+                    brightBlue: '#42a5f5',
+                    brightMagenta: '#ce93d8',
+                    brightCyan: '#80deea',
+                    brightWhite: '#ffffff'
+                }
+            });
+
+            fitAddon = new FitAddon.FitAddon();
+            term.loadAddon(fitAddon);
+
+            term.open(document.getElementById('repl-terminal'));
+            fitAddon.fit();
+
+            // Welcome message
+            term.writeln('\x1b[36m=== numchuck REPL ===\x1b[0m');
+            term.writeln('\x1b[90mType "help" for commands, or enter ChucK code directly.\x1b[0m');
+            term.writeln('');
+            writePrompt();
+
+            // Handle resize
+            window.addEventListener('resize', function() {
+                if (currentView === 'repl' && fitAddon) {
+                    fitAddon.fit();
+                }
+            });
+
+            // Handle keyboard input
+            term.onKey(function(e) {
+                var key = e.key;
+                var code = e.domEvent.keyCode;
+                var ev = e.domEvent;
+
+                if (code === 13) { // Enter
+                    term.writeln('');
+                    if (replInput.trim()) {
+                        replHistory.push(replInput);
+                        historyIndex = replHistory.length;
+                        sendREPLCommand(replInput);
+                    } else {
+                        writePrompt();
+                    }
+                    replInput = '';
+                } else if (code === 8) { // Backspace
+                    if (replInput.length > 0) {
+                        replInput = replInput.slice(0, -1);
+                        term.write('\b \b');
+                    }
+                } else if (code === 38) { // Up arrow
+                    if (historyIndex > 0) {
+                        clearCurrentInput();
+                        historyIndex--;
+                        replInput = replHistory[historyIndex] || '';
+                        term.write(replInput);
+                    }
+                } else if (code === 40) { // Down arrow
+                    if (historyIndex < replHistory.length) {
+                        clearCurrentInput();
+                        historyIndex++;
+                        replInput = replHistory[historyIndex] || '';
+                        term.write(replInput);
+                    }
+                } else if (code === 9) { // Tab - ignore for now
+                    ev.preventDefault();
+                } else if ((ev.ctrlKey || ev.metaKey) && code === 67) { // Ctrl+C or Cmd+C
+                    // If there's a selection, copy it (let browser handle)
+                    var selection = term.getSelection();
+                    if (selection) {
+                        navigator.clipboard.writeText(selection);
+                    } else {
+                        // No selection - cancel input
+                        term.writeln('^C');
+                        replInput = '';
+                        writePrompt();
+                    }
+                } else if ((ev.ctrlKey || ev.metaKey) && code === 86) { // Ctrl+V or Cmd+V
+                    // Handle paste via clipboard API
+                    ev.preventDefault();
+                    navigator.clipboard.readText().then(function(text) {
+                        if (text) {
+                            pasteText(text);
+                        }
+                    }).catch(function() {
+                        // Clipboard API failed, fallback handled by onData
+                    });
+                } else if (ev.ctrlKey && code === 76) { // Ctrl+L - clear
+                    term.clear();
+                    writePrompt();
+                } else if (key.length === 1 && !ev.ctrlKey && !ev.metaKey) {
+                    replInput += key;
+                    term.write(key);
+                }
+            });
+
+            // Handle paste from onData (fallback for browsers without clipboard API)
+            term.onData(function(data) {
+                // Only handle paste (multi-char data that's not an escape sequence)
+                if (data.length > 1 && !data.startsWith('\x1b')) {
+                    pasteText(data);
+                }
+            });
+
+            // Paste helper function
+            function pasteText(text) {
+                // Filter control chars except newlines
+                var filtered = text.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '');
+                if (!filtered) return;
+
+                if (filtered.includes('\n') || filtered.includes('\r')) {
+                    // Multi-line paste - show as multi-line but keep as single input
+                    var displayText = filtered.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+                    term.write(displayText.replace(/\n/g, '\r\n'));
+                    replInput += displayText;
+                } else {
+                    replInput += filtered;
+                    term.write(filtered);
+                }
+            }
+
+            // Enable right-click context menu for copy/paste
+            term.attachCustomKeyEventHandler(function(e) {
+                // Allow Cmd+C, Cmd+V, Ctrl+C, Ctrl+V to pass through for copy/paste
+                if ((e.ctrlKey || e.metaKey) && (e.keyCode === 67 || e.keyCode === 86)) {
+                    return false; // Let our onKey handler handle it
+                }
+                return true;
+            });
+        }
+
+        function writePrompt() {
+            term.write('\x1b[33m[=>]\x1b[0m ');
+        }
+
+        function clearCurrentInput() {
+            for (var i = 0; i < replInput.length; i++) {
+                term.write('\b \b');
+            }
+        }
+
+        function sendREPLCommand(input) {
+            // Send via WebSocket
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'repl', command: input }));
+            } else {
+                writeREPLError('Not connected to server');
+                writePrompt();
+            }
+        }
+
+        function writeREPLOutput(text, style) {
+            if (!term) return;
+            var lines = text.split('\n');
+            for (var i = 0; i < lines.length; i++) {
+                if (style === 'error') {
+                    term.writeln('\x1b[31m' + lines[i] + '\x1b[0m');
+                } else if (style === 'success') {
+                    term.writeln('\x1b[32m' + lines[i] + '\x1b[0m');
+                } else if (style === 'info') {
+                    term.writeln('\x1b[36m' + lines[i] + '\x1b[0m');
+                } else if (style === 'vm') {
+                    term.writeln('\x1b[90m' + lines[i] + '\x1b[0m');
+                } else {
+                    term.writeln(lines[i]);
+                }
+            }
+        }
+
+        function writeREPLError(text) {
+            writeREPLOutput(text, 'error');
+        }
+
+        // Extend handleMessage for REPL output
+        var originalHandleMessage = handleMessage;
+        handleMessage = function(data) {
+            originalHandleMessage(data);
+
+            // Handle REPL-specific messages
+            if (data.type === 'repl_output') {
+                writeREPLOutput(data.text, data.style);
+                if (data.prompt !== false) {
+                    writePrompt();
+                }
+            } else if (data.type === 'repl_error') {
+                writeREPLError(data.text);
+                writePrompt();
+            } else if (data.type === 'console' && currentView === 'repl') {
+                // Mirror console output to REPL terminal
+                var style = data.level === 'error' ? 'error' : (data.level === 'vm' ? 'vm' : 'info');
+                writeREPLOutput(data.text, style);
+            }
+        };
     </script>
 </body>
 </html>

@@ -199,7 +199,9 @@ numchuck web --no-browser
 **Web IDE Features:**
 
 * Browser-based code editor with syntax highlighting
+* Interactive REPL terminal (toggle between Editor and REPL views)
 * Multi-file tabs with local storage persistence (files saved automatically)
+* Open files from disk and download/save-as to disk
 * Examples dropdown with built-in ChucK examples (click to load)
 * Globals panel with auto-discovery of ChucK global variables
   - Interactive sliders for int/float globals with real-time control
@@ -218,9 +220,25 @@ numchuck web --no-browser
 * Real-time console output via WebSocket
 * Audio start/stop controls
 * Keyboard shortcuts:
-  - Ctrl+Enter: Spork code
-  - Ctrl+S: Save current tab
+  - Ctrl+Enter: Spork code (Editor mode)
+  - Ctrl+S: Save to local storage
+  - Ctrl+O: Open file from disk
+  - Ctrl+Shift+S: Download/Save As
   - Ctrl+N: New tab
+  - Ctrl+C: Cancel input (REPL mode)
+  - Ctrl+L: Clear terminal (REPL mode)
+
+**REPL Commands** (same as TUI REPL):
+* `+ file.ck` - Spork a file
+* `- <id>` / `- all` - Remove shred(s)
+* `status` / `^` - Show VM status
+* `?` / `?<id>` - List shreds / shred info
+* `?g` - List global variables
+* `name::value` - Set global variable
+* `name?` - Get global value
+* `name!` / `name!!` - Signal/broadcast event
+* `>` - Start audio, `||` - Stop audio
+* Or enter ChucK code directly
 
 **REST API Endpoints:**
 
