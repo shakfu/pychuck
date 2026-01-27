@@ -14,6 +14,8 @@
 #include "constants.h"
 
 #include <algorithm>
+#include <atomic>
+#include <cmath>
 #include <mutex>
 #include <stdexcept>
 #include <sstream>
@@ -30,6 +32,12 @@ static std::mutex g_audio_mutex;
 // Thread-local storage for current ChucK instance (used by chout/cherr callbacks)
 static thread_local ChucK* g_current_chuck = nullptr;
 
+// Audio metering - atomic floats for thread-safe access from Python
+static std::atomic<float> g_meter_rms_left{0.0f};
+static std::atomic<float> g_meter_rms_right{0.0f};
+static std::atomic<float> g_meter_peak_left{0.0f};
+static std::atomic<float> g_meter_peak_right{0.0f};
+
 // Audio callback function - uses userData to get ChucK instance
 static void audio_callback_func(SAMPLE* input, SAMPLE* output, t_CKUINT numFrames,
                                 t_CKUINT numInChans, t_CKUINT numOutChans, void* userData) {
@@ -39,6 +47,46 @@ static void audio_callback_func(SAMPLE* input, SAMPLE* output, t_CKUINT numFrame
         g_current_chuck = chuck;
         chuck->run(input, output, numFrames);
         g_current_chuck = nullptr;
+
+        // Calculate audio meters after processing
+        if (numOutChans >= 2 && numFrames > 0) {
+            float sum_sq_left = 0.0f;
+            float sum_sq_right = 0.0f;
+            float peak_left = 0.0f;
+            float peak_right = 0.0f;
+
+            for (t_CKUINT i = 0; i < numFrames; i++) {
+                float left = static_cast<float>(output[i * numOutChans]);
+                float right = static_cast<float>(output[i * numOutChans + 1]);
+
+                sum_sq_left += left * left;
+                sum_sq_right += right * right;
+                peak_left = std::max(peak_left, std::abs(left));
+                peak_right = std::max(peak_right, std::abs(right));
+            }
+
+            // Store RMS and peak values
+            g_meter_rms_left.store(std::sqrt(sum_sq_left / numFrames), std::memory_order_relaxed);
+            g_meter_rms_right.store(std::sqrt(sum_sq_right / numFrames), std::memory_order_relaxed);
+            g_meter_peak_left.store(peak_left, std::memory_order_relaxed);
+            g_meter_peak_right.store(peak_right, std::memory_order_relaxed);
+        } else if (numOutChans == 1 && numFrames > 0) {
+            // Mono output - use same value for both channels
+            float sum_sq = 0.0f;
+            float peak = 0.0f;
+
+            for (t_CKUINT i = 0; i < numFrames; i++) {
+                float sample = static_cast<float>(output[i]);
+                sum_sq += sample * sample;
+                peak = std::max(peak, std::abs(sample));
+            }
+
+            float rms = std::sqrt(sum_sq / numFrames);
+            g_meter_rms_left.store(rms, std::memory_order_relaxed);
+            g_meter_rms_right.store(rms, std::memory_order_relaxed);
+            g_meter_peak_left.store(peak, std::memory_order_relaxed);
+            g_meter_peak_right.store(peak, std::memory_order_relaxed);
+        }
     }
 }
 
@@ -1063,6 +1111,17 @@ NB_MODULE(_numchuck, m) {
             return g_audio_context && g_audio_context->is_started();
         },
         "Check if real-time audio is currently running");
+
+    m.def("get_audio_meters",
+        []() {
+            nb::dict meters;
+            meters["rms_left"] = g_meter_rms_left.load(std::memory_order_relaxed);
+            meters["rms_right"] = g_meter_rms_right.load(std::memory_order_relaxed);
+            meters["peak_left"] = g_meter_peak_left.load(std::memory_order_relaxed);
+            meters["peak_right"] = g_meter_peak_right.load(std::memory_order_relaxed);
+            return meters;
+        },
+        "Get current audio meter values (RMS and peak for left/right channels)");
 
     // Cleanup function to be called during module teardown
     m.def("_cleanup_callbacks",

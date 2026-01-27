@@ -736,7 +736,9 @@ class Chuck:
     # Async/await API
     # -------------------------------------------------------------------------
 
-    async def get_int_awaitable(self, name: str, run_frames: int = DEFAULT_RUN_FRAMES) -> int:
+    async def get_int_awaitable(
+        self, name: str, run_frames: int = DEFAULT_RUN_FRAMES
+    ) -> int:
         """Get a global int variable using async/await.
 
         This method runs the VM in a background thread to avoid blocking
@@ -771,7 +773,9 @@ class Chuck:
             )
         return await future
 
-    async def get_float_awaitable(self, name: str, run_frames: int = DEFAULT_RUN_FRAMES) -> float:
+    async def get_float_awaitable(
+        self, name: str, run_frames: int = DEFAULT_RUN_FRAMES
+    ) -> float:
         """Get a global float variable using async/await.
 
         Args:
@@ -798,7 +802,9 @@ class Chuck:
             )
         return await future
 
-    async def get_string_awaitable(self, name: str, run_frames: int = DEFAULT_RUN_FRAMES) -> str:
+    async def get_string_awaitable(
+        self, name: str, run_frames: int = DEFAULT_RUN_FRAMES
+    ) -> str:
         """Get a global string variable using async/await.
 
         Args:

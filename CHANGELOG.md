@@ -37,10 +37,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 - **Web IDE** (`src/_web.cpp`, `src/numchuck/web/`):
   - Browser-based ChucK IDE similar to WebChucK
-  - Embedded Mongoose web server (zero external dependencies)
+  - Mongoose web server serving static files from package directory
   - REST API for ChucK control: compile, remove shred, audio start/stop
   - WebSocket for real-time console output and status updates
-  - Embedded HTML/CSS/JS frontend with code editor
+  - HTML/CSS/JS frontend in `src/numchuck/web/static/`
   - CLI command: `numchuck web [--port 8080] [files...]`
   - CMake option: `-DNUMCHUCK_ENABLE_WEB=ON` (enabled by default)
   - **Enhanced UI Features**:
@@ -48,13 +48,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
     - Examples dropdown with built-in ChucK examples
     - Globals panel with auto-discovery and interactive sliders for int/float variables
     - Shred management: replace shred, preview code, elapsed time display
-    - MIDI panel for device listing (Web MIDI API)
     - Theme toggle (dark/light mode) with system preference detection
     - Keyboard shortcuts: Ctrl+Enter (spork), Ctrl+S (save), Ctrl+N (new tab)
+  - **Real-time Audio Metering**:
+    - RMS and peak level meters for left/right channels
+    - Calculated in C++ audio callback for accuracy
+    - Streamed via WebSocket every 100ms when audio running
+    - Visual meter bars in browser UI
+    - New `get_audio_meters()` function in Python API
+  - **WebSocket Globals Sync**:
+    - Push-based globals updates (every 500ms when changed)
+    - Reduced polling to 10s fallback
+    - Real-time slider sync in browser UI
   - **New REST API Endpoints**:
     - `GET /api/globals` - List all global variables with types
     - `POST /api/shred/:id/replace` - Replace running shred with new code
     - `GET /api/shred/:id/code` - Get shred source code
+
+- **Audio Metering API** (`src/_numchuck.cpp`, `src/numchuck/_numchuck.pyi`):
+  - `get_audio_meters()` - Returns dict with `rms_left`, `rms_right`, `peak_left`, `peak_right`
+  - Thread-safe atomic floats updated in real-time audio callback
+  - `AudioMeters` TypedDict for type checking
+
+- **Type Stubs for Web Module** (`src/numchuck/_web.pyi`):
+  - Complete type annotations for `WebServer` class
+  - Properties: `port`, `static_dir`, `is_running`, `client_count`
+  - Methods: `set_api_handler`, `broadcast`, `start`, `stop`
 
 ### Fixed
 

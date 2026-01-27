@@ -209,7 +209,6 @@ numchuck web --no-browser
   - Replace shred with current editor code
   - Preview shred source code
   - Remove individual shreds
-* MIDI panel showing available MIDI devices (Web MIDI API)
 * Theme toggle (dark/light mode) with system preference detection
 * Real-time console output via WebSocket
 * Audio start/stop controls

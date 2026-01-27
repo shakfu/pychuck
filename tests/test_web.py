@@ -209,3 +209,166 @@ class TestLowLevelWebServer:
                 server.stop()
             del server
             gc.collect()
+
+
+class TestAudioMeters:
+    """Tests for audio metering functionality."""
+
+    def test_get_audio_meters_exists(self):
+        """Test that get_audio_meters function exists."""
+        from numchuck._numchuck import get_audio_meters
+
+        assert callable(get_audio_meters)
+
+    def test_get_audio_meters_returns_dict(self):
+        """Test that get_audio_meters returns a dict with expected keys."""
+        from numchuck._numchuck import get_audio_meters
+
+        meters = get_audio_meters()
+
+        assert isinstance(meters, dict)
+        assert "rms_left" in meters
+        assert "rms_right" in meters
+        assert "peak_left" in meters
+        assert "peak_right" in meters
+
+    def test_get_audio_meters_values_are_floats(self):
+        """Test that meter values are floats."""
+        from numchuck._numchuck import get_audio_meters
+
+        meters = get_audio_meters()
+
+        assert isinstance(meters["rms_left"], float)
+        assert isinstance(meters["rms_right"], float)
+        assert isinstance(meters["peak_left"], float)
+        assert isinstance(meters["peak_right"], float)
+
+    def test_get_audio_meters_values_non_negative(self):
+        """Test that meter values are non-negative."""
+        from numchuck._numchuck import get_audio_meters
+
+        meters = get_audio_meters()
+
+        assert meters["rms_left"] >= 0.0
+        assert meters["rms_right"] >= 0.0
+        assert meters["peak_left"] >= 0.0
+        assert meters["peak_right"] >= 0.0
+
+    def test_is_audio_running_exists(self):
+        """Test that is_audio_running function exists."""
+        from numchuck._numchuck import is_audio_running
+
+        assert callable(is_audio_running)
+
+    def test_is_audio_running_returns_bool(self):
+        """Test that is_audio_running returns a boolean."""
+        from numchuck._numchuck import is_audio_running
+
+        result = is_audio_running()
+        assert isinstance(result, bool)
+
+
+class TestGlobalsSync:
+    """Tests for globals synchronization via WebSocket."""
+
+    def test_globals_api_endpoint(self):
+        """Test the /api/globals REST endpoint."""
+        import gc
+        import json
+        import urllib.request
+        from numchuck import Chuck
+        from numchuck.web import WebChuckServer
+
+        chuck = Chuck()
+        try:
+            with WebChuckServer(chuck, port=8089) as server:
+                time.sleep(0.2)
+
+                # First compile code with global variables
+                code = "global float GAIN; 0.5 => GAIN;"
+                req = urllib.request.Request(
+                    "http://localhost:8089/api/compile",
+                    data=json.dumps({"code": code}).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                urllib.request.urlopen(req)
+
+                # Run a few frames to process the code
+                time.sleep(0.1)
+
+                # Now fetch globals
+                req = urllib.request.Request(
+                    "http://localhost:8089/api/globals",
+                    method="GET",
+                )
+                response = urllib.request.urlopen(req)
+                data = json.loads(response.read().decode("utf-8"))
+
+                assert "globals" in data
+                assert isinstance(data["globals"], list)
+        finally:
+            chuck.close()
+            gc.collect()
+
+    def test_server_has_broadcast_thread(self):
+        """Test that server starts broadcast thread when running."""
+        import gc
+        from numchuck import Chuck
+        from numchuck.web import WebChuckServer
+
+        chuck = Chuck()
+        try:
+            server = WebChuckServer(chuck, port=8090)
+            server.start()
+            time.sleep(0.2)
+
+            # Check that broadcast thread exists
+            assert server._broadcast_thread is not None
+            assert server._broadcast_thread.is_alive()
+
+            server.stop()
+            time.sleep(0.2)
+
+            # Thread should be stopped
+            assert server._broadcast_thread is None or not server._broadcast_thread.is_alive()
+        finally:
+            if server.is_running:
+                server.stop()
+            chuck.close()
+            gc.collect()
+
+    def test_meter_broadcast_format(self):
+        """Test that audio_meters message format is correct."""
+        import gc
+        import json
+        from numchuck import Chuck
+        from numchuck.web import WebChuckServer
+        from numchuck._numchuck import get_audio_meters
+
+        chuck = Chuck()
+        try:
+            # Get current meter values
+            meters = get_audio_meters()
+
+            # Create expected message format
+            msg = {
+                "type": "audio_meters",
+                "rms_left": meters["rms_left"],
+                "rms_right": meters["rms_right"],
+                "peak_left": meters["peak_left"],
+                "peak_right": meters["peak_right"],
+            }
+
+            # Verify it's valid JSON
+            json_str = json.dumps(msg)
+            parsed = json.loads(json_str)
+
+            assert parsed["type"] == "audio_meters"
+            assert "rms_left" in parsed
+            assert "rms_right" in parsed
+            assert "peak_left" in parsed
+            assert "peak_right" in parsed
+        finally:
+            chuck.close()
+            gc.collect()

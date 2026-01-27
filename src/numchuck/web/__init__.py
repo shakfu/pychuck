@@ -6,11 +6,16 @@ Provides a browser-based IDE for ChucK live coding.
 from __future__ import annotations
 
 import json
+import threading
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from ..constants import DEFAULT_WEB_PORT, MAX_CONSOLE_LINES
+
+# Broadcast interval for meters and globals (seconds)
+METER_BROADCAST_INTERVAL = 0.1  # 100ms for smooth meter updates
+GLOBALS_CHECK_INTERVAL = 0.5  # 500ms for globals changes
 
 if TYPE_CHECKING:
     from ..api import Chuck
@@ -41,6 +46,9 @@ class WebChuckServer:
         >>> server.stop()
     """
 
+    # Default static directory within the package
+    _DEFAULT_STATIC_DIR = Path(__file__).parent / "static"
+
     def __init__(
         self,
         chuck: Chuck,
@@ -52,7 +60,7 @@ class WebChuckServer:
         Args:
             chuck: ChucK instance to control
             port: HTTP port to listen on (default: 8080)
-            static_dir: Directory for static files (optional, uses embedded UI if None)
+            static_dir: Directory for static files (optional, uses package's static/ if None)
         """
         if not WEB_AVAILABLE:
             raise ImportError(
@@ -64,8 +72,11 @@ class WebChuckServer:
         self._server = _WebServer()
         self._server.port = port
 
+        # Use provided static_dir or default to package's static folder
         if static_dir:
             self._server.static_dir = str(Path(static_dir).resolve())
+        else:
+            self._server.static_dir = str(self._DEFAULT_STATIC_DIR.resolve())
 
         # Set up API handler
         self._server.set_api_handler(self._handle_api)
@@ -83,6 +94,11 @@ class WebChuckServer:
         # Recording state
         self._recording = False
         self._recorded_samples: list[float] = []
+
+        # Broadcast loop state
+        self._broadcast_thread: threading.Thread | None = None
+        self._broadcast_stop_event = threading.Event()
+        self._last_globals_json = ""
 
         # Set up console capture
         self._setup_console_capture()
@@ -154,10 +170,16 @@ class WebChuckServer:
         elif uri.startswith("/api/global/") and method == "POST":
             name = uri.split("/")[-1]
             return self._api_set_global(name, data)
-        elif uri.startswith("/api/shred/") and uri.endswith("/code") and method == "GET":
+        elif (
+            uri.startswith("/api/shred/") and uri.endswith("/code") and method == "GET"
+        ):
             shred_id = int(uri.split("/")[-2])
             return self._api_get_shred_code(shred_id)
-        elif uri.startswith("/api/shred/") and uri.endswith("/replace") and method == "POST":
+        elif (
+            uri.startswith("/api/shred/")
+            and uri.endswith("/replace")
+            and method == "POST"
+        ):
             shred_id = int(uri.split("/")[-2])
             return self._api_replace_shred(shred_id, data)
         elif method == "WS":
@@ -249,9 +271,9 @@ class WebChuckServer:
         """List all global variables with their values."""
         try:
             globals_list = self._chuck.raw.get_all_globals()
-            result = []
+            result: list[dict[str, Any]] = []
             for var_type, name in globals_list:
-                entry = {"type": var_type, "name": name}
+                entry: dict[str, Any] = {"type": var_type, "name": name}
                 # Try to get the value
                 try:
                     if var_type == "int":
@@ -271,6 +293,7 @@ class WebChuckServer:
         """Get a global variable value."""
         var_type = data.get("type", "float")
         try:
+            value: int | float | str
             if var_type == "int":
                 value = self._chuck.get_int(name)
             elif var_type == "float":
@@ -320,6 +343,9 @@ class WebChuckServer:
         value = data.get("value")
         var_type = data.get("type", "float")
 
+        if value is None:
+            return json.dumps({"success": False, "error": "No value provided"})
+
         try:
             if var_type == "int":
                 self._chuck.set_int(name, int(value))
@@ -328,7 +354,9 @@ class WebChuckServer:
             elif var_type == "string":
                 self._chuck.set_string(name, str(value))
             else:
-                return json.dumps({"success": False, "error": f"Unknown type: {var_type}"})
+                return json.dumps(
+                    {"success": False, "error": f"Unknown type: {var_type}"}
+                )
             return json.dumps({"success": True})
         except Exception as e:
             return json.dumps({"success": False, "error": str(e)})
@@ -391,6 +419,61 @@ class WebChuckServer:
                 json.dumps({"type": "audio_status", "running": running})
             )
 
+    def _broadcast_meters(self) -> None:
+        """Broadcast audio meter values to all clients."""
+        if not self._server.is_running:
+            return
+
+        try:
+            from .._numchuck import get_audio_meters, is_audio_running
+
+            if is_audio_running():
+                meters = get_audio_meters()
+                msg = {
+                    "type": "audio_meters",
+                    "rms_left": meters.get("rms_left", 0.0),
+                    "rms_right": meters.get("rms_right", 0.0),
+                    "peak_left": meters.get("peak_left", 0.0),
+                    "peak_right": meters.get("peak_right", 0.0),
+                }
+                self._server.broadcast(json.dumps(msg))
+        except Exception:
+            pass
+
+    def _broadcast_globals_if_changed(self) -> None:
+        """Broadcast globals update if values have changed."""
+        if not self._server.is_running:
+            return
+
+        try:
+            globals_json = self._api_list_globals()
+            if globals_json != self._last_globals_json:
+                self._last_globals_json = globals_json
+                # Parse and reformat for WebSocket message
+                data = json.loads(globals_json)
+                msg = {"type": "globals", "globals": data.get("globals", [])}
+                self._server.broadcast(json.dumps(msg))
+        except Exception:
+            pass
+
+    def _broadcast_loop(self) -> None:
+        """Background loop for meter and globals broadcasting."""
+        meter_counter = 0
+        globals_interval_count = int(GLOBALS_CHECK_INTERVAL / METER_BROADCAST_INTERVAL)
+
+        while not self._broadcast_stop_event.is_set():
+            # Broadcast meters every iteration (100ms)
+            self._broadcast_meters()
+
+            # Broadcast globals less frequently (every 500ms)
+            meter_counter += 1
+            if meter_counter >= globals_interval_count:
+                meter_counter = 0
+                self._broadcast_globals_if_changed()
+
+            # Sleep for the meter interval
+            self._broadcast_stop_event.wait(METER_BROADCAST_INTERVAL)
+
     @property
     def port(self) -> int:
         """Server port."""
@@ -416,8 +499,21 @@ class WebChuckServer:
         if not self._server.start():
             raise RuntimeError("Failed to start web server")
 
+        # Start broadcast loop thread
+        self._broadcast_stop_event.clear()
+        self._broadcast_thread = threading.Thread(
+            target=self._broadcast_loop, daemon=True, name="numchuck-web-broadcast"
+        )
+        self._broadcast_thread.start()
+
     def stop(self) -> None:
         """Stop the web server."""
+        # Stop broadcast loop thread
+        self._broadcast_stop_event.set()
+        if self._broadcast_thread is not None:
+            self._broadcast_thread.join(timeout=1.0)
+            self._broadcast_thread = None
+
         self._server.stop()
         # Clear callbacks to break reference cycles and prevent crash at shutdown
         self._chuck.set_stdout_callback(None)

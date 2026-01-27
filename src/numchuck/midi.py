@@ -36,9 +36,13 @@ class MIDIMapping:
     def __post_init__(self) -> None:
         """Validate the mapping parameters."""
         if not 0 <= self.channel <= MIDI_MAX_CHANNEL:
-            raise ValueError(f"MIDI channel must be 0-{MIDI_MAX_CHANNEL}, got {self.channel}")
+            raise ValueError(
+                f"MIDI channel must be 0-{MIDI_MAX_CHANNEL}, got {self.channel}"
+            )
         if not 0 <= self.cc_number <= MIDI_MAX_CC:
-            raise ValueError(f"MIDI CC number must be 0-{MIDI_MAX_CC}, got {self.cc_number}")
+            raise ValueError(
+                f"MIDI CC number must be 0-{MIDI_MAX_CC}, got {self.cc_number}"
+            )
         if not self.global_name:
             raise ValueError("Global name cannot be empty")
 
