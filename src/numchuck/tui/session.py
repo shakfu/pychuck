@@ -8,6 +8,7 @@ from .logging import get_logger, TUILogger
 
 if TYPE_CHECKING:
     from .._numchuck import ChucK
+    from ..watcher import FileWatcher
 
 
 class ChuckSession:
@@ -37,6 +38,7 @@ class ChuckSession:
         self.audio_running = False
         self.project: Project | None = None
         self._logger = logger or get_logger()
+        self._file_watcher: FileWatcher | None = None
 
         # Initialize project if name provided
         if project_name:
@@ -106,7 +108,8 @@ class ChuckSession:
     def get_shred_name(self, shred_id: int) -> str:
         """Get display name for a shred."""
         if shred_id in self.shreds:
-            return self.shreds[shred_id]["name"]
+            name: str = self.shreds[shred_id]["name"]
+            return name
         return f"shred-{shred_id}"
 
 

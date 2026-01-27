@@ -14,7 +14,7 @@ For detailed help on each command:
 """
 
 
-def main():
+def main() -> None:
     from .cli.main import main as cli_main
 
     cli_main()

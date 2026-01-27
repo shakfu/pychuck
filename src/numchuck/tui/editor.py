@@ -187,7 +187,7 @@ class ChuckEditor:
             event.app.invalidate()
 
         @kb.add("f6")
-        def replace_shred(event):
+        def replace_shred(event: "KeyPressEvent") -> None:
             """Replace existing shred (F6)"""
             if not self.tabs:
                 return
@@ -218,13 +218,13 @@ class ChuckEditor:
             event.app.invalidate()
 
         @kb.add("c-t")
-        def new_tab(event):
+        def new_tab(event: "KeyPressEvent") -> None:
             """New tab (Ctrl-T)"""
             self.add_tab()
             event.app.invalidate()
 
         @kb.add("c-w")
-        def close_tab(event):
+        def close_tab(event: "KeyPressEvent") -> None:
             """Close tab (Ctrl-W)"""
             if len(self.tabs) > 1:
                 self.tabs.pop(self.current_tab_index)
@@ -233,7 +233,7 @@ class ChuckEditor:
 
         @kb.add("c-pagedown")
         @kb.add("c-n")
-        def next_tab(event):
+        def next_tab(event: "KeyPressEvent") -> None:
             """Next tab (Ctrl-PageDown or Ctrl-N)"""
             if len(self.tabs) > 1:
                 self.current_tab_index = (self.current_tab_index + 1) % len(self.tabs)
@@ -241,14 +241,14 @@ class ChuckEditor:
 
         @kb.add("c-pageup")
         @kb.add("c-p")
-        def prev_tab(event):
+        def prev_tab(event: "KeyPressEvent") -> None:
             """Previous tab (Ctrl-PageUp or Ctrl-P)"""
             if len(self.tabs) > 1:
                 self.current_tab_index = (self.current_tab_index - 1) % len(self.tabs)
                 event.app.invalidate()
 
         @kb.add("c-a")
-        def start_audio_handler(event):
+        def start_audio_handler(event: "KeyPressEvent") -> None:
             """Start audio (Ctrl-A)"""
             if not self.app_state.audio_running:
                 if self.app_state.start_audio_playback():
@@ -312,7 +312,7 @@ class ChuckEditor:
         input_kb = KeyBindings()
 
         @input_kb.add("tab")
-        def _(event):
+        def _(event: "KeyPressEvent") -> None:
             """Trigger completion on Tab - insert common prefix or cycle"""
             b = event.app.current_buffer
             if b.complete_state:
@@ -323,14 +323,14 @@ class ChuckEditor:
                 b.start_completion(insert_common_part=True, select_first=False)
 
         @input_kb.add("s-tab")
-        def _(event):
+        def _(event: "KeyPressEvent") -> None:
             """Previous completion on Shift-Tab"""
             b = event.app.current_buffer
             if b.complete_state:
                 b.complete_previous()
 
         @input_kb.add("enter")
-        def _(event):
+        def _(event: "KeyPressEvent") -> None:
             """Accept completion or submit"""
             b = event.app.current_buffer
             if b.complete_state:
@@ -341,7 +341,7 @@ class ChuckEditor:
                 ok_handler()
 
         @input_kb.add("escape")
-        def _(event):
+        def _(event: "KeyPressEvent") -> None:
             """Cancel dialog"""
             cancel_handler()
 

@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    pass
+    from typing import Any
 
 
 @dataclass
@@ -50,7 +50,7 @@ class Package:
     latest_version: str | None
 
     @classmethod
-    def _from_info(cls, info) -> Package:
+    def _from_info(cls, info: "Any") -> Package:
         """Create a Package from a _chump.PackageInfo object."""
         return cls(
             name=info.name,

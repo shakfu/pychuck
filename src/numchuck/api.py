@@ -31,13 +31,14 @@ Thread Safety:
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Generic, Iterator, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, Iterator, TypeVar
 
 import numpy as np
 
 from . import _numchuck
 
 if TYPE_CHECKING:
+    from types import TracebackType
     from typing import Callable
 
     from numpy.typing import NDArray
@@ -148,7 +149,12 @@ class Chuck:
         """
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: "TracebackType | None",
+    ) -> None:
         """Exit context manager, ensuring proper cleanup.
 
         Calls close() to shutdown the ChucK instance. This is especially
@@ -488,7 +494,7 @@ class Chuck:
         """
         return self._chuck.replace_shred(shred_id, code, args)
 
-    def shred_info(self, shred_id: int) -> dict | None:
+    def shred_info(self, shred_id: int) -> dict[str, Any] | None:
         """Get information about a shred.
 
         Returns:
@@ -995,7 +1001,7 @@ class Shred:
         return self._id in self._chuck.shreds
 
     @property
-    def info(self) -> dict | None:
+    def info(self) -> dict[str, Any] | None:
         """Get information about the shred."""
         return self._chuck.shred_info(self._id)
 

@@ -13,13 +13,13 @@ import sys
 
 
 def main(
-    start_audio=False,
-    smart_enter=True,
-    show_sidebar=True,
-    project_name=None,
-    files=None,
-    force_stdin=False,
-):
+    start_audio: bool = False,
+    smart_enter: bool = True,
+    show_sidebar: bool = True,
+    project_name: str | None = None,
+    files: list[str] | None = None,
+    force_stdin: bool = False,
+) -> None:
     """
     Launch vanilla TUI REPL
 
@@ -49,8 +49,8 @@ def main(
         # Non-interactive mode - read from stdin
         from .repl import ChuckREPLStdin
 
-        repl = ChuckREPLStdin(project_name=project_name)
-        exit_code = repl.run(start_audio=start_audio, files=files or [])
+        stdin_repl = ChuckREPLStdin(project_name=project_name)
+        exit_code = stdin_repl.run(start_audio=start_audio, files=files or [])
         sys.exit(exit_code)
 
 

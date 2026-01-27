@@ -8,9 +8,13 @@ using the chump package manager.
 from __future__ import annotations
 
 import sys
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..packages import PackageManager
 
 
-def _get_manager():
+def _get_manager() -> "PackageManager":
     """Get package manager instance, handling import errors gracefully."""
     try:
         from ..packages import PackageManager
@@ -209,8 +213,8 @@ def cmd_pkg_update(name: str | None = None) -> None:
             print(f"Use 'numchuck pkg install {name}' to install it.")
             return
 
-        pkg = pm.get_package(name)
-        if pkg and pkg.latest_version == pkg.installed_version:
+        package = pm.get_package(name)
+        if package is not None and package.latest_version == package.installed_version:
             print(f"Package '{name}' is already at the latest version.")
             return
 

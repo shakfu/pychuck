@@ -12,7 +12,7 @@ Provides base class with common functionality:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout.containers import ConditionalContainer, Window
@@ -78,8 +78,8 @@ def format_shred_name(full_name: str, max_len: int = 56) -> str:
 
 
 def generate_shreds_table(
-    shreds: dict,
-    chuck,
+    shreds: dict[int, dict[str, Any]],
+    chuck: ChucK,
     use_pipes: bool = False,
 ) -> str:
     """Generate formatted table of active shreds.

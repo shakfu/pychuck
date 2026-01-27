@@ -1,18 +1,18 @@
 import ast
 import re
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Callable, Optional
 
 
 @dataclass
 class Command:
     type: str
-    args: dict
+    args: dict[str, Any]
 
 
 class CommandParser:
-    def __init__(self):
-        self.patterns = [
+    def __init__(self) -> None:
+        self.patterns: list[tuple[str, Callable[[re.Match[str]], Command]]] = [
             # Chuck-style word commands (new)
             (r"^add\s+(.+\.ck)$", self._spork_file),
             (r"^remove\s+all$", self._remove_all),
@@ -102,194 +102,195 @@ class CommandParser:
         # Don't generate error for things that look like ChucK code
         return None
 
-    def _spork_file(self, m):
+    def _spork_file(self, m: re.Match[str]) -> Command:
         return Command("spork_file", {"path": m.group(1)})
 
-    def _spork_code(self, m):
+    def _spork_code(self, m: re.Match[str]) -> Command:
         return Command("spork_code", {"code": m.group(1)})
 
-    def _remove_all(self, m):
+    def _remove_all(self, m: re.Match[str]) -> Command:
         return Command("remove_all", {})
 
-    def _remove_shred(self, m):
+    def _remove_shred(self, m: re.Match[str]) -> Command:
         return Command("remove_shred", {"id": int(m.group(1))})
 
-    def _replace_shred(self, m):
+    def _replace_shred(self, m: re.Match[str]) -> Command:
         return Command("replace_shred", {"id": int(m.group(1)), "code": m.group(2)})
 
-    def _replace_shred_file(self, m):
+    def _replace_shred_file(self, m: re.Match[str]) -> Command:
         return Command(
             "replace_shred_file", {"id": int(m.group(1)), "path": m.group(2)}
         )
 
-    def _status(self, m):
+    def _status(self, m: re.Match[str]) -> Command:
         return Command("status", {})
 
-    def _list_shreds(self, m):
+    def _list_shreds(self, m: re.Match[str]) -> Command:
         return Command("list_shreds", {})
 
-    def _shred_info(self, m):
+    def _shred_info(self, m: re.Match[str]) -> Command:
         return Command("shred_info", {"id": int(m.group(1))})
 
-    def _list_globals(self, m):
+    def _list_globals(self, m: re.Match[str]) -> Command:
         return Command("list_globals", {})
 
-    def _audio_info(self, m):
+    def _audio_info(self, m: re.Match[str]) -> Command:
         return Command("audio_info", {})
 
-    def _current_time(self, m):
+    def _current_time(self, m: re.Match[str]) -> Command:
         return Command("current_time", {})
 
-    def _set_global(self, m):
+    def _set_global(self, m: re.Match[str]) -> Command:
         name = m.group(1)
         value_str = m.group(2)
         return Command(
             "set_global", {"name": name, "value": self._parse_value(value_str)}
         )
 
-    def _get_global(self, m):
+    def _get_global(self, m: re.Match[str]) -> Command:
         return Command("get_global", {"name": m.group(1)})
 
-    def _broadcast_event(self, m):
+    def _broadcast_event(self, m: re.Match[str]) -> Command:
         return Command("broadcast_event", {"name": m.group(1)})
 
-    def _signal_event(self, m):
+    def _signal_event(self, m: re.Match[str]) -> Command:
         return Command("signal_event", {"name": m.group(1)})
 
-    def _start_audio(self, m):
+    def _start_audio(self, m: re.Match[str]) -> Command:
         return Command("start_audio", {})
 
-    def _stop_audio(self, m):
+    def _stop_audio(self, m: re.Match[str]) -> Command:
         return Command("stop_audio", {})
 
-    def _shutdown_audio(self, m):
+    def _shutdown_audio(self, m: re.Match[str]) -> Command:
         return Command("shutdown_audio", {})
 
-    def _clear_vm(self, m):
+    def _clear_vm(self, m: re.Match[str]) -> Command:
         return Command("clear_vm", {})
 
-    def _reset_id(self, m):
+    def _reset_id(self, m: re.Match[str]) -> Command:
         return Command("reset_id", {})
 
-    def _clear_screen(self, m):
+    def _clear_screen(self, m: re.Match[str]) -> Command:
         return Command("clear_screen", {})
 
-    def _compile_file(self, m):
+    def _compile_file(self, m: re.Match[str]) -> Command:
         return Command("compile_file", {"path": m.group(1)})
 
-    def _exec_code(self, m):
+    def _exec_code(self, m: re.Match[str]) -> Command:
         return Command("exec_code", {"code": m.group(1)})
 
-    def _shell(self, m):
+    def _shell(self, m: re.Match[str]) -> Command:
         return Command("shell", {"cmd": m.group(1)})
 
-    def _edit_shred(self, m):
+    def _edit_shred(self, m: re.Match[str]) -> Command:
         return Command("edit_shred", {"id": int(m.group(1))})
 
-    def _open_editor(self, m):
+    def _open_editor(self, m: re.Match[str]) -> Command:
         return Command("open_editor", {})
 
-    def _watch(self, m):
+    def _watch(self, m: re.Match[str]) -> Command:
         return Command("watch", {})
 
-    def _watch_file(self, m):
+    def _watch_file(self, m: re.Match[str]) -> Command:
         return Command("watch_file", {"path": m.group(1)})
 
-    def _unwatch_file(self, m):
+    def _unwatch_file(self, m: re.Match[str]) -> Command:
         return Command("unwatch_file", {"path": m.group(1)})
 
-    def _unwatch_all(self, m):
+    def _unwatch_all(self, m: re.Match[str]) -> Command:
         return Command("unwatch_all", {})
 
-    def _list_watched(self, m):
+    def _list_watched(self, m: re.Match[str]) -> Command:
         return Command("list_watched", {})
 
-    def _toggle_waveform(self, m):
+    def _toggle_waveform(self, m: re.Match[str]) -> Command:
         return Command("toggle_waveform", {})
 
-    def _waveform_on(self, m):
+    def _waveform_on(self, m: re.Match[str]) -> Command:
         return Command("waveform_on", {})
 
-    def _waveform_off(self, m):
+    def _waveform_off(self, m: re.Match[str]) -> Command:
         return Command("waveform_off", {})
 
-    def _record_start(self, m):
+    def _record_start(self, m: re.Match[str]) -> Command:
         name = m.group(1) if m.group(1) else None
         return Command("record_start", {"name": name})
 
-    def _record_stop(self, m):
+    def _record_stop(self, m: re.Match[str]) -> Command:
         return Command("record_stop", {})
 
-    def _record_save(self, m):
+    def _record_save(self, m: re.Match[str]) -> Command:
         return Command("record_save", {"name": m.group(1)})
 
-    def _record_discard(self, m):
+    def _record_discard(self, m: re.Match[str]) -> Command:
         return Command("record_discard", {})
 
-    def _record_status(self, m):
+    def _record_status(self, m: re.Match[str]) -> Command:
         return Command("record_status", {})
 
-    def _playback(self, m):
+    def _playback(self, m: re.Match[str]) -> Command:
         name = m.group(1)
         speed = float(m.group(2)) if m.group(2) else 1.0
         return Command("playback", {"name": name, "speed": speed})
 
-    def _playback_pause(self, m):
+    def _playback_pause(self, m: re.Match[str]) -> Command:
         return Command("playback_pause", {})
 
-    def _playback_resume(self, m):
+    def _playback_resume(self, m: re.Match[str]) -> Command:
         return Command("playback_resume", {})
 
-    def _playback_stop(self, m):
+    def _playback_stop(self, m: re.Match[str]) -> Command:
         return Command("playback_stop", {})
 
-    def _list_recordings(self, m):
+    def _list_recordings(self, m: re.Match[str]) -> Command:
         return Command("list_recordings", {})
 
-    def _load_snippet(self, m):
+    def _load_snippet(self, m: re.Match[str]) -> Command:
         return Command("load_snippet", {"name": m.group(1)})
 
-    def _midi_learn(self, m):
+    def _midi_learn(self, m: re.Match[str]) -> Command:
         name = m.group(1)
         min_val = float(m.group(2)) if m.group(2) else 0.0
         max_val = float(m.group(3)) if m.group(3) else 1.0
         return Command("midi_learn", {"name": name, "min": min_val, "max": max_val})
 
-    def _midi_list(self, m):
+    def _midi_list(self, m: re.Match[str]) -> Command:
         return Command("midi_list", {})
 
-    def _midi_remove(self, m):
+    def _midi_remove(self, m: re.Match[str]) -> Command:
         return Command("midi_remove", {"name": m.group(1)})
 
-    def _midi_start(self, m):
+    def _midi_start(self, m: re.Match[str]) -> Command:
         return Command("midi_start", {})
 
-    def _midi_stop(self, m):
+    def _midi_stop(self, m: re.Match[str]) -> Command:
         return Command("midi_stop", {})
 
-    def _midi_status(self, m):
+    def _midi_status(self, m: re.Match[str]) -> Command:
         return Command("midi_status", {})
 
-    def _midi_monitor(self, m):
+    def _midi_monitor(self, m: re.Match[str]) -> Command:
         return Command("midi_monitor", {})
 
-    def _osc_start(self, m):
+    def _osc_start(self, m: re.Match[str]) -> Command:
         port = int(m.group(1)) if m.group(1) else 9000
         return Command("osc_start", {"port": port})
 
-    def _osc_stop(self, m):
+    def _osc_stop(self, m: re.Match[str]) -> Command:
         return Command("osc_stop", {})
 
-    def _osc_status(self, m):
+    def _osc_status(self, m: re.Match[str]) -> Command:
         return Command("osc_status", {})
 
-    def _parse_value(self, s):
+    def _parse_value(self, s: str) -> int | float | str | list[Any]:
         """Parse value from string"""
         s = s.strip()
 
         # Array
         if s.startswith("[") and s.endswith("]"):
-            return ast.literal_eval(s)
+            result: list[Any] = ast.literal_eval(s)
+            return result
 
         # String
         if s.startswith('"') and s.endswith('"'):

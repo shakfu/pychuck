@@ -5,7 +5,7 @@ Handles versioning scheme: file.ck → file-1.ck → file-1-1.ck
 """
 
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 
 class ProjectVersion:
@@ -108,7 +108,7 @@ class Project:
         """List all versioned files in project."""
         return sorted(self.project_dir.glob("*.ck"))
 
-    def get_timeline(self) -> list[dict]:
+    def get_timeline(self) -> list[dict[str, Any]]:
         """Get chronological timeline of all versions."""
         files = []
         for path in self.list_versions():

@@ -17,7 +17,7 @@ from ..paths import (
 )
 
 
-def get_snippet_info(name: str) -> dict | None:
+def get_snippet_info(name: str) -> dict[str, str] | None:
     """Get information about a snippet.
 
     Local snippets take precedence over global snippets.
@@ -33,8 +33,8 @@ def get_snippet_info(name: str) -> dict | None:
         return None
 
     return {
-        "source": source,
-        "path": path,
+        "source": source or "unknown",
+        "path": str(path),
         "content": path.read_text(),
     }
 

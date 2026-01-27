@@ -24,7 +24,7 @@ def _chump_available() -> bool:
         return False
 
 
-def create_parser():
+def create_parser() -> argparse.ArgumentParser:
     """Create the argument parser with all subcommands."""
     parser = argparse.ArgumentParser(
         prog="numchuck",
@@ -248,7 +248,7 @@ def create_parser():
     return parser
 
 
-def cmd_edit(args):
+def cmd_edit(args: argparse.Namespace) -> None:
     """Launch the multi-tab editor."""
     from ..tui.editor import main as editor_main
 
@@ -257,7 +257,7 @@ def cmd_edit(args):
     )
 
 
-def cmd_repl(args):
+def cmd_repl(args: argparse.Namespace) -> None:
     """Launch the interactive REPL."""
     from ..tui.tui import main as tui_main
 
@@ -275,7 +275,7 @@ def cmd_repl(args):
     )
 
 
-def cmd_run(args):
+def cmd_run(args: argparse.Namespace) -> None:
     """Execute ChucK files from command line."""
     from .executor import execute_files
 
@@ -288,7 +288,7 @@ def cmd_run(args):
     )
 
 
-def cmd_version(args):
+def cmd_version(args: argparse.Namespace) -> None:
     """Show version information."""
     from .._numchuck import version
     from .._version import __version__
@@ -297,7 +297,7 @@ def cmd_version(args):
     print(f"ChucK version: {version()}")
 
 
-def cmd_info(args):
+def cmd_info(args: argparse.Namespace) -> None:
     """Show ChucK and numchuck info."""
     from .._numchuck import ChucK, version
     from .._version import __version__
@@ -308,7 +308,7 @@ def cmd_info(args):
     print(f"Active VMs: {ChucK.num_vms()}")
 
 
-def cmd_export(args):
+def cmd_export(args: argparse.Namespace) -> None:
     """Export ChucK files to WAV audio."""
     from .. import RenderError, to_wav
 
@@ -332,7 +332,7 @@ def cmd_export(args):
         sys.exit(1)
 
 
-def cmd_snippets(args):
+def cmd_snippets(args: argparse.Namespace) -> None:
     """Manage code snippets."""
     from .snippets import (
         cmd_snippets_list,
@@ -351,7 +351,7 @@ def cmd_snippets(args):
         cmd_snippets_list()
 
 
-def cmd_watch(args):
+def cmd_watch(args: argparse.Namespace) -> None:
     """Watch ChucK files and auto-reload on changes."""
     from .watcher import cmd_watch as run_watch
 
@@ -363,7 +363,7 @@ def cmd_watch(args):
     )
 
 
-def cmd_pkg(args):
+def cmd_pkg(args: argparse.Namespace) -> None:
     """Manage ChucK packages."""
     from .packages import (
         cmd_pkg_info,
@@ -396,7 +396,7 @@ def cmd_pkg(args):
         cmd_pkg_list()
 
 
-def main():
+def main() -> None:
     """Main CLI entry point."""
     parser = create_parser()
     args = parser.parse_args()

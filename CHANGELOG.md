@@ -282,8 +282,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
     - `from numchuck.lang import ChuckLexer, KEYWORDS, ...`
 
 - **Python Version Support**:
-  - Dropped Python 3.8 support (EOL October 2024)
-  - Now requires Python 3.9+
+  - Dropped Python 3.8 and 3.9 support (3.9 EOL October 2025, union type syntax requires 3.10+)
+  - Now requires Python 3.10+
   - Added Python 3.13 classifier
 
 - **Test Count**: 963 tests (up from 603)
@@ -324,6 +324,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Removed problematic static callback clearing from `ChuckREPL.cleanup()`
   - Setting `set_stdout_callback`/`set_stderr_callback` to lambdas during cleanup caused segfault at interpreter shutdown
   - Tests now use `app_state.setup()` instead of `repl.setup()` to avoid setting static callbacks
+
+- **Full `mypy --strict` compliance** (150 type errors fixed across 17 files):
+  - `parser.py`: Added type annotations to all 50+ command handler methods, `Command.args` typed as `dict[str, Any]`
+  - `midi.py`: Fixed `dict` type parameters, added `Iterator` return type for `__iter__`
+  - `recorder.py`: Fixed `dict` type parameters, added explicit casts in `from_dict` methods
+  - `waveform.py`: Fixed `deque` type parameter
+  - `render.py`: Fixed `NDArray` type parameters for return types
+  - `api.py`: Added `TracebackType` for `__exit__`, typed `shred_info` return as `dict[str, Any]`
+  - `packages.py`: Fixed `_from_info` parameter type
+  - `cli/packages.py`: Added `_get_manager` return type annotation
+  - `cli/snippets.py`: Fixed `get_snippet_info` return type
+  - `session.py`: Added `_file_watcher` attribute, fixed `get_shred_name` return type
+  - `common.py`: Added type parameters to `generate_shreds_table`
+  - `commands.py`: Fixed `_get_or_create_watcher` return type, removed unnecessary `hasattr` check
+  - `executor.py`: Added return type and `FrameType` parameter type to `signal_handler`
+  - `repl.py`: Added type annotations to all inner functions (15+ nested handlers), removed unused type ignores
+  - `editor.py`: Added type annotations to all 10 key binding handlers
+  - `cli/main.py`: Added return type annotations to all 12 command functions
 
 ## [0.1.8]
 

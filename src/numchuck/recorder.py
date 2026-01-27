@@ -12,7 +12,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
     pass
@@ -32,7 +32,7 @@ class RecordedAction:
     action_type: str  # "command" or "code"
     content: str
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, float | str]:
         """Convert to dictionary for JSON serialization."""
         return {
             "timestamp": self.timestamp,
@@ -41,12 +41,12 @@ class RecordedAction:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "RecordedAction":
+    def from_dict(cls, data: dict[str, float | str]) -> "RecordedAction":
         """Create from dictionary."""
         return cls(
-            timestamp=data["timestamp"],
-            action_type=data["action_type"],
-            content=data["content"],
+            timestamp=float(data["timestamp"]),
+            action_type=str(data["action_type"]),
+            content=str(data["content"]),
         )
 
 
@@ -64,9 +64,9 @@ class RecordedSession:
     name: str
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     actions: list[RecordedAction] = field(default_factory=list)
-    metadata: dict = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "name": self.name,
@@ -76,7 +76,7 @@ class RecordedSession:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "RecordedSession":
+    def from_dict(cls, data: dict[str, Any]) -> "RecordedSession":
         """Create from dictionary."""
         return cls(
             name=data["name"],
@@ -154,7 +154,7 @@ class SessionRecorder:
         """Get current session name, or None if not recording."""
         return self._session.name if self._session else None
 
-    def start(self, name: str, metadata: dict | None = None) -> None:
+    def start(self, name: str, metadata: dict[str, Any] | None = None) -> None:
         """Start recording a new session.
 
         Args:

@@ -3,6 +3,9 @@ from __future__ import annotations
 import sys
 from typing import TYPE_CHECKING, Any
 
+from prompt_toolkit.key_binding import KeyPressEvent
+from prompt_toolkit.formatted_text import AnyFormattedText
+
 from .parser import CommandParser
 from .commands import CommandExecutor
 from ..paths import get_history_file, ensure_numchuck_directories
@@ -139,7 +142,7 @@ class ChuckREPLStdin:
 
         # Break executor references
         if hasattr(self, "executor") and self.executor is not None:
-            self.executor._chuck = None  # type: ignore[assignment]
+            self.executor._chuck = None
             self.executor.session = None  # type: ignore[assignment]
             self.executor = None  # type: ignore[assignment]
 
@@ -223,7 +226,7 @@ class ChuckREPL:
         self.max_log_lines = 100  # Keep last 100 messages
 
         # Create topbar content function (simplified to show just IDs)
-        def get_topbar_text():
+        def get_topbar_text() -> str:
             """Generate topbar content showing active shred IDs"""
             if self.session.shreds:
                 shred_ids = " ".join(
@@ -234,7 +237,7 @@ class ChuckREPL:
                 return "No active shreds  (F2: table)"
 
         # Create error bar function
-        def get_error_text():
+        def get_error_text() -> str:
             """Show error message if any"""
             if self.error_message:
                 return f"✗ {self.error_message}"
@@ -288,7 +291,7 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
         )
 
         # Create shreds table function
-        def get_shreds_table():
+        def get_shreds_table() -> str:
             """Generate formatted table of active shreds"""
             return generate_shreds_table(
                 self.session.shreds, self.chuck, use_pipes=False
@@ -308,7 +311,7 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
         )
 
         # Create bottom toolbar function (shows VM status)
-        def get_bottom_toolbar():
+        def get_bottom_toolbar() -> str:
             try:
                 audio_status = "ON" if self.session.audio_running else "OFF"
                 now = self.chuck.now()
@@ -336,16 +339,16 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
 
         # Topbar visibility condition
         @Condition
-        def topbar_visible():
+        def topbar_visible() -> bool:
             return self.show_sidebar
 
         @kb.add("c-s")
-        def _(event):
+        def _(event: KeyPressEvent) -> None:
             """Forward history search with Ctrl+S"""
             event.current_buffer.history_forward()
 
         @kb.add("f2")
-        def _(event):
+        def _(event: KeyPressEvent) -> None:
             """Toggle shreds table window with F2"""
             self.show_shreds_window = not self.show_shreds_window
             # Update shreds table content when opening
@@ -354,19 +357,19 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
             event.app.invalidate()  # Force redraw
 
         @kb.add("f1")
-        def _(event):
+        def _(event: KeyPressEvent) -> None:
             """Toggle help window with F1"""
             self.show_help_window = not self.show_help_window
             event.app.invalidate()  # Force redraw
 
         @kb.add("f3")
-        def _(event):
+        def _(event: KeyPressEvent) -> None:
             """Toggle log window with F3"""
             self.show_log_window = not self.show_log_window
             event.app.invalidate()  # Force redraw
 
         @kb.add("c-q")
-        def _(event):
+        def _(event: KeyPressEvent) -> None:
             """Exit with Ctrl-Q"""
             event.app.exit()
 
@@ -374,7 +377,7 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
         ensure_numchuck_directories()
 
         # Prompt continuation for multiline input
-        def get_continuation(width, line_number, is_soft_wrap):
+        def get_continuation(width: int, line_number: int, is_soft_wrap: bool) -> str:
             return "... " if line_number > 0 else ""
 
         # Smart multiline filter - determines if we should stay in multiline mode
@@ -382,7 +385,7 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
         from prompt_toolkit.application import get_app
 
         @Condition
-        def should_continue_multiline():
+        def should_continue_multiline() -> bool:
             if not self.smart_enter:
                 return True  # Always multiline, require Esc+Enter/Ctrl+Enter
 
@@ -454,7 +457,7 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
         )
 
         # Create main input window with prompt
-        def get_prompt_text():
+        def get_prompt_text() -> AnyFormattedText:
             prompt_html = HTML(
                 "<prompt-bracket>[</prompt-bracket><prompt-chuck>=></prompt-chuck><prompt-bracket>]</prompt-bracket> "
             )
@@ -477,7 +480,7 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
 
         # Create error bar window (conditional)
         @Condition
-        def error_visible():
+        def error_visible() -> bool:
             return bool(self.error_message)
 
         error_window = ConditionalContainer(
@@ -491,21 +494,21 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
 
         # Create help window (conditional)
         @Condition
-        def help_visible():
+        def help_visible() -> bool:
             return self.show_help_window
 
         help_window = ConditionalContainer(self.help_area, filter=help_visible)
 
         # Create shreds table window (conditional)
         @Condition
-        def shreds_visible():
+        def shreds_visible() -> bool:
             return self.show_shreds_window
 
         shreds_window = ConditionalContainer(self.shreds_area, filter=shreds_visible)
 
         # Create log window (conditional)
         @Condition
-        def log_visible():
+        def log_visible() -> bool:
             return self.show_log_window
 
         log_window = ConditionalContainer(self.log_area, filter=log_visible)
@@ -695,7 +698,7 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
 
         # Break executor references
         if hasattr(self, "executor") and self.executor is not None:
-            self.executor._chuck = None  # type: ignore[assignment]
+            self.executor._chuck = None
             self.executor.session = None  # type: ignore[assignment]
             self.executor = None  # type: ignore[assignment]
 

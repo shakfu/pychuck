@@ -27,7 +27,7 @@ def render(
     sample_rate: int = 44100,
     channels: int = 2,
     dtype: type = np.float32,
-) -> "NDArray":
+) -> "NDArray[np.float32] | NDArray[np.int16]":
     """Render ChucK code to a numpy array.
 
     Args:
@@ -83,7 +83,7 @@ def render_file(
     sample_rate: int = 44100,
     channels: int = 2,
     dtype: type = np.float32,
-) -> "NDArray":
+) -> "NDArray[np.float32] | NDArray[np.int16]":
     """Render ChucK files to a numpy array.
 
     Args:

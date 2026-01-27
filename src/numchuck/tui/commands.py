@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from .._numchuck import ChucK
     from .parser import Command
     from .session import ChuckSession
+    from ..watcher import FileWatcher
 
 
 class CommandExecutor:
@@ -108,7 +109,8 @@ class CommandExecutor:
         """
         handler = getattr(self, f"_cmd_{cmd.type}", None)
         if handler:
-            return handler(cmd.args)
+            result: str | None = handler(cmd.args)
+            return result
         else:
             return f"Unknown command type: {cmd.type}"
 
@@ -478,12 +480,9 @@ class CommandExecutor:
     # File watching commands
     # -------------------------------------------------------------------------
 
-    def _get_or_create_watcher(self):
+    def _get_or_create_watcher(self) -> "FileWatcher":
         """Get or create the file watcher instance."""
-        if (
-            not hasattr(self.session, "_file_watcher")
-            or self.session._file_watcher is None
-        ):
+        if self.session._file_watcher is None:
             from ..watcher import FileWatcher
 
             def on_reload(path: Path, shred_id: int) -> None:
@@ -493,7 +492,7 @@ class CommandExecutor:
                 self._logger.error(f"[watch error] {path.name}: {error}")
 
             self.session._file_watcher = FileWatcher(
-                chuck=self.chuck,
+                chuck=self.chuck,  # type: ignore[arg-type]
                 session=self.session,
                 on_reload=on_reload,
                 on_error=on_error,

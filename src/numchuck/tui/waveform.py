@@ -189,7 +189,7 @@ class WaveformBuffer:
 
     size: int = 4096
     channels: int = 2
-    _buffer: deque = field(default_factory=deque, repr=False)
+    _buffer: deque[float] = field(default_factory=deque, repr=False)
     _peak_left: float = field(default=0.0, repr=False)
     _peak_right: float = field(default=0.0, repr=False)
     _peak_decay: float = field(default=0.95, repr=False)

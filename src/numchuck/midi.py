@@ -7,7 +7,7 @@ Provides MIDI CC to ChucK global variable mapping and ChucK code generation.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Iterator
 
 if TYPE_CHECKING:
     pass
@@ -40,7 +40,7 @@ class MIDIMapping:
         if not self.global_name:
             raise ValueError("Global name cannot be empty")
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, int | str | float]:
         """Convert to dictionary for serialization."""
         return {
             "channel": self.channel,
@@ -51,14 +51,14 @@ class MIDIMapping:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "MIDIMapping":
+    def from_dict(cls, data: dict[str, int | str | float]) -> "MIDIMapping":
         """Create from dictionary."""
         return cls(
-            channel=data["channel"],
-            cc_number=data["cc_number"],
-            global_name=data["global_name"],
-            min_value=data.get("min_value", 0.0),
-            max_value=data.get("max_value", 1.0),
+            channel=int(data["channel"]),
+            cc_number=int(data["cc_number"]),
+            global_name=str(data["global_name"]),
+            min_value=float(data.get("min_value", 0.0)),
+            max_value=float(data.get("max_value", 1.0)),
         )
 
     def scale_value(self, cc_value: int) -> float:
@@ -157,12 +157,14 @@ class MIDIMappings:
         """Remove all mappings."""
         self.mappings.clear()
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, list[dict[str, int | str | float]]]:
         """Convert to dictionary for serialization."""
         return {"mappings": [m.to_dict() for m in self.mappings]}
 
     @classmethod
-    def from_dict(cls, data: dict) -> "MIDIMappings":
+    def from_dict(
+        cls, data: dict[str, list[dict[str, int | str | float]]]
+    ) -> "MIDIMappings":
         """Create from dictionary."""
         mappings = [MIDIMapping.from_dict(m) for m in data.get("mappings", [])]
         return cls(mappings=mappings)
@@ -171,7 +173,7 @@ class MIDIMappings:
         """Return number of mappings."""
         return len(self.mappings)
 
-    def __iter__(self):
+    def __iter__(self) -> "Iterator[MIDIMapping]":
         """Iterate over mappings."""
         return iter(self.mappings)
 

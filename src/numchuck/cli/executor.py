@@ -11,6 +11,7 @@ import sys
 import time
 import signal
 from pathlib import Path
+from types import FrameType
 from typing import List, Optional
 
 
@@ -26,7 +27,7 @@ def execute_files(
     channels: int = 2,
     silent: bool = False,
     duration: Optional[float] = None,
-):
+) -> None:
     """
     Execute ChucK files from command line.
 
@@ -77,7 +78,7 @@ def execute_files(
     # Setup signal handler for graceful shutdown
     shutdown_requested = [False]  # Use list to allow modification in nested function
 
-    def signal_handler(sig, frame):
+    def signal_handler(sig: int, frame: FrameType | None) -> None:
         print("\nShutdown requested...", file=sys.stderr)
         shutdown_requested[0] = True
 

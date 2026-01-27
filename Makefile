@@ -61,7 +61,7 @@ snap:
 	@git add --all . && git commit -m 'snap' && git push
 
 typecheck:
-	@uv run mypy src/
+	@uv run mypy --strict src/
 
 lint:
 	@uv run ruff check --fix src/
