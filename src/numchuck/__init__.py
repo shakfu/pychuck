@@ -31,9 +31,16 @@ Error Handling:
     - FileNotFoundError: ChucK file not found
 """
 
-from typing import Any
-
 from ._version import __version__, __version_info__
+
+# Core API
+from .api import Chuck, GlobalFloat, GlobalInt, GlobalString, Shred
+
+# Rendering
+from .render import RenderError, render, render_file, to_wav
+
+# Configuration
+from .config import Config, get_config, load_config, save_config
 
 __all__ = [
     # Version
@@ -56,50 +63,3 @@ __all__ = [
     "get_config",
     "save_config",
 ]
-
-# Lazy imports to avoid circular import with _numchuck extension module.
-# When api.py does "from . import _numchuck", it needs the numchuck package
-# to be fully initialized. By deferring imports until first access, we ensure
-# the package initialization completes before api.py is loaded.
-
-_api_names = {"Chuck", "Shred", "GlobalInt", "GlobalFloat", "GlobalString"}
-_render_names = {"render", "render_file", "to_wav", "RenderError"}
-_config_names = {"Config", "load_config", "get_config", "save_config"}
-
-
-def __getattr__(name: str) -> Any:
-    if name in _api_names:
-        from .api import Chuck, GlobalFloat, GlobalInt, GlobalString, Shred
-
-        globals().update(
-            Chuck=Chuck,
-            Shred=Shred,
-            GlobalInt=GlobalInt,
-            GlobalFloat=GlobalFloat,
-            GlobalString=GlobalString,
-        )
-        return globals()[name]
-
-    if name in _render_names:
-        from .render import RenderError, render, render_file, to_wav
-
-        globals().update(
-            render=render,
-            render_file=render_file,
-            to_wav=to_wav,
-            RenderError=RenderError,
-        )
-        return globals()[name]
-
-    if name in _config_names:
-        from .config import Config, get_config, load_config, save_config
-
-        globals().update(
-            Config=Config,
-            load_config=load_config,
-            get_config=get_config,
-            save_config=save_config,
-        )
-        return globals()[name]
-
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
