@@ -138,21 +138,6 @@ def test_info_command_parsing():
     assert args.command == 'info'
 
 
-def test_tui_command_backward_compatibility():
-    """Test tui command is still supported for backward compatibility."""
-    from numchuck.cli.main import create_parser
-
-    parser = create_parser()
-
-    args = parser.parse_args(['tui'])
-    assert args.command == 'tui'
-    assert args.start_audio is False
-
-    args = parser.parse_args(['tui', '--start-audio', '--no-smart-enter'])
-    assert args.start_audio is True
-    assert args.no_smart_enter is True
-
-
 def test_command_handlers_exist():
     """Test that all command handlers are defined."""
     from numchuck.cli import main

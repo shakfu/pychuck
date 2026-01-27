@@ -17,6 +17,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ### Added
 
+- **Package Management (Optional)** - Integration of chump package manager:
+  - New `_chump` nanobind module providing Python bindings for chump
+  - `numchuck.packages` module with `Package` dataclass and `PackageManager` class
+  - CLI commands via `numchuck pkg`:
+    - `pkg list [--installed]` - List available/installed packages
+    - `pkg info <name>` - Show package details
+    - `pkg install <name>[@version]` - Install packages
+    - `pkg uninstall <name> [--force]` - Remove packages
+    - `pkg update [<name>]` - Update package(s)
+    - `pkg refresh` - Update package manifest
+    - `pkg search <query>` - Search packages by name/description/keywords
+    - `pkg path` - Show packages directory
+  - Build with `cmake -DNUMCHUCK_ENABLE_CHUMP=ON ..` (disabled by default)
+  - Dependencies: nlohmann_json, minizip-ng (via FetchContent), curl, OpenSSL, zlib (system)
+  - Shares package location with native chump (`~/.chuck/packages/`)
+  - Files: `thirdparty/chump/CMakeLists.txt`, `src/_chump.cpp`, `src/numchuck/packages.py`, `src/numchuck/cli/packages.py`, `tests/test_packages.py`
+
 - **Offline Audio Rendering API** (`src/numchuck/render.py`):
   - `render(code, duration, sample_rate, channels, dtype)` - Render ChucK code to numpy array
   - `render_file(files, duration, sample_rate, channels, dtype)` - Render ChucK files to numpy array

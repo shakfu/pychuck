@@ -1,0 +1,144 @@
+{
+    "manifest-version": 1,
+    "packages": [
+        {
+            "name": "Butt",
+            "authors": ["AuthorA", "AuthorB"],
+            "homepage": "http://example.com",
+            "repository": "http://repo.com",
+            "license": "MIT",
+            "description": "DescriptionA",
+            "keywords": ["KeywordA", "KeywordB"],
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "api_version": {
+                        "major": 9,
+                        "minor": 0
+                    },
+                    "language_version_min": {
+                        "mega": 1,
+                        "major": 5,
+                        "minor": 2,
+                        "patch": 7
+                    },
+                    "os": "linux",
+                    "arch": "x86_64",
+                    "files": [
+                        {
+                            "url": "https://ccrma.stanford.edu/~nshaheed/chugins/Hydra/linux/butt.chug",
+                            "local_dir": "./",
+                            "file_type": "package",
+                            "checksum": "1234"
+                        }
+                    ]
+                },
+                {
+                    "version": "1.0.0",
+                    "api_version": {
+                        "major": 9,
+                        "minor": 0
+                    },
+                    "language_version_min": {
+                        "mega": 1,
+                        "major": 5,
+                        "minor": 2,
+                        "patch": 1
+                    },
+                    "os": "linux",
+                    "arch": "x86_64",
+                    "files": [
+                        {
+                            "url": "https://ccrma.stanford.edu/~nshaheed/chugins/Hydra/linux/butt.chug",
+                            "local_dir": "./",
+                            "file_type": "package",
+                            "checksum": "1234"
+                        }
+                    ]
+                },
+                {
+                    "version": "1.0.0",
+                    "api_version": {
+                        "major": 9,
+                        "minor": 0
+                    },
+                    "language_version_min": {
+                        "mega": 1,
+                        "major": 5,
+                        "minor": 2,
+                        "patch": 1
+                    },
+                    "os": "mac",
+                    "arch": "universal",
+                    "files": [
+                        {
+                            "url": "https://ccrma.stanford.edu/~nshaheed/chugins/Hydra/linux/butt.chug",
+                            "local_dir": "./",
+                            "file_type": "package",
+                            "checksum": "1234"
+                        }
+                    ]
+                },
+                {
+                    "version": "0.9.1",
+                    "api_version": {
+                        "major": 8,
+                        "minor": 8
+                    },
+                    "language_version_min": {
+                        "mega": 1,
+                        "major": 5,
+                        "minor": 0,
+                        "patch": 1
+                    },
+                    "language_version_max": {
+                        "mega": 1,
+                        "major": 5,
+                        "minor": 2,
+                        "patch": 1
+                    },
+                    "os": "linux",
+                    "arch": "x86_64",
+                    "files": [
+                        {
+                            "url": "https://ccrma.stanford.edu/~nshaheed/chugins/Hydra/linux/butt.chug",
+                            "local_dir": "./",
+                            "file_type": "package",
+                            "checksum": "1234"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "ButtFiles",
+            "authors": ["AuthorA", "AuthorB"],
+            "homepage": "http://example.com",
+            "repository": "http://repo.com",
+            "license": "MIT",
+            "description": "DescriptionA",
+            "keywords": ["KeywordA", "KeywordB"],
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "language_version_min": {
+                        "mega": 1,
+                        "major": 5,
+                        "minor": 2,
+                        "patch": 7
+                    },
+                    "os": "linux",
+                    "arch": "x86_64",
+                    "files": [
+                        {
+                            "local_dir": "./boot",
+                            "url": "https://ccrma.stanford.edu/~nshaheed/chugins/Hydra/linux/butt.chug",
+                            "file_type": "package",
+                            "checksum": "1234"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

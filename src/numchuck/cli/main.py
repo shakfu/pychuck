@@ -14,6 +14,16 @@ import sys
 import argparse
 
 
+def _chump_available() -> bool:
+    """Check if the _chump module is available."""
+    try:
+        from .. import _chump  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
 def create_parser():
     """Create the argument parser with all subcommands."""
     parser = argparse.ArgumentParser(
@@ -167,25 +177,68 @@ def create_parser():
         help="Suppress status messages",
     )
 
-    # tui subcommand (backward compatibility - maps to repl)
-    tui_parser = subparsers.add_parser(
-        "tui", help="Launch interactive REPL (alias for repl)"
-    )
-    tui_parser.add_argument(
-        "--start-audio",
-        action="store_true",
-        help="Start audio automatically on REPL startup",
-    )
-    tui_parser.add_argument(
-        "--no-smart-enter",
-        action="store_true",
-        help="Disable smart Enter mode (always require Esc+Enter to submit)",
-    )
-    tui_parser.add_argument(
-        "--no-sidebar",
-        action="store_true",
-        help="Hide topbar showing active shreds (can toggle with F2)",
-    )
+    # pkg subcommand - package management (only if _chump is available)
+    if _chump_available():
+        pkg_parser = subparsers.add_parser("pkg", help="Manage ChucK packages")
+        pkg_subparsers = pkg_parser.add_subparsers(
+            dest="pkg_command", help="Package commands"
+        )
+
+        # pkg list
+        pkg_list_parser = pkg_subparsers.add_parser(
+            "list", help="List available packages"
+        )
+        pkg_list_parser.add_argument(
+            "--installed",
+            action="store_true",
+            help="Show only installed packages",
+        )
+
+        # pkg info
+        pkg_info_parser = pkg_subparsers.add_parser("info", help="Show package details")
+        pkg_info_parser.add_argument("name", help="Package name")
+
+        # pkg install
+        pkg_install_parser = pkg_subparsers.add_parser(
+            "install", help="Install a package"
+        )
+        pkg_install_parser.add_argument(
+            "package",
+            help="Package name (optionally with version: name@version)",
+        )
+
+        # pkg uninstall
+        pkg_uninstall_parser = pkg_subparsers.add_parser(
+            "uninstall", help="Uninstall a package"
+        )
+        pkg_uninstall_parser.add_argument("name", help="Package name")
+        pkg_uninstall_parser.add_argument(
+            "--force",
+            action="store_true",
+            help="Force removal even if files have been modified",
+        )
+
+        # pkg update
+        pkg_update_parser = pkg_subparsers.add_parser(
+            "update", help="Update a package or all packages"
+        )
+        pkg_update_parser.add_argument(
+            "name",
+            nargs="?",
+            help="Package name (omit to update all)",
+        )
+
+        # pkg refresh
+        pkg_subparsers.add_parser("refresh", help="Update package manifest from server")
+
+        # pkg search
+        pkg_search_parser = pkg_subparsers.add_parser(
+            "search", help="Search for packages"
+        )
+        pkg_search_parser.add_argument("query", help="Search query")
+
+        # pkg path
+        pkg_subparsers.add_parser("path", help="Show packages directory path")
 
     return parser
 
@@ -303,6 +356,39 @@ def cmd_watch(args):
     )
 
 
+def cmd_pkg(args):
+    """Manage ChucK packages."""
+    from .packages import (
+        cmd_pkg_info,
+        cmd_pkg_install,
+        cmd_pkg_list,
+        cmd_pkg_path,
+        cmd_pkg_refresh,
+        cmd_pkg_search,
+        cmd_pkg_uninstall,
+        cmd_pkg_update,
+    )
+
+    if args.pkg_command == "list" or args.pkg_command is None:
+        cmd_pkg_list(installed_only=getattr(args, "installed", False))
+    elif args.pkg_command == "info":
+        cmd_pkg_info(args.name)
+    elif args.pkg_command == "install":
+        cmd_pkg_install(args.package)
+    elif args.pkg_command == "uninstall":
+        cmd_pkg_uninstall(args.name, force=args.force)
+    elif args.pkg_command == "update":
+        cmd_pkg_update(args.name)
+    elif args.pkg_command == "refresh":
+        cmd_pkg_refresh()
+    elif args.pkg_command == "search":
+        cmd_pkg_search(args.query)
+    elif args.pkg_command == "path":
+        cmd_pkg_path()
+    else:
+        cmd_pkg_list()
+
+
 def main():
     """Main CLI entry point."""
     parser = create_parser()
@@ -312,7 +398,6 @@ def main():
     command_handlers = {
         "edit": cmd_edit,
         "repl": cmd_repl,
-        "tui": cmd_repl,  # Backward compatibility
         "run": cmd_run,
         "version": cmd_version,
         "info": cmd_info,
@@ -320,6 +405,10 @@ def main():
         "snippets": cmd_snippets,
         "watch": cmd_watch,
     }
+
+    # Add pkg handler only if _chump is available
+    if _chump_available():
+        command_handlers["pkg"] = cmd_pkg
 
     # Execute command
     if args.command in command_handlers:

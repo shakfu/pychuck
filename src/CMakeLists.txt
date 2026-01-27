@@ -86,3 +86,38 @@ set_target_properties(_numchuck PROPERTIES
 install(TARGETS _numchuck LIBRARY DESTINATION numchuck)
 
 
+# ============================================================================
+# _chump module - ChucK package manager bindings (optional)
+# ============================================================================
+
+if(NUMCHUCK_ENABLE_CHUMP)
+    nanobind_add_module(
+      _chump
+      STABLE_ABI
+      NB_STATIC
+      ${CMAKE_SOURCE_DIR}/src/_chump.cpp
+    )
+
+    target_include_directories(_chump
+        PRIVATE
+        ${CMAKE_SOURCE_DIR}/thirdparty/chump/include
+        ${CMAKE_SOURCE_DIR}/thirdparty/chugins/chuck/include
+    )
+
+    target_link_libraries(_chump
+        PRIVATE
+        chump_lib
+    )
+
+    target_compile_features(_chump PUBLIC cxx_std_17)
+
+    set_target_properties(_chump PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/src/numchuck"
+        ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/src/numchuck"
+        LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/src/numchuck"
+    )
+
+    install(TARGETS _chump LIBRARY DESTINATION numchuck)
+endif()
+
+

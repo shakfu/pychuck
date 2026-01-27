@@ -50,7 +50,7 @@ uv add numchuck
 
 ```sh
 # Clone the repository
-git clone <repository-url>
+git clone https://github.com/shakfu/numchuck.git
 cd numchuck
 
 # Build the extension
@@ -100,22 +100,22 @@ python -m numchuck edit --start-audio --project mymusic
 
 ```sh
 # Launch the REPL
-python -m numchuck repl
+numchuck repl
 
 # Load files on startup
-python -m numchuck repl bass.ck melody.ck
+numchuck repl bass.ck melody.ck
 
 # Enable project versioning
-python -m numchuck repl --project mymusic
+numchuck repl --project mymusic
 
 # Start with audio enabled
-python -m numchuck repl --start-audio
+numchuck repl --start-audio
 
 # Disable smart Enter mode
-python -m numchuck repl --no-smart-enter
+numchuck repl --no-smart-enter
 
 # Hide sidebar (can toggle with F2)
-python -m numchuck repl --no-sidebar
+numchuck repl --no-sidebar
 ```
 
 **REPL Commands:**
@@ -136,57 +136,105 @@ python -m numchuck repl --no-sidebar
 
 ```sh
 # Execute ChucK files from command line
-python -m numchuck run myfile.ck
+numchuck run myfile.ck
 
 # Run multiple files
-python -m numchuck run bass.ck melody.ck
+numchuck run bass.ck melody.ck
 
 # Run for 10 seconds then exit
-python -m numchuck run myfile.ck --duration 10
+numchuck run myfile.ck --duration 10
 
 # Silent mode (no audio)
-python -m numchuck run myfile.ck --silent
+numchuck run myfile.ck --silent
 
 # Custom sample rate
-python -m numchuck run myfile.ck --srate 48000
+numchuck run myfile.ck --srate 48000
 ```
 
 #### 4. Snippet Management
 
 ```sh
 # List all available snippets
-python -m numchuck snippets list
+numchuck snippets list
 
 # Show snippet content
-python -m numchuck snippets show sine
+numchuck snippets show sine
 
 # Show snippets directory path
-python -m numchuck snippets path
+numchuck snippets path
 ```
 
 #### 5. File Watch Mode
 
 ```sh
 # Watch files and auto-reload on changes
-python -m numchuck watch bass.ck melody.ck
+numchuck watch bass.ck melody.ck
 ```
 
 #### 6. WAV Export
 
 ```sh
 # Export ChucK files to WAV
-python -m numchuck export output.wav --files sine.ck --duration 10
+numchuck export output.wav --files sine.ck --duration 10
 ```
 
 #### 7. Version and Info
 
 ```sh
 # Show version
-python -m numchuck version
+numchuck version
 
 # Show ChucK and numchuck info
-python -m numchuck info
+numchuck info
 ```
+
+#### 8. Package Management (Optional)
+
+Package management requires building with chump support enabled (disabled by default):
+
+```sh
+# Build with chump support
+pip install . --config-settings=cmake.define.NUMCHUCK_ENABLE_CHUMP=ON
+```
+
+Once enabled, you can manage ChucK packages:
+
+```sh
+# List available packages
+numchuck pkg list
+
+# Show only installed packages
+numchuck pkg list --installed
+
+# Show package details
+numchuck pkg info Patch
+
+# Install a package
+numchuck pkg install Patch
+
+# Install specific version
+numchuck pkg install Patch@1.0.0
+
+# Uninstall a package
+numchuck pkg uninstall Patch
+
+# Update a package
+numchuck pkg update Patch
+
+# Update all installed packages
+numchuck pkg update
+
+# Refresh package manifest from server
+numchuck pkg refresh
+
+# Search for packages
+numchuck pkg search reverb
+
+# Show packages directory
+numchuck pkg path
+```
+
+Packages are installed to `~/.chuck/packages/` (shared with native chump).
 
 **Interface Features:**
 
