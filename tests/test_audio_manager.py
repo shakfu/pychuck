@@ -5,7 +5,11 @@ These tests require real audio hardware and are skipped on CI.
 
 import pytest
 
-from numchuck._numchuck import ChucK, PARAM_SAMPLE_RATE, PARAM_OUTPUT_CHANNELS
+from numchuck import _numchuck
+
+ChucK = _numchuck.ChucK
+PARAM_SAMPLE_RATE = _numchuck.PARAM_SAMPLE_RATE
+PARAM_OUTPUT_CHANNELS = _numchuck.PARAM_OUTPUT_CHANNELS
 from numchuck.services import AudioService
 from numchuck.tui.logging import TUILogger, LogLevel
 

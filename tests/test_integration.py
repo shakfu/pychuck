@@ -6,7 +6,7 @@ testing end-to-end scenarios rather than isolated units.
 """
 
 import pytest
-import numchuck._numchuck as numchuck
+from numchuck import _numchuck as numchuck
 import numpy as np
 import time
 from pathlib import Path

@@ -1,5 +1,5 @@
 import pytest
-import numchuck._numchuck as numchuck
+from numchuck import _numchuck as numchuck
 import time
 
 
