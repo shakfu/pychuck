@@ -15,6 +15,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ## [Unreleased]
 
+## [0.1.9]
+
 ### Added
 
 - **Chugin Directory Search** (`src/numchuck/api.py`, `src/numchuck/tui/common.py`):
@@ -91,44 +93,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Complete type annotations for `WebServer` class
   - Properties: `port`, `static_dir`, `is_running`, `client_count`
   - Methods: `set_api_handler`, `broadcast`, `start`, `stop`
-
-### Fixed
-
-- **Web IDE Server Crash on Page Load** (`src/_numchuck.cpp`):
-  - Fixed segfault (exit code 139) when browser connects to Web IDE
-  - Root cause: `get_all_globals()` called `self.globals()->get_all_global_variables()` without null check
-  - When no globals are defined, `self.globals()` returns nullptr
-  - Browser's JavaScript polls `/api/globals` every 2 seconds, triggering crash on page load
-  - Added null pointer check to return empty list when globals manager is unavailable
-
-- **Web IDE Audio Status Incorrect** (`src/_numchuck.cpp`, `src/numchuck/web/__init__.py`):
-  - Fixed audio toggle showing "Running" when audio was actually stopped
-  - Root cause: `_is_audio_running()` checked `audio_info()["sample_rate"] > 0` which is always true
-  - ChucK always has a sample rate configured regardless of audio running state
-  - Added new `is_audio_running()` C++ function that checks actual audio context state
-  - Updated Python wrapper to use new function for accurate status
-
-- **Windows File Compilation** (`src/_numchuck.cpp`):
-  - Normalize Windows backslash paths to forward slashes before passing to ChucK
-  - Fixes "Failed to compile" errors on Windows CI with temp file paths
-
-- **CI Test Stability**:
-  - Added `@pytest.mark.realtime` to `test_audio_commands` to skip on CI without audio devices
-  - Fixes ALSA errors on Linux CI runners
-
-- **macOS Script Compatibility** (`scripts/remove_chump.sh`):
-  - Replaced BSD-incompatible sed commands with Python for cross-platform file modifications
-
-### Removed
-
-- **Chump Package Manager Integration**:
-  - Removed `_chump.cpp`, `_chump.py`, `packages.py`, `cli/packages.py`
-  - Removed `numchuck pkg` CLI commands
-  - Removed chump documentation from README.md and CHANGELOG.md
-
-## [0.1.9]
-
-### Added
 
 - **Audio Stream Iteration API** (`src/numchuck/api.py`):
   - `chuck.stream(frames_per_chunk, max_chunks, reuse)` generator method
@@ -392,10 +356,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ### Removed
 
+- **Chump Package Manager Integration**:
+  - Removed `_chump.cpp`, `_chump.py`, `packages.py`, `cli/packages.py`
+  - Removed `numchuck pkg` CLI commands
+  - Removed chump documentation from README.md and CHANGELOG.md
 - **`tui` CLI subcommand** - Use `numchuck repl` instead (the `tui` alias is no longer supported)
 - **`AudioManager` backward compatibility alias** - Use `AudioService` directly from `numchuck.services`
 
 ### Fixed
+
+- **Web IDE Server Crash on Page Load** (`src/_numchuck.cpp`):
+  - Fixed segfault (exit code 139) when browser connects to Web IDE
+  - Root cause: `get_all_globals()` called `self.globals()->get_all_global_variables()` without null check
+  - When no globals are defined, `self.globals()` returns nullptr
+  - Browser's JavaScript polls `/api/globals` every 2 seconds, triggering crash on page load
+  - Added null pointer check to return empty list when globals manager is unavailable
+
+- **Web IDE Audio Status Incorrect** (`src/_numchuck.cpp`, `src/numchuck/web/__init__.py`):
+  - Fixed audio toggle showing "Running" when audio was actually stopped
+  - Root cause: `_is_audio_running()` checked `audio_info()["sample_rate"] > 0` which is always true
+  - ChucK always has a sample rate configured regardless of audio running state
+  - Added new `is_audio_running()` C++ function that checks actual audio context state
+  - Updated Python wrapper to use new function for accurate status
+
+- **Windows File Compilation** (`src/_numchuck.cpp`):
+  - Normalize Windows backslash paths to forward slashes before passing to ChucK
+  - Fixes "Failed to compile" errors on Windows CI with temp file paths
+
+- **CI Test Stability**:
+  - Added `@pytest.mark.realtime` to `test_audio_commands` to skip on CI without audio devices
+  - Fixes ALSA errors on Linux CI runners
+
+- **macOS Script Compatibility** (`scripts/remove_chump.sh`):
+  - Replaced BSD-incompatible sed commands with Python for cross-platform file modifications
 
 - **Type Safety Improvements** (full `mypy --strict` compliance):
   - `api.py`: Added `_chuck` property with proper None handling after `close()`
