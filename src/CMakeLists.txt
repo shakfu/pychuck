@@ -84,3 +84,43 @@ set_target_properties(_numchuck PROPERTIES
 # Install directive for scikit-build-core
 install(TARGETS _numchuck LIBRARY DESTINATION numchuck)
 
+# Web server module (optional)
+if(NUMCHUCK_ENABLE_WEB)
+    message(STATUS "Building web server module (_web)")
+
+    nanobind_add_module(
+        _web
+        STABLE_ABI
+        NB_STATIC
+        ${CMAKE_SOURCE_DIR}/src/_web.cpp
+        ${CMAKE_SOURCE_DIR}/thirdparty/mongoose/mongoose.c
+    )
+
+    target_include_directories(_web
+        PRIVATE
+        ${CMAKE_SOURCE_DIR}/thirdparty/mongoose
+        ${CMAKE_SOURCE_DIR}/thirdparty/chuck/core
+    )
+
+    # Platform-specific definitions for Mongoose
+    target_compile_definitions(_web
+        PRIVATE
+        MG_ENABLE_LINES=0
+        $<$<PLATFORM_ID:Windows>:MG_ENABLE_WINSOCK2=1>
+    )
+
+    # Platform-specific link libraries
+    target_link_libraries(_web
+        PRIVATE
+        $<$<PLATFORM_ID:Windows>:ws2_32>
+    )
+
+    set_target_properties(_web PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/src/numchuck"
+        ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/src/numchuck"
+        LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/src/numchuck"
+    )
+
+    install(TARGETS _web LIBRARY DESTINATION numchuck)
+endif()
+

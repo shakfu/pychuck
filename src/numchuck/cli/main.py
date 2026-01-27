@@ -172,6 +172,46 @@ def create_parser() -> argparse.ArgumentParser:
         help="Suppress status messages",
     )
 
+    # web subcommand
+    web_parser = subparsers.add_parser(
+        "web", help="Launch browser-based ChucK IDE (WebChucK-style)"
+    )
+    web_parser.add_argument(
+        "files",
+        nargs="*",
+        help="ChucK files to load on startup",
+    )
+    web_parser.add_argument(
+        "--port",
+        "-p",
+        type=int,
+        default=8080,
+        help="HTTP port to listen on (default: 8080)",
+    )
+    web_parser.add_argument(
+        "--srate",
+        type=int,
+        default=44100,
+        help="Sample rate in Hz (default: 44100)",
+    )
+    web_parser.add_argument(
+        "--channels",
+        "-c",
+        type=int,
+        default=2,
+        help="Number of output channels (default: 2)",
+    )
+    web_parser.add_argument(
+        "--start-audio",
+        action="store_true",
+        help="Start audio automatically on startup",
+    )
+    web_parser.add_argument(
+        "--no-browser",
+        action="store_true",
+        help="Don't open browser automatically",
+    )
+
     return parser
 
 
@@ -290,6 +330,92 @@ def cmd_watch(args: argparse.Namespace) -> None:
     )
 
 
+def cmd_web(args: argparse.Namespace) -> None:
+    """Launch browser-based ChucK IDE."""
+    import signal
+    import webbrowser
+
+    try:
+        from ..web import WEB_AVAILABLE, WebChuckServer
+    except ImportError:
+        print("Error: Web module not available.")
+        print("Rebuild numchuck with -DNUMCHUCK_ENABLE_WEB=ON")
+        sys.exit(1)
+
+    if not WEB_AVAILABLE:
+        print("Error: Web module not available.")
+        print("Rebuild numchuck with -DNUMCHUCK_ENABLE_WEB=ON")
+        sys.exit(1)
+
+    from .. import Chuck
+    from .._numchuck import start_audio, stop_audio
+
+    # Create ChucK instance
+    chuck = Chuck(
+        sample_rate=args.srate,
+        output_channels=args.channels,
+    )
+
+    # Create and start web server
+    server = WebChuckServer(chuck, port=args.port)
+
+    # Track if audio was started
+    audio_started = False
+
+    # Flag to signal shutdown
+    shutdown_requested = False
+
+    # Handle Ctrl+C gracefully
+    def signal_handler(sig: int, frame: object) -> None:
+        nonlocal shutdown_requested
+        print("\nShutting down...")
+        shutdown_requested = True
+
+    signal.signal(signal.SIGINT, signal_handler)
+
+    try:
+        server.start()
+        print(f"numchuck Web IDE running at {server.url}")
+        print("Press Ctrl+C to stop")
+
+        # Load any initial files
+        for filepath in args.files:
+            try:
+                success, shred_ids = chuck.compile_file(filepath)
+                if success:
+                    print(f"  Loaded {filepath} -> shred {shred_ids}")
+            except Exception as e:
+                print(f"  Failed to load {filepath}: {e}")
+
+        # Start audio if requested
+        if args.start_audio:
+            start_audio(chuck.raw)
+            audio_started = True
+            print("  Audio started")
+
+        # Open browser
+        if not args.no_browser:
+            webbrowser.open(server.url)
+
+        # Keep running until interrupted
+        while server.is_running and not shutdown_requested:
+            import time
+
+            time.sleep(0.5)
+
+    except Exception as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+    finally:
+        # Stop server first
+        server.stop()
+        # Stop audio if it was started
+        if audio_started:
+            stop_audio()
+        # Clean up ChucK instance
+        chuck.close()
+
+
 def main() -> None:
     """Main CLI entry point."""
     parser = create_parser()
@@ -305,6 +431,7 @@ def main() -> None:
         "export": cmd_export,
         "snippets": cmd_snippets,
         "watch": cmd_watch,
+        "web": cmd_web,
     }
 
     # Execute command

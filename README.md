@@ -180,7 +180,44 @@ numchuck watch bass.ck melody.ck
 numchuck export output.wav --files sine.ck --duration 10
 ```
 
-#### 7. Version and Info
+#### 7. Web IDE (Browser-Based)
+
+```sh
+# Launch browser-based ChucK IDE
+numchuck web
+
+# Specify port
+numchuck web --port 9000
+
+# Load files on startup with audio enabled
+numchuck web --start-audio bass.ck melody.ck
+
+# Don't auto-open browser
+numchuck web --no-browser
+```
+
+**Web IDE Features:**
+
+* Browser-based code editor with syntax highlighting
+* Spork, remove, and replace shreds from the browser
+* Real-time console output via WebSocket
+* Shred status panel with elapsed time
+* Audio start/stop controls
+* Keyboard shortcut: Ctrl+Enter to spork code
+
+**REST API Endpoints:**
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/status` | GET | Get VM status, shreds, audio state |
+| `/api/compile` | POST | Compile and spork code |
+| `/api/shred/:id` | DELETE | Remove a shred |
+| `/api/clear` | POST | Clear all shreds |
+| `/api/audio/start` | POST | Start real-time audio |
+| `/api/audio/stop` | POST | Stop real-time audio |
+| `/ws` | WebSocket | Real-time console and status updates |
+
+#### 8. Version and Info
 
 ```sh
 # Show version
@@ -846,6 +883,33 @@ from numchuck.watcher import FileWatcher, WatchedFile
 * **`start() -> None`** - Start the file watcher
 * **`stop() -> None`** - Stop the file watcher
 * **`WatchedFile`** - Dataclass for watched file info
+
+### Web Server (`numchuck.web`)
+
+```python
+from numchuck.web import WebChuckServer, WEB_AVAILABLE
+```
+
+* **`WEB_AVAILABLE`** - Boolean indicating if web module is available
+* **`WebChuckServer(chuck, port=8080, static_dir=None)`** - Browser-based ChucK IDE server
+  * `start() -> None` - Start the web server in background thread
+  * `stop() -> None` - Stop the web server
+  * `broadcast(msg: str) -> None` - Broadcast message to all WebSocket clients
+  * `port` - Server port (read-only)
+  * `url` - Server URL (e.g., "http://localhost:8080")
+  * `is_running` - Check if server is running
+  * `client_count` - Number of connected WebSocket clients
+
+```python
+# Example usage
+from numchuck import Chuck
+from numchuck.web import WebChuckServer
+
+chuck = Chuck()
+with WebChuckServer(chuck, port=8080) as server:
+    print(f"IDE running at {server.url}")
+    input("Press Enter to stop...")
+```
 
 ### MIDI Support (`numchuck.midi`)
 

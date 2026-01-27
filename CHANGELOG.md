@@ -35,6 +35,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - `= <id> file.ck` / `= <id> "code"` - ChucK-style replace shred shortcuts
   - `^` - ChucK-style status shortcut
 
+- **Web IDE** (`src/_web.cpp`, `src/numchuck/web/`):
+  - Browser-based ChucK IDE similar to WebChucK
+  - Embedded Mongoose web server (zero external dependencies)
+  - REST API for ChucK control: compile, remove shred, audio start/stop
+  - WebSocket for real-time console output and status updates
+  - Embedded HTML/CSS/JS frontend with code editor
+  - CLI command: `numchuck web [--port 8080] [files...]`
+  - CMake option: `-DNUMCHUCK_ENABLE_WEB=ON` (enabled by default)
+
 ### Fixed
 
 - **Windows File Compilation** (`src/_numchuck.cpp`):

@@ -708,12 +708,12 @@ class Chuck:
     # Console output
     # -------------------------------------------------------------------------
 
-    def set_stdout_callback(self, callback: Callable[[str], None]) -> None:
-        """Set callback for ChucK stdout (chout) output."""
+    def set_stdout_callback(self, callback: Callable[[str], None] | None) -> None:
+        """Set callback for ChucK stdout (chout) output. Pass None to clear."""
         self._chuck.set_stdout_callback(callback)
 
-    def set_stderr_callback(self, callback: Callable[[str], None]) -> None:
-        """Set callback for ChucK stderr (cherr) output."""
+    def set_stderr_callback(self, callback: Callable[[str], None] | None) -> None:
+        """Set callback for ChucK stderr (cherr) output. Pass None to clear."""
         self._chuck.set_stderr_callback(callback)
 
     # -------------------------------------------------------------------------

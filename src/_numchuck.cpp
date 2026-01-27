@@ -925,27 +925,41 @@ NB_MODULE(_numchuck, m) {
             &ChucK::poop,
             "ChucK poop compatibility")
         .def_static("set_stdout_callback",
-            [](nb::callable callback) {
-                static nb::callable stored_callback;
-                stored_callback = callback;
-                return ChucK::setStdoutCallback([](const char* msg) {
-                    nb::gil_scoped_acquire acquire;
-                    stored_callback(msg);
-                });
+            [](nb::handle callback) {
+                static nb::object stored_callback;
+                if (callback.is_none()) {
+                    stored_callback = nb::object();
+                    ChucK::setStdoutCallback(nullptr);
+                } else {
+                    stored_callback = nb::borrow(callback);
+                    ChucK::setStdoutCallback([](const char* msg) {
+                        nb::gil_scoped_acquire acquire;
+                        if (stored_callback.is_valid() && !stored_callback.is_none()) {
+                            stored_callback(msg);
+                        }
+                    });
+                }
             },
-            "callback"_a,
-            "Set global stdout callback")
+            "callback"_a.none(),
+            "Set global stdout callback (pass None to clear)")
         .def_static("set_stderr_callback",
-            [](nb::callable callback) {
-                static nb::callable stored_callback;
-                stored_callback = callback;
-                return ChucK::setStderrCallback([](const char* msg) {
-                    nb::gil_scoped_acquire acquire;
-                    stored_callback(msg);
-                });
+            [](nb::handle callback) {
+                static nb::object stored_callback;
+                if (callback.is_none()) {
+                    stored_callback = nb::object();
+                    ChucK::setStderrCallback(nullptr);
+                } else {
+                    stored_callback = nb::borrow(callback);
+                    ChucK::setStderrCallback([](const char* msg) {
+                        nb::gil_scoped_acquire acquire;
+                        if (stored_callback.is_valid() && !stored_callback.is_none()) {
+                            stored_callback(msg);
+                        }
+                    });
+                }
             },
-            "callback"_a,
-            "Set global stderr callback");
+            "callback"_a.none(),
+            "Set global stderr callback (pass None to clear)");
 
     // Version function
     m.def("version", &ChucK::version, "Get ChucK version");
