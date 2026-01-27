@@ -1,4 +1,7 @@
-"""Tests for AudioService class."""
+"""Tests for AudioService class.
+
+These tests require real audio hardware and are skipped on CI.
+"""
 
 import pytest
 
@@ -18,6 +21,7 @@ def initialized_chuck():
     # Cleanup handled by test
 
 
+@pytest.mark.realtime
 class TestAudioService:
     """Test AudioService class."""
 
