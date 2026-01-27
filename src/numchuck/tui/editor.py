@@ -170,25 +170,20 @@ class ChuckEditor:
                 return
 
             tab = self.tabs[self.current_tab_index]
-            success, shred_ids = self.app_state.chuck.compile_code(tab.content)
+            filename = tab.file_path.name if tab.file_path else "untitled.ck"
 
-            if success and shred_ids:
-                shred_id = shred_ids[0]
-                tab.shred_id = shred_id
+            # Use ShredService for sporking
+            result = self.app_state.shred_service.spork_code(
+                tab.content,
+                name=filename,
+            )
 
-                # Save to project with versioning
-                filename = tab.file_path.name if tab.file_path else "untitled.ck"
-                self.app_state.session.add_shred(
-                    shred_id,
-                    filename,
-                    content=tab.content,
-                    shred_type="file" if tab.file_path else "code",
-                )
-
-                self.status_message = f"Sporked shred {shred_id}"
+            if result.success and result.shred_id is not None:
+                tab.shred_id = result.shred_id
+                self.status_message = f"Sporked shred {result.shred_id}"
                 tab.modified = False
             else:
-                self.status_message = "Compilation failed"
+                self.status_message = result.error or "Compilation failed"
             event.app.invalidate()
 
         @kb.add("f6")
@@ -204,33 +199,22 @@ class ChuckEditor:
                 event.app.invalidate()
                 return
 
-            try:
-                old_id = tab.shred_id
-                new_id = self.app_state.chuck.replace_shred(old_id, tab.content)
+            old_id = tab.shred_id
+            filename = tab.file_path.name if tab.file_path else "untitled.ck"
 
-                if new_id > 0:
-                    # Save replacement version to project
-                    if self.app_state.session.project:
-                        self.app_state.session.replace_shred(old_id, tab.content)
+            # Use ShredService for replacing
+            result = self.app_state.shred_service.replace_shred(
+                old_id,
+                tab.content,
+                name=filename,
+            )
 
-                    # Update session tracking
-                    self.app_state.session.shreds.pop(old_id, None)
-                    filename = tab.file_path.name if tab.file_path else "untitled.ck"
-                    self.app_state.session.add_shred(
-                        new_id,
-                        filename,
-                        content=tab.content,
-                        shred_type="file" if tab.file_path else "code",
-                    )
-
-                    tab.shred_id = new_id
-                    tab.modified = False
-
-                    self.status_message = f"Replaced {old_id} → {new_id}"
-                else:
-                    self.status_message = "Replace failed"
-            except Exception as e:
-                self.status_message = f"Replace failed: {e}"
+            if result.success and result.shred_id is not None:
+                tab.shred_id = result.shred_id
+                tab.modified = False
+                self.status_message = f"Replaced {old_id} -> {result.shred_id}"
+            else:
+                self.status_message = result.error or "Replace failed"
             event.app.invalidate()
 
         @kb.add("c-t")

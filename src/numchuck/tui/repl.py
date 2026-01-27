@@ -481,15 +481,10 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
             # If not a recognized command, treat as ChucK code
             # Check if it looks like ChucK code (contains =>, ;, or multiline)
             if "\n" in text or "=>" in text or ";" in text or "{" in text:
-                # ChucK code compilation is silent, topbar shows result
-                success, shred_ids = self.chuck.compile_code(text)
-                if success:
-                    for sid in shred_ids:
-                        self.session.add_shred(
-                            sid, f"code-{sid}", content=text, shred_type="code"
-                        )
-                else:
-                    self.error_message = "Failed to compile code"
+                # Use ShredService for code compilation
+                result = self.app_state.shred_service.spork_code(text, name="repl")
+                if not result.success:
+                    self.error_message = result.error or "Failed to compile code"
             else:
                 # Not a recognized command and doesn't look like ChucK code
                 self.error_message = f"Unknown command: {text}"

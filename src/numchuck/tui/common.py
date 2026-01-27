@@ -37,6 +37,7 @@ AudioManager = AudioService
 
 if TYPE_CHECKING:
     from prompt_toolkit.key_binding.key_processor import KeyPressEvent
+    from ..services import ShredService, GlobalsService
 
 
 def format_elapsed_time(elapsed_sec: float) -> str:
@@ -285,6 +286,10 @@ class ChuckApplication:
             self.__chuck, project_name=project_name
         )
 
+        # Service instances (lazily created)
+        self._shred_service: ShredService | None = None
+        self._globals_service: GlobalsService | None = None
+
         # Shared UI state
         self.show_help = False
         self.show_shreds = False
@@ -310,6 +315,30 @@ class ChuckApplication:
         if self.__session is None:
             raise RuntimeError("Session has been closed")
         return self.__session
+
+    @property
+    def shred_service(self) -> "ShredService":
+        """Get the ShredService for shred operations.
+
+        Lazily creates the service on first access.
+        """
+        if not hasattr(self, "_shred_service") or self._shred_service is None:
+            from ..services import ShredService
+
+            self._shred_service = ShredService(self.chuck, self.session, self._logger)
+        return self._shred_service
+
+    @property
+    def globals_service(self) -> "GlobalsService":
+        """Get the GlobalsService for global variable operations.
+
+        Lazily creates the service on first access.
+        """
+        if not hasattr(self, "_globals_service") or self._globals_service is None:
+            from ..services import GlobalsService
+
+            self._globals_service = GlobalsService(self.chuck, self._logger)
+        return self._globals_service
 
     def setup(self) -> None:
         """Initialize ChucK with configured parameters.

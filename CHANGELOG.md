@@ -224,10 +224,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Added `shred_service` and `globals_service` properties with proper None handling
   - Simplified command methods to delegate to services
 
-- **ChuckApplication Cleanup** (`src/numchuck/tui/common.py`):
+- **ChuckApplication Service Integration** (`src/numchuck/tui/common.py`):
+  - Added `shred_service` and `globals_service` lazily-created properties
+  - Services are cached after first access for reuse
   - `chuck` and `session` are now properties that raise `RuntimeError` if accessed after cleanup
   - Cleanup method properly handles None state and circular reference breaking
   - Fixed `close()` to `shutdown()` for ChucK instance cleanup
+
+- **Editor Refactoring** (`src/numchuck/tui/editor.py`):
+  - F5/Ctrl-R (spork) now uses `ShredService.spork_code()` instead of direct ChucK calls
+  - F6 (replace) now uses `ShredService.replace_shred()` instead of direct ChucK calls
+  - Session tracking handled automatically by ShredService
+  - Simplified error handling with structured `ShredResult` returns
+
+- **REPL Refactoring** (`src/numchuck/tui/repl.py`):
+  - Direct code compilation now uses `ShredService.spork_code()` instead of direct ChucK calls
+  - Consistent with CommandExecutor's service-based approach
 
 - **API Refactoring** - Moved general-purpose modules from `tui/` to top level for library use:
   - `numchuck.render` - Offline rendering API (new, from `cli/export.py`)

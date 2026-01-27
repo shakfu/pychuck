@@ -772,6 +772,76 @@ class TestChuckApplication:
         assert app.session.project.name == "test_project"
 
 
+class TestChuckApplicationServices:
+    """Test ChuckApplication service properties."""
+
+    @patch("numchuck.tui.common.ChucK")
+    @patch("numchuck.tui.common.get_logger")
+    def test_shred_service_lazy_creation(self, mock_get_logger, mock_chuck_class):
+        """Test shred_service is lazily created on first access."""
+        mock_chuck = MagicMock()
+        mock_chuck_class.return_value = mock_chuck
+
+        app = ChuckApplication()
+
+        # Service should not exist yet
+        assert app._shred_service is None
+
+        # Access service triggers creation
+        service = app.shred_service
+
+        # Now it should exist
+        assert app._shred_service is not None
+        assert service is app._shred_service
+
+    @patch("numchuck.tui.common.ChucK")
+    @patch("numchuck.tui.common.get_logger")
+    def test_shred_service_cached(self, mock_get_logger, mock_chuck_class):
+        """Test shred_service returns same instance on subsequent accesses."""
+        mock_chuck = MagicMock()
+        mock_chuck_class.return_value = mock_chuck
+
+        app = ChuckApplication()
+
+        service1 = app.shred_service
+        service2 = app.shred_service
+
+        assert service1 is service2
+
+    @patch("numchuck.tui.common.ChucK")
+    @patch("numchuck.tui.common.get_logger")
+    def test_globals_service_lazy_creation(self, mock_get_logger, mock_chuck_class):
+        """Test globals_service is lazily created on first access."""
+        mock_chuck = MagicMock()
+        mock_chuck_class.return_value = mock_chuck
+
+        app = ChuckApplication()
+
+        # Service should not exist yet
+        assert app._globals_service is None
+
+        # Access service triggers creation
+        service = app.globals_service
+
+        # Now it should exist
+        assert app._globals_service is not None
+        assert service is app._globals_service
+
+    @patch("numchuck.tui.common.ChucK")
+    @patch("numchuck.tui.common.get_logger")
+    def test_globals_service_cached(self, mock_get_logger, mock_chuck_class):
+        """Test globals_service returns same instance on subsequent accesses."""
+        mock_chuck = MagicMock()
+        mock_chuck_class.return_value = mock_chuck
+
+        app = ChuckApplication()
+
+        service1 = app.globals_service
+        service2 = app.globals_service
+
+        assert service1 is service2
+
+
 class TestOutputCaptureCallback:
     """Test output capture callback behavior."""
 
