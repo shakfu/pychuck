@@ -11,6 +11,7 @@
 #include "mongoose.h"
 #include "constants.h"
 
+#include <algorithm>
 #include <atomic>
 #include <mutex>
 #include <thread>
