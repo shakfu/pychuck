@@ -217,6 +217,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Logger integration for warnings and debug output
   - Specific exception types instead of broad `Exception` catches
 
+- **REPL Stdin Mode** (`src/numchuck/tui/repl.py`, `src/numchuck/tui/tui.py`):
+  - Non-interactive REPL mode for piped input and scripting
+  - Automatic detection: uses stdin mode when input is not a TTY
+  - New `ChuckREPLStdin` class for processing commands from stdin
+  - Comment support: lines starting with `#` are ignored
+  - Exit commands: `quit`, `exit`, or `q` to stop processing
+  - Usage examples:
+    - `echo '+ test.ck' | numchuck repl` - Pipe commands
+    - `numchuck repl < commands.txt` - Redirect input
+    - `cat script.txt | numchuck repl` - Script execution
+  - New `--stdin` CLI flag to force stdin mode even in interactive terminals
+  - 63 new tests for stdin REPL mode (`tests/test_repl_stdin.py`)
+
 ### Changed
 
 - **CommandExecutor Refactoring** (`src/numchuck/tui/commands.py`):
@@ -224,6 +237,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Added `shred_service`, `globals_service`, and `file_service` properties with proper None handling
   - Snippet loading (`@name`) now uses `FileService` instead of direct path functions
   - Simplified command methods to delegate to services
+  - `_cmd_list_shreds` now uses session data instead of VM query (works without audio running)
 
 - **ChuckApplication Service Integration** (`src/numchuck/tui/common.py`):
   - Added `shred_service`, `globals_service`, and `file_service` lazily-created properties
@@ -272,7 +286,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Now requires Python 3.9+
   - Added Python 3.13 classifier
 
-- **Test Count**: 603 tests (up from 280)
+- **Test Count**: 963 tests (up from 603)
 
 - **CLI Test Suite** (`tests/test_executor.py`, `tests/test_watcher_cli.py`):
   - Added 28 new tests for CLI executor and watcher modules
@@ -300,6 +314,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Added proper cleanup of completer references before ChucK instance is closed
   - Added `gc.collect()` calls to ensure C++ objects are released before interpreter shutdown
   - REPL now exits cleanly without "leaked instances/types/functions" warnings
+
+- **REPL cleanup method idempotency** (`src/numchuck/tui/repl.py`):
+  - `ChuckREPL.cleanup()` can now be safely called multiple times
+  - Added `is not None` checks before accessing completer, executor, and app_state
+  - Prevents `AttributeError` when cleanup is called on already-cleaned instance
 
 ## [0.1.8]
 
