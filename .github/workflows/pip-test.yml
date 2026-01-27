@@ -42,6 +42,6 @@ jobs:
       - name: Run tests
         run: |
           # Run from tests/ dir to avoid importing local src/
-          # Skip: realtime (no audio device), wavfile (WvOut timing), chugin (not bundled)
+          # Skip: realtime (no audio device), wavfile (WvOut timing), chugin (not bundled), tui (requires console)
           cd tests
-          pytest . -v --tb=short -k "not realtime and not wavfile and not chugin"
+          pytest . -v --tb=short -k "not realtime and not wavfile and not chugin and not tui"

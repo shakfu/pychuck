@@ -11,3 +11,6 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "asyncio: marks tests as async"
     )
+    config.addinivalue_line(
+        "markers", "tui: marks tests requiring a terminal/console (skipped on CI)"
+    )

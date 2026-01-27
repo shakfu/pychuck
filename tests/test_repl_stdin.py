@@ -195,9 +195,11 @@ class TestChuckREPLStdinCommands:
 
 # =============================================================================
 # ChuckREPL (Interactive REPL) Tests
+# These tests require a terminal/console and are skipped on CI.
 # =============================================================================
 
 
+@pytest.mark.tui
 class TestChuckREPLInit:
     """Tests for ChuckREPL initialization."""
 
@@ -260,6 +262,7 @@ class TestChuckREPLInit:
             repl.cleanup()
 
 
+@pytest.mark.tui
 class TestChuckREPLAddToLog:
     """Tests for add_to_log method."""
 
@@ -324,6 +327,7 @@ class TestChuckREPLAddToLog:
         assert repl.app.invalidate.call_count >= 1
 
 
+@pytest.mark.tui
 class TestChuckREPLProcessInput:
     """Tests for process_input method."""
 
@@ -438,6 +442,7 @@ class TestChuckREPLProcessInput:
         assert repl.app.invalidate.call_count >= 1
 
 
+@pytest.mark.tui
 class TestChuckREPLCleanup:
     """Tests for cleanup method."""
 
@@ -475,6 +480,7 @@ class TestChuckREPLCleanup:
         assert repl.app_state is None
 
 
+@pytest.mark.tui
 class TestChuckREPLSetup:
     """Tests for setup method."""
 
@@ -494,6 +500,7 @@ class TestChuckREPLSetup:
             repl.cleanup()
 
 
+@pytest.mark.tui
 class TestChuckREPLHelperFunctions:
     """Tests for internal helper functions defined in __init__."""
 
@@ -526,6 +533,7 @@ class TestChuckREPLHelperFunctions:
             repl.cleanup()
 
 
+@pytest.mark.tui
 class TestChuckREPLWindowToggles:
     """Tests for window toggle functionality."""
 
@@ -555,6 +563,7 @@ class TestChuckREPLWindowToggles:
         assert repl.show_log_window is True
 
 
+@pytest.mark.tui
 class TestChuckREPLErrorHandling:
     """Tests for error handling in REPL."""
 

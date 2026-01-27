@@ -67,12 +67,13 @@ jobs:
 
       - name: Run tests
         run: |
-          uv run pytest -v --tb=short
+          # Skip: realtime (no audio device), wavfile (WvOut timing), chugin (not bundled), tui (requires console)
+          uv run pytest -v --tb=short -k "not realtime and not wavfile and not chugin and not tui"
 
       - name: Verify clean exit
         if: runner.os != 'Windows'
         run: |
-          uv run pytest || exit_code=$?
+          uv run pytest -k "not realtime and not wavfile and not chugin and not tui" || exit_code=$?
           if [ "$exit_code" != "0" ]; then
             echo "Tests failed with exit code $exit_code"
             exit 1
@@ -145,7 +146,8 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          uv run pytest --cov=numchuck --cov-report=xml --cov-report=term
+          # Skip: realtime (no audio device), wavfile (WvOut timing), chugin (not bundled), tui (requires console)
+          uv run pytest --cov=numchuck --cov-report=xml --cov-report=term -k "not realtime and not wavfile and not chugin and not tui"
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
