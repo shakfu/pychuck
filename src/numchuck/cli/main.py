@@ -68,6 +68,11 @@ def create_parser():
     repl_parser.add_argument(
         "--project", type=str, help="Project name for versioned file storage"
     )
+    repl_parser.add_argument(
+        "--stdin",
+        action="store_true",
+        help="Read commands from stdin (non-interactive mode for testing/scripting)",
+    )
 
     # run subcommand
     run_parser = subparsers.add_parser(
@@ -258,6 +263,7 @@ def cmd_repl(args):
 
     # Get project name from args if provided
     project_name = getattr(args, "project", None)
+    force_stdin = getattr(args, "stdin", False)
 
     tui_main(
         start_audio=args.start_audio,
@@ -265,6 +271,7 @@ def cmd_repl(args):
         show_sidebar=not args.no_sidebar,
         project_name=project_name,
         files=getattr(args, "files", []),
+        force_stdin=force_stdin,
     )
 
 

@@ -159,16 +159,21 @@ class CommandExecutor:
         return None
 
     def _cmd_list_shreds(self, args: dict[str, Any]) -> str | None:
-        """List all running shreds."""
-        shreds = self.chuck.get_all_shred_ids()
-        if not shreds:
+        """List all running shreds.
+
+        Uses session tracking for immediate results. The session tracks
+        shreds as they're sporked, which works better for non-realtime
+        use (testing, scripting) where VM message queue isn't processed.
+        """
+        # Use session data for reliability (works without audio running)
+        if not self.session.shreds:
             self._log("no shreds running")
             return None
 
         self._log(f"{'ID':<8} {'Name':<40}")
         self._log("-" * 50)
-        for sid in shreds:
-            name = self.session.get_shred_name(sid)
+        for sid, info in self.session.shreds.items():
+            name = info.get("name", "unknown")
             self._log(f"{sid:<8} {name:<40}")
         return None
 

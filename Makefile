@@ -52,7 +52,7 @@ test-review:
 	@uv run pytest --review
 
 coverage:
-	@uv run pytest --cov=numchuck --cov-report=term-missing --cov-report=html
+	@uv run pytest --cov=numchuck --cov-report term-missing:skip-covered --cov-report=html
 
 repl:
 	@uv run numchuck repl

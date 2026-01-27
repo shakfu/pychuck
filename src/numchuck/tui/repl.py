@@ -13,6 +13,148 @@ if TYPE_CHECKING:
     from prompt_toolkit.buffer import Buffer
 
 
+class ChuckREPLStdin:
+    """Non-interactive REPL that reads from stdin.
+
+    Used when stdin is piped or redirected, allowing testing and scripting:
+        echo '+ test.ck' | numchuck repl
+        cat commands.txt | numchuck repl
+        numchuck repl < script.txt
+    """
+
+    def __init__(
+        self,
+        project_name: str | None = None,
+    ) -> None:
+        self.app_state = ChuckApplication(project_name=project_name)
+        self.chuck = self.app_state.chuck
+        self.session = self.app_state.session
+        self.parser = CommandParser()
+        self.executor = CommandExecutor(self.session)
+
+    def setup(self) -> None:
+        """Initialize ChucK with sensible defaults."""
+        # Don't set static callbacks - they cause segfaults on cleanup
+        # Instance callbacks are safer
+        self.app_state.setup()
+
+        # Capture output to stderr so it doesn't mix with command output
+        def log_to_stderr(msg: str) -> None:
+            sys.stderr.write(msg)
+            sys.stderr.flush()
+
+        self.app_state.set_log_callback(log_to_stderr)
+        self.app_state.setup_output_capture()
+
+    def process_line(self, line: str) -> str | None:
+        """Process a single line of input.
+
+        Args:
+            line: Input line to process
+
+        Returns:
+            Error message if any, None on success
+        """
+        text = line.strip()
+
+        if not text or text.startswith("#"):
+            return None  # Skip empty lines and comments
+
+        if text in ["quit", "exit", "q"]:
+            return "EXIT"
+
+        # Parse and execute
+        cmd = self.parser.parse(text)
+        if cmd:
+            return self.executor.execute(cmd)
+        else:
+            # If not a recognized command, treat as ChucK code
+            if "\n" in text or "=>" in text or ";" in text or "{" in text:
+                result = self.app_state.shred_service.spork_code(text, name="stdin")
+                if not result.success:
+                    return result.error or "Failed to compile code"
+            else:
+                return f"Unknown command: {text}"
+
+        return None
+
+    def run(
+        self,
+        start_audio: bool = False,
+        files: list[str] | None = None,
+        input_stream: Any = None,
+    ) -> int:
+        """Run REPL reading from stdin.
+
+        Args:
+            start_audio: If True, start audio automatically
+            files: Optional list of ChucK files to load on startup
+            input_stream: Optional input stream (defaults to sys.stdin)
+
+        Returns:
+            Exit code (0 for success, 1 for error)
+        """
+        if input_stream is None:
+            input_stream = sys.stdin
+
+        exit_code = 0
+
+        try:
+            self.setup()
+
+            if start_audio:
+                self.app_state.start_audio_playback()
+
+            # Load files if provided
+            if files:
+                for filepath in files:
+                    cmd = self.parser.parse(f"+ {filepath}")
+                    if cmd:
+                        result = self.executor.execute(cmd)
+                        if result:
+                            sys.stderr.write(f"Error loading {filepath}: {result}\n")
+                            exit_code = 1
+
+            # Process each line from input
+            for line in input_stream:
+                error = self.process_line(line)
+                if error == "EXIT":
+                    break
+                elif error:
+                    sys.stderr.write(f"Error: {error}\n")
+                    exit_code = 1
+
+        finally:
+            self.cleanup()
+
+        return exit_code
+
+    def cleanup(self) -> None:
+        """Shutdown cleanly."""
+        import gc
+
+        # Clear convenience references FIRST (before app_state.cleanup closes ChucK)
+        self.chuck = None  # type: ignore[assignment]
+        self.session = None  # type: ignore[assignment]
+
+        # Break executor references
+        if hasattr(self, "executor") and self.executor is not None:
+            self.executor._chuck = None  # type: ignore[assignment]
+            self.executor.session = None  # type: ignore[assignment]
+            self.executor = None  # type: ignore[assignment]
+
+        # Now cleanup app_state (this closes ChucK instance)
+        if hasattr(self, "app_state") and self.app_state is not None:
+            self.app_state.cleanup()
+            self.app_state = None  # type: ignore[assignment]
+
+        # Force garbage collection multiple times to break all cycles
+        # and release C++ objects before interpreter shutdown
+        gc.collect()
+        gc.collect()
+        gc.collect()
+
+
 class ChuckREPL:
     """Interactive REPL for ChucK with full-screen UI."""
 
@@ -546,19 +688,19 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
         self.session = None  # type: ignore[assignment]
 
         # Break completer references (it holds chuck and session)
-        if hasattr(self, "completer"):
+        if hasattr(self, "completer") and self.completer is not None:
             self.completer.chuck = None  # type: ignore[assignment]
             self.completer.session = None  # type: ignore[assignment]
             self.completer = None  # type: ignore[assignment]
 
         # Break executor references
-        if hasattr(self, "executor"):
+        if hasattr(self, "executor") and self.executor is not None:
             self.executor._chuck = None  # type: ignore[assignment]
             self.executor.session = None  # type: ignore[assignment]
             self.executor = None  # type: ignore[assignment]
 
         # Now cleanup app_state (this closes ChucK instance)
-        if hasattr(self, "app_state"):
+        if hasattr(self, "app_state") and self.app_state is not None:
             self.app_state.cleanup()
             self.app_state = None  # type: ignore[assignment]
 
