@@ -494,7 +494,8 @@ class TestChuckApplication:
         app = ChuckApplication(auto_init=True)
 
         # setup() should have been called
-        assert mock_chuck.set_param.call_count == 3  # sample_rate, output, input
+        # 4 params: sample_rate, output_channels, input_channels, chugin_enable
+        assert mock_chuck.set_param.call_count == 4
         assert mock_chuck.init.call_count == 1
 
     @patch("numchuck.tui.common.ChucK")
@@ -507,9 +508,9 @@ class TestChuckApplication:
         app = ChuckApplication(sample_rate=48000, output_channels=4, input_channels=2)
         app.setup()
 
-        # Check set_param calls
+        # Check set_param calls (sample_rate, output_channels, input_channels, chugin_enable)
         calls = mock_chuck.set_param.call_args_list
-        assert len(calls) == 3
+        assert len(calls) == 4
         assert mock_chuck.init.call_count == 1
 
     @patch("numchuck.tui.common.ChucK")

@@ -31,11 +31,13 @@ Thread Safety:
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Generic, Iterator, TypeVar
 
 import numpy as np
 
 from . import _numchuck
+from .paths import get_chugins_dir
 
 if TYPE_CHECKING:
     from types import TracebackType
@@ -101,9 +103,39 @@ class Chuck:
                 _numchuck.PARAM_WORKING_DIRECTORY, working_directory
             )
         self._chuck.set_param(_numchuck.PARAM_CHUGIN_ENABLE, int(chugin_enable))
+
+        # Set up chugin search paths
+        # PARAM_IMPORT_PATH_SYSTEM is used for directory search (finds .chug files)
+        # PARAM_USER_CHUGINS is for explicit individual .chug file paths
+        chugin_dirs: list[str] = []
+        chugin_files: list[str] = []
+
+        # Process user-provided chugin paths
         if user_chugins:
+            for path in user_chugins:
+                p = Path(path).expanduser()
+                if p.is_file() and p.suffix == ".chug":
+                    chugin_files.append(str(p))
+                elif p.is_dir():
+                    chugin_dirs.append(str(p))
+
+        # Add numchuck's chugins directory if it exists
+        numchuck_chugins_dir = get_chugins_dir()
+        if numchuck_chugins_dir.exists():
+            dir_str = str(numchuck_chugins_dir)
+            if dir_str not in chugin_dirs:
+                chugin_dirs.append(dir_str)
+
+        # Set search directories (for .chug discovery)
+        if chugin_dirs:
             self._chuck.set_param_string_list(
-                _numchuck.PARAM_USER_CHUGINS, user_chugins
+                _numchuck.PARAM_IMPORT_PATH_SYSTEM, chugin_dirs
+            )
+
+        # Set explicit chugin files
+        if chugin_files:
+            self._chuck.set_param_string_list(
+                _numchuck.PARAM_USER_CHUGINS, chugin_files
             )
         self._chuck.set_param(_numchuck.PARAM_VM_ADAPTIVE, int(vm_adaptive))
         self._chuck.set_param(_numchuck.PARAM_VM_HALT, int(vm_halt))
@@ -446,8 +478,23 @@ class Chuck:
 
     @property
     def user_chugins(self) -> list[str]:
-        """List of user chugin paths."""
+        """List of explicit user chugin file paths (.chug files)."""
         return self._chuck.get_param_string_list(_numchuck.PARAM_USER_CHUGINS)
+
+    @property
+    def import_path_system(self) -> list[str]:
+        """System import/chugin search paths (directories searched for .chug files)."""
+        return self._chuck.get_param_string_list(_numchuck.PARAM_IMPORT_PATH_SYSTEM)
+
+    @property
+    def import_path_user(self) -> list[str]:
+        """User import search paths."""
+        return self._chuck.get_param_string_list(_numchuck.PARAM_IMPORT_PATH_USER)
+
+    @property
+    def import_path_packages(self) -> list[str]:
+        """Package import search paths."""
+        return self._chuck.get_param_string_list(_numchuck.PARAM_IMPORT_PATH_PACKAGES)
 
     @property
     def compiler_highlight_on_error(self) -> bool:

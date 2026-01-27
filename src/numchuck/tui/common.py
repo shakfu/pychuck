@@ -23,11 +23,14 @@ from .._numchuck import (
     PARAM_SAMPLE_RATE,
     PARAM_OUTPUT_CHANNELS,
     PARAM_INPUT_CHANNELS,
+    PARAM_CHUGIN_ENABLE,
+    PARAM_IMPORT_PATH_SYSTEM,
 )
 from ..services.audio import AudioService
 from .session import ChuckSession
 from .logging import TUILogger, get_logger
 from ..config import get_config, KeybindingsConfig
+from ..paths import get_chugins_dir
 from . import widgets
 
 if TYPE_CHECKING:
@@ -356,6 +359,29 @@ class ChuckApplication:
         self.chuck.set_param(PARAM_SAMPLE_RATE, self._sample_rate)
         self.chuck.set_param(PARAM_OUTPUT_CHANNELS, self._output_channels)
         self.chuck.set_param(PARAM_INPUT_CHANNELS, self._input_channels)
+
+        # Configure chugin paths from config and numchuck directory
+        config = get_config()
+        self.chuck.set_param(PARAM_CHUGIN_ENABLE, int(config.chuck.chugin_enable))
+
+        # Build chugin search directories: config paths + numchuck chugins dir
+        # PARAM_IMPORT_PATH_SYSTEM is used for directory search (finds .chug files)
+        chugin_dirs: list[str] = []
+        for path in config.paths.chugin_paths:
+            expanded = str(Path(path).expanduser())
+            if expanded not in chugin_dirs:
+                chugin_dirs.append(expanded)
+
+        # Add numchuck's chugins directory if it exists
+        numchuck_chugins_dir = get_chugins_dir()
+        if numchuck_chugins_dir.exists():
+            dir_str = str(numchuck_chugins_dir)
+            if dir_str not in chugin_dirs:
+                chugin_dirs.append(dir_str)
+
+        if chugin_dirs:
+            self.chuck.set_param_string_list(PARAM_IMPORT_PATH_SYSTEM, chugin_dirs)
+
         self.chuck.init()
 
     def set_log_callback(self, callback: Callable[[str], None]) -> None:

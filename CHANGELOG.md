@@ -15,6 +15,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- **Chugin Directory Search** (`src/numchuck/api.py`, `src/numchuck/tui/common.py`):
+  - Automatic discovery of chugins in `.numchuck/chugins` directory
+  - Uses `PARAM_IMPORT_PATH_SYSTEM` for directory-based chugin search
+  - `user_chugins` parameter accepts both directories and explicit `.chug` files
+  - Directories are searched recursively for `.chug` files
+
+- **Import Path Properties** (`src/numchuck/api.py`):
+  - `chuck.import_path_system` - System chugin/import search directories
+  - `chuck.import_path_user` - User import search paths
+  - `chuck.import_path_packages` - Package import search paths
+
+### Fixed
+
+- **Windows File Compilation** (`src/_numchuck.cpp`):
+  - Normalize Windows backslash paths to forward slashes before passing to ChucK
+  - Fixes "Failed to compile" errors on Windows CI with temp file paths
+
+- **CI Test Stability**:
+  - Added `@pytest.mark.realtime` to `test_audio_commands` to skip on CI without audio devices
+  - Fixes ALSA errors on Linux CI runners
+
+- **macOS Script Compatibility** (`scripts/remove_chump.sh`):
+  - Replaced BSD-incompatible sed commands with Python for cross-platform file modifications
+
+### Removed
+
+- **Chump Package Manager Integration**:
+  - Removed `_chump.cpp`, `_chump.py`, `packages.py`, `cli/packages.py`
+  - Removed `numchuck pkg` CLI commands
+  - Removed chump documentation from README.md and CHANGELOG.md
+
 ## [0.1.9]
 
 ### Added
@@ -292,7 +325,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - `commands.py`: `shred_service` and `globals_service` properties with None checks
   - `globals.py`: Fixed variable reuse in `get_global()` method, explicit array type annotations
   - `completer.py`: Renamed shadowed `match` variable, added explicit `return None`
-  - `_chump.py`: Created placeholder module with `TYPE_CHECKING` stubs for package manager
 
 - **Nanobind memory leak warnings on REPL exit**:
   - `ChuckCompleter` was holding references to `chuck` and `session` that weren't cleaned up
@@ -555,7 +587,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 - **Chugin Build System** (`scripts/cmake/fn_add_chugin.cmake`):
   - Dynamic chugins now output to `examples/chugins/` directory
   - Removed wheel installation of `.chug` files
-  - Chugins managed externally (use chump package manager)
+  - Chugins managed externally
   - Codesigning moved from install-time to post-build command
 
 - **API Method Signatures** (`api.py`):
