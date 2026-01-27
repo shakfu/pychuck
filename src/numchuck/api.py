@@ -31,7 +31,7 @@ Thread Safety:
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Generic, TypeVar
+from typing import TYPE_CHECKING, Generic, Iterator, TypeVar
 
 import numpy as np
 
@@ -296,6 +296,54 @@ class Chuck:
         input_buf = np.zeros(num_frames * in_channels, dtype=np.float32)
         output_buf = np.zeros(num_frames * out_channels, dtype=np.float32)
         self._chuck.run(input_buf, output_buf, num_frames)
+
+    def stream(
+        self,
+        frames_per_chunk: int = 512,
+        *,
+        max_chunks: int | None = None,
+        reuse: bool = True,
+    ) -> Iterator[NDArray[np.float32]]:
+        """Iterate over audio chunks from the VM.
+
+        Creates a generator that yields audio buffers, enabling Pythonic
+        iteration-based audio processing pipelines.
+
+        Args:
+            frames_per_chunk: Number of frames per iteration (default: 512)
+            max_chunks: Maximum chunks to yield, or None for infinite iteration
+            reuse: If True, reuse internal buffer (zero allocation per iteration)
+
+        Yields:
+            Audio buffer for each chunk (frames_per_chunk * output_channels,)
+
+        Examples:
+            # Process 100 chunks of audio
+            for audio in chuck.stream(512, max_chunks=100):
+                process(audio)
+
+            # Infinite stream with explicit break
+            for audio in chuck.stream(256):
+                if some_condition:
+                    break
+                process(audio)
+
+            # Render 10 seconds of audio at 44100 Hz
+            sample_rate = 44100
+            duration = 10
+            total_frames = sample_rate * duration
+            chunks_needed = total_frames // 512
+            for audio in chuck.stream(512, max_chunks=chunks_needed):
+                write_to_file(audio)
+
+        Note:
+            When `reuse=True` (default), the same buffer is yielded each iteration.
+            Copy the data if you need to store it: `audio.copy()`
+        """
+        chunk = 0
+        while max_chunks is None or chunk < max_chunks:
+            yield self.run(frames_per_chunk, reuse=reuse)
+            chunk += 1
 
     # -------------------------------------------------------------------------
     # Audio parameters (read-only after init)

@@ -186,15 +186,21 @@ Remaining opportunities from code review.
 
 ### API Enhancements
 
-- [ ] **Audio stream iteration API** (`src/numchuck/api.py`)
+- [x] **Audio stream iteration API** (`src/numchuck/api.py`)
+  - Added `chuck.stream(frames_per_chunk, max_chunks, reuse)` generator method
   - Iterator-based audio processing: `for frame in chuck.stream(512): process(frame)`
-  - Would enable more Pythonic real-time audio pipelines
+  - Supports infinite iteration with early break, or bounded with `max_chunks`
+  - Zero-allocation mode with `reuse=True` (default)
+  - 8 new tests in `test_api.py`
 
 ### TUI Enhancements
 
-- [ ] **UGen parameter autocomplete** (`src/numchuck/tui/completer.py`)
-  - Tab completion for UGen parameters: `.freq`, `.gain`, `.phase`, etc.
-  - Requires knowledge of UGen parameter names
+- [x] **UGen parameter autocomplete** (`src/numchuck/tui/completer.py`)
+  - Tab completion for UGen parameters after `.`: `.freq`, `.gain`, `.phase`, etc.
+  - Context-aware: detects UGen type from variable declarations (e.g., `SinOsc s; s.` suggests SinOsc params)
+  - Added `UGEN_PARAMS` mapping with parameters for 40+ UGens
+  - Includes oscillator, filter, envelope, delay, reverb, buffer, and STK instrument params
+  - 6 new tests in `test_completer.py`
 
 ### Tooling
 

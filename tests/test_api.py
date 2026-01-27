@@ -503,3 +503,93 @@ class TestContextManager:
             output = chuck.run(4410)
             assert len(output) == 4410
             assert output.max() > 0
+
+
+class TestStreamIterator:
+    """Test stream iteration API."""
+
+    def test_stream_basic(self):
+        """Test basic stream iteration."""
+        chuck = Chuck(output_channels=1)
+        chuck.compile("SinOsc s => dac; 440 => s.freq; 1::second => now;")
+
+        chunks = list(chuck.stream(512, max_chunks=5))
+        assert len(chunks) == 5
+        for chunk in chunks:
+            assert len(chunk) == 512
+            assert chunk.dtype == np.float32
+
+    def test_stream_produces_audio(self):
+        """Test that stream produces actual audio."""
+        chuck = Chuck(output_channels=1)
+        chuck.compile("SinOsc s => dac; 440 => s.freq; 1::second => now;")
+
+        for audio in chuck.stream(512, max_chunks=3):
+            # Sine wave should have non-zero values
+            assert audio.max() > 0 or audio.min() < 0
+
+    def test_stream_reuse_buffer(self):
+        """Test that reuse=True yields the same buffer object."""
+        chuck = Chuck(output_channels=1)
+        chuck.compile("SinOsc s => dac; 1::second => now;")
+
+        buffers = []
+        for audio in chuck.stream(256, max_chunks=3, reuse=True):
+            # Store the buffer id (same array is reused)
+            buffers.append(id(audio))
+
+        # All buffer IDs should be the same when reuse=True
+        assert buffers[0] == buffers[1] == buffers[2]
+
+    def test_stream_no_reuse_different_data(self):
+        """Test that reuse=False yields independent data each iteration."""
+        chuck = Chuck(output_channels=1)
+        chuck.compile("SinOsc s => dac; 440 => s.freq; 1::second => now;")
+
+        # Collect copies of the data from each chunk
+        data_copies = []
+        for audio in chuck.stream(256, max_chunks=3, reuse=False):
+            data_copies.append(audio.copy())
+
+        # Each chunk should have different data (sine wave progresses)
+        # Check that not all chunks are identical
+        assert not np.allclose(data_copies[0], data_copies[1])
+        assert not np.allclose(data_copies[1], data_copies[2])
+
+    def test_stream_early_break(self):
+        """Test that stream can be broken out of early."""
+        chuck = Chuck(output_channels=1)
+        chuck.compile("SinOsc s => dac; 1::second => now;")
+
+        count = 0
+        for audio in chuck.stream(512):  # No max_chunks - infinite
+            count += 1
+            if count >= 5:
+                break
+
+        assert count == 5
+
+    def test_stream_stereo(self):
+        """Test stream with stereo output."""
+        chuck = Chuck(output_channels=2)
+        chuck.compile("SinOsc s => dac; 1::second => now;")
+
+        for audio in chuck.stream(256, max_chunks=2):
+            # Stereo: 256 frames * 2 channels = 512 samples
+            assert len(audio) == 512
+
+    def test_stream_total_frames(self):
+        """Test rendering a specific duration using stream."""
+        chuck = Chuck(sample_rate=44100, output_channels=1)
+        chuck.compile("SinOsc s => dac; 440 => s.freq; 10::second => now;")
+
+        # Render exactly 1 second of audio
+        frames_per_chunk = 512
+        chunks_needed = 44100 // frames_per_chunk  # 86 chunks
+
+        all_audio = []
+        for audio in chuck.stream(frames_per_chunk, max_chunks=chunks_needed):
+            all_audio.append(audio.copy())  # Copy since reuse=True by default
+
+        total_frames = sum(len(a) for a in all_audio)
+        assert total_frames == frames_per_chunk * chunks_needed

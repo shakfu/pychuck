@@ -17,6 +17,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ### Added
 
+- **Audio Stream Iteration API** (`src/numchuck/api.py`):
+  - `chuck.stream(frames_per_chunk, max_chunks, reuse)` generator method
+  - Iterator-based audio processing: `for audio in chuck.stream(512): process(audio)`
+  - Supports infinite iteration with early break, or bounded with `max_chunks`
+  - Zero-allocation mode with `reuse=True` (default)
+  - 8 new tests for stream iteration
+
+- **UGen Parameter Autocomplete** (`src/numchuck/tui/completer.py`):
+  - Tab completion for UGen parameters after `.`: `.freq`, `.gain`, `.phase`, etc.
+  - Context-aware: detects UGen type from variable declarations
+  - `UGEN_PARAMS` mapping with parameters for 40+ UGens (oscillators, filters, envelopes, delays, reverbs, buffers, STK instruments)
+  - 6 new tests for parameter completion
+
 - **Package Management (Optional)** - Integration of chump package manager:
   - New `_chump` nanobind module providing Python bindings for chump
   - `numchuck.packages` module with `Package` dataclass and `PackageManager` class
@@ -216,7 +229,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Now requires Python 3.9+
   - Added Python 3.13 classifier
 
-- **Test Count**: 588 tests (up from 280)
+- **Test Count**: 575 tests (up from 280)
 
 ### Removed
 

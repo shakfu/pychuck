@@ -171,3 +171,88 @@ class TestChuckCompleter:
         completions = list(completer.get_completions(doc, None))
         # Should return empty since globals query failed
         assert completions == []
+
+    def test_ugen_param_completion_after_dot(self):
+        """Test UGen parameter completion after a dot."""
+        session = MockSession()
+        chuck = MockChuck()
+        completer = ChuckCompleter(session, chuck)
+
+        # Simple dot completion without known UGen context
+        doc = Document("s.fr")
+        completions = list(completer.get_completions(doc, None))
+
+        # Should suggest 'freq' (common UGen parameter)
+        assert any(c.text == "freq" for c in completions)
+
+    def test_ugen_param_completion_with_context(self):
+        """Test UGen parameter completion with known UGen type."""
+        session = MockSession()
+        chuck = MockChuck()
+        completer = ChuckCompleter(session, chuck)
+
+        # With UGen declaration context
+        doc = Document("SinOsc s; s.fr")
+        completions = list(completer.get_completions(doc, None))
+
+        # Should suggest 'freq' with 'SinOsc' in metadata
+        freq_completions = [c for c in completions if c.text == "freq"]
+        assert len(freq_completions) > 0
+        # display_meta may be a string or FormattedText, check string content
+        meta = freq_completions[0].display_meta
+        meta_str = str(meta) if hasattr(meta, "__iter__") else meta
+        assert "SinOsc" in meta_str
+
+    def test_ugen_param_completion_empty_prefix(self):
+        """Test UGen parameter completion with empty prefix after dot."""
+        session = MockSession()
+        chuck = MockChuck()
+        completer = ChuckCompleter(session, chuck)
+
+        doc = Document("s.")
+        completions = list(completer.get_completions(doc, None))
+
+        # Should suggest common UGen parameters
+        param_names = [c.text for c in completions]
+        assert "freq" in param_names
+        assert "gain" in param_names
+
+    def test_ugen_param_filter_specific(self):
+        """Test that filter UGens get filter-specific parameters."""
+        session = MockSession()
+        chuck = MockChuck()
+        completer = ChuckCompleter(session, chuck)
+
+        doc = Document("LPF f; f.Q")
+        completions = list(completer.get_completions(doc, None))
+
+        # Should suggest 'Q' (filter parameter)
+        assert any(c.text == "Q" for c in completions)
+
+    def test_ugen_param_adsr_specific(self):
+        """Test that ADSR gets envelope-specific parameters."""
+        session = MockSession()
+        chuck = MockChuck()
+        completer = ChuckCompleter(session, chuck)
+
+        doc = Document("ADSR e; e.attack")
+        completions = list(completer.get_completions(doc, None))
+
+        # Should suggest attackTime, attackRate
+        param_names = [c.text for c in completions]
+        assert "attackTime" in param_names
+        assert "attackRate" in param_names
+
+    def test_ugen_param_sndbuf_specific(self):
+        """Test that SndBuf gets buffer-specific parameters."""
+        session = MockSession()
+        chuck = MockChuck()
+        completer = ChuckCompleter(session, chuck)
+
+        doc = Document("SndBuf buf; buf.r")
+        completions = list(completer.get_completions(doc, None))
+
+        # Should suggest rate, read
+        param_names = [c.text for c in completions]
+        assert "rate" in param_names
+        assert "read" in param_names

@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Iterator
 from prompt_toolkit.completion import Completer, Completion, PathCompleter
 from prompt_toolkit.document import Document
 
-from ..lang import ALL_IDENTIFIERS, REPL_COMMANDS
+from ..lang import ALL_IDENTIFIERS, ALL_UGEN_PARAMS, REPL_COMMANDS, UGEN_PARAMS, UGENS
 from ..paths import list_all_snippets
 
 if TYPE_CHECKING:
@@ -109,6 +109,57 @@ class ChuckCompleter(Completer):
         except (ImportError, RuntimeError):
             pass
 
+    def _complete_ugen_params(
+        self, prefix: str, ugen_name: str | None = None
+    ) -> Iterator[Completion]:
+        """Complete UGen parameters after a dot.
+
+        Args:
+            prefix: The partial parameter name typed after the dot
+            ugen_name: If known, the UGen type to get specific parameters for
+        """
+        # Get parameters for specific UGen or all parameters if unknown
+        if ugen_name and ugen_name in UGEN_PARAMS:
+            params = UGEN_PARAMS[ugen_name]
+        else:
+            params = ALL_UGEN_PARAMS
+
+        for param in sorted(params):
+            if param.startswith(prefix):
+                # Show UGen name in meta if we know the type
+                meta = ugen_name if ugen_name else "UGen"
+                yield Completion(
+                    param,
+                    start_position=-len(prefix),
+                    display_meta=meta,
+                )
+
+    def _detect_ugen_context(self, text: str) -> str | None:
+        """Try to detect if we're accessing a UGen and which type.
+
+        Looks for patterns like 'SinOsc s; s.' or 'SinOsc s => dac; s.'
+        Returns the UGen name if detected, None otherwise.
+        """
+        import re
+
+        # Find variable declarations: "UGenName varname"
+        # Then check if the text ends with "varname."
+        ugen_vars: dict[str, str] = {}
+
+        # Pattern: UGenName followed by variable name
+        decl_pattern = r"\b(" + "|".join(re.escape(u) for u in UGENS) + r")\s+(\w+)"
+        for match in re.finditer(decl_pattern, text):
+            ugen_name, var_name = match.groups()
+            ugen_vars[var_name] = ugen_name
+
+        # Check if we're accessing a known variable with a dot
+        # Pattern: "varname." at the end
+        access_pattern = r"(\w+)\.\s*$"
+        match = re.search(access_pattern, text)
+        if match:
+            var_name = match.group(1)
+            return ugen_vars.get(var_name)
+
     def get_completions(
         self, document: Document, complete_event: CompleteEvent
     ) -> Iterator[Completion]:
@@ -170,6 +221,17 @@ class ChuckCompleter(Completer):
         elif text.startswith("@"):
             prefix = text[1:]  # Remove leading '@'
             yield from self._complete_snippets(prefix)
+
+        # After '.', suggest UGen parameters
+        elif "." in text:
+            # Get text before and after the last dot
+            dot_pos = text.rfind(".")
+            before_dot = text[: dot_pos + 1]  # Include the dot for context
+            after_dot = text[dot_pos + 1 :]  # Parameter prefix after dot
+
+            # Try to detect which UGen we're accessing
+            ugen_name = self._detect_ugen_context(before_dot)
+            yield from self._complete_ugen_params(after_dot, ugen_name)
 
         # Default: suggest REPL commands or ChucK identifiers
         else:
