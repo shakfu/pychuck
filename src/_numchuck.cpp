@@ -12,6 +12,7 @@
 #include "chuck_vm.h"
 #include "util_platforms.h"  // For ck_usleep
 
+#include <algorithm>
 #include <mutex>
 #include <stdexcept>
 #include <sstream>
@@ -418,9 +419,14 @@ NB_MODULE(_numchuck, m) {
                     throw std::runtime_error("ChucK instance not initialized. Call init() first.");
                 }
 
+                // Normalize path to use forward slashes for cross-platform compatibility
+                // ChucK handles forward slashes correctly on all platforms including Windows
+                std::string normalized_path = path;
+                std::replace(normalized_path.begin(), normalized_path.end(), '\\', '/');
+
                 ChuckContextGuard guard(&self);
                 std::vector<t_CKUINT> shred_ids;
-                t_CKBOOL result = self.compileFile(path, args, count, immediate, &shred_ids);
+                t_CKBOOL result = self.compileFile(normalized_path, args, count, immediate, &shred_ids);
                 return std::make_pair(result != 0, shred_ids);
             },
             "path"_a, "args"_a = "", "count"_a = 1, "immediate"_a = false,

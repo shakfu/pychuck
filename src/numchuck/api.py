@@ -229,7 +229,10 @@ class Chuck:
             Not thread-safe during real-time audio playback.
             Call stop_audio() before compiling new code.
         """
-        return self._chuck.compile_file(path, args, count, immediate)
+        # Normalize path to use forward slashes for cross-platform compatibility
+        # ChucK handles forward slashes correctly on all platforms including Windows
+        normalized_path = path.replace("\\", "/")
+        return self._chuck.compile_file(normalized_path, args, count, immediate)
 
     def run(
         self,
