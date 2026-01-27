@@ -25,7 +25,7 @@ jobs:
 
       - name: Install numchuck from PyPI and test dependencies
         run: |
-          pip install numchuck pytest numpy
+          pip install numchuck pytest numpy pytest-asyncio
 
       - name: Verify using installed package (not local src)
         run: |
