@@ -328,67 +328,150 @@ private:
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1e1e1e; color: #d4d4d4; height: 100vh; display: flex; flex-direction: column; }
-        header { background: #2d2d2d; padding: 10px 20px; display: flex; align-items: center; gap: 15px; border-bottom: 1px solid #404040; }
-        header h1 { font-size: 18px; color: #4fc3f7; }
-        .status { padding: 5px 12px; border-radius: 4px; font-size: 12px; font-weight: 600; }
-        .status.running { background: #4caf50; color: white; }
-        .status.stopped { background: #f44336; color: white; }
-        .toolbar { display: flex; gap: 8px; margin-left: auto; }
-        .toolbar button { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.2s; }
-        .btn-primary { background: #4caf50; color: white; }
-        .btn-primary:hover { background: #45a049; }
-        .btn-danger { background: #f44336; color: white; }
-        .btn-danger:hover { background: #d32f2f; }
-        .btn-secondary { background: #555; color: white; }
-        .btn-secondary:hover { background: #666; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a1a; color: #e0e0e0; height: 100vh; display: flex; flex-direction: column; }
+
+        /* Header / Toolbar */
+        header { background: #252525; padding: 8px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #333; }
+        .logo { display: flex; align-items: center; gap: 8px; }
+        .logo svg { width: 24px; height: 24px; }
+        .logo span { font-size: 16px; font-weight: 600; color: #4fc3f7; }
+
+        /* Status indicator */
+        .status-badge { padding: 6px 14px; border-radius: 16px; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+        .status-badge.running { background: #2e7d32; color: #fff; }
+        .status-badge.stopped { background: #c62828; color: #fff; }
+        .status-badge::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+
+        /* Toolbar buttons */
+        .toolbar { display: flex; gap: 8px; margin-left: 20px; }
+        .tool-btn { width: 42px; height: 42px; border-radius: 50%; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.1s, box-shadow 0.2s; }
+        .tool-btn:hover { transform: scale(1.05); }
+        .tool-btn:active { transform: scale(0.95); }
+        .tool-btn svg { width: 20px; height: 20px; fill: white; }
+        .tool-btn.play { background: linear-gradient(135deg, #43a047, #2e7d32); }
+        .tool-btn.replace { background: linear-gradient(135deg, #1e88e5, #1565c0); }
+        .tool-btn.stop { background: linear-gradient(135deg, #fb8c00, #ef6c00); }
+        .tool-btn.clear { background: linear-gradient(135deg, #e53935, #c62828); }
+        .tool-btn[disabled] { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        .spacer { flex: 1; }
+        .title { font-size: 14px; color: #888; }
+
+        /* Main layout */
         main { flex: 1; display: flex; overflow: hidden; }
-        .editor-panel { flex: 1; display: flex; flex-direction: column; border-right: 1px solid #404040; }
-        .editor-header { background: #2d2d2d; padding: 8px 15px; font-size: 13px; color: #888; border-bottom: 1px solid #404040; }
+
+        /* File explorer sidebar */
+        .file-sidebar { width: 180px; background: #1e1e1e; border-right: 1px solid #333; display: flex; flex-direction: column; }
+        .sidebar-header { padding: 10px 12px; font-size: 11px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #333; }
+        .file-list { flex: 1; overflow-y: auto; padding: 8px 0; }
+        .file-item { padding: 6px 12px; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px; color: #ccc; }
+        .file-item:hover { background: #2a2a2a; }
+        .file-item.active { background: #333; color: #fff; }
+        .file-item svg { width: 16px; height: 16px; fill: #888; }
+
+        /* Editor area */
+        .editor-area { flex: 1; display: flex; flex-direction: column; }
+        .editor-tabs { background: #252525; display: flex; border-bottom: 1px solid #333; }
+        .editor-tab { padding: 10px 20px; font-size: 13px; color: #888; cursor: pointer; border-right: 1px solid #333; display: flex; align-items: center; gap: 8px; }
+        .editor-tab.active { background: #1a1a1a; color: #fff; }
+        .editor-tab svg { width: 14px; height: 14px; fill: currentColor; }
         .editor-container { flex: 1; overflow: hidden; }
-        .CodeMirror { height: 100% !important; font-size: 14px; line-height: 1.5; }
-        .sidebar { width: 350px; display: flex; flex-direction: column; }
-        .panel { flex: 1; display: flex; flex-direction: column; border-bottom: 1px solid #404040; }
-        .panel:last-child { border-bottom: none; }
-        .panel-header { background: #2d2d2d; padding: 8px 15px; font-size: 13px; font-weight: 600; color: #4fc3f7; border-bottom: 1px solid #404040; }
-        .panel-content { flex: 1; overflow-y: auto; padding: 10px; }
-        #shreds-list { list-style: none; }
-        #shreds-list li { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; background: #2d2d2d; border-radius: 4px; margin-bottom: 5px; }
-        #shreds-list .shred-id { color: #4fc3f7; font-weight: 600; width: 30px; }
-        #shreds-list .shred-name { flex: 1; color: #d4d4d4; }
-        #shreds-list .shred-time { color: #888; font-size: 12px; margin-right: 10px; }
-        #shreds-list .shred-remove { background: #f44336; color: white; border: none; border-radius: 50%; width: 22px; height: 22px; cursor: pointer; font-size: 14px; line-height: 1; }
-        #console { font-family: 'Monaco', 'Menlo', monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
-        .console-line { padding: 2px 0; }
-        .console-line.error { color: #f44336; }
+        .CodeMirror { height: 100% !important; font-size: 14px; line-height: 1.6; background: #1a1a1a; }
+
+        /* Right sidebar */
+        .right-sidebar { width: 320px; display: flex; flex-direction: column; border-left: 1px solid #333; background: #1e1e1e; }
+
+        /* Shred panel */
+        .shred-panel { height: 200px; display: flex; flex-direction: column; border-bottom: 1px solid #333; }
+        .panel-header { padding: 10px 12px; font-size: 11px; font-weight: 600; color: #4fc3f7; text-transform: uppercase; letter-spacing: 0.5px; background: #252525; border-bottom: 1px solid #333; }
+        .shred-table { flex: 1; overflow-y: auto; }
+        .shred-table table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .shred-table th { text-align: left; padding: 8px 10px; color: #888; font-weight: 500; border-bottom: 1px solid #333; background: #222; position: sticky; top: 0; }
+        .shred-table td { padding: 8px 10px; border-bottom: 1px solid #2a2a2a; }
+        .shred-table tr:hover td { background: #252525; }
+        .shred-id { color: #4fc3f7; font-weight: 600; }
+        .shred-name { color: #e0e0e0; }
+        .shred-time { color: #888; font-family: monospace; }
+        .remove-btn { width: 24px; height: 24px; border-radius: 50%; border: none; background: #c62828; color: white; cursor: pointer; font-size: 16px; line-height: 1; display: flex; align-items: center; justify-content: center; }
+        .remove-btn:hover { background: #e53935; }
+        .empty-row td { color: #666; font-style: italic; text-align: center; padding: 20px; }
+
+        /* Console panel */
+        .console-panel { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+        .panel-tabs { display: flex; background: #252525; border-bottom: 1px solid #333; }
+        .panel-tab { padding: 8px 16px; font-size: 11px; font-weight: 600; color: #888; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid transparent; }
+        .panel-tab:hover { color: #bbb; }
+        .panel-tab.active { color: #4fc3f7; border-bottom-color: #4fc3f7; }
+        .console-content { flex: 1; overflow-y: auto; padding: 10px; font-family: 'Monaco', 'Menlo', 'Consolas', monospace; font-size: 12px; line-height: 1.5; }
+        .console-line { padding: 2px 0; white-space: pre-wrap; word-break: break-all; }
+        .console-line.error { color: #ef5350; }
         .console-line.info { color: #4fc3f7; }
-        .empty-state { color: #666; font-style: italic; text-align: center; padding: 20px; }
-        /* ChucK-specific syntax colors */
+        .console-line.warn { color: #ffb74d; }
+        .console-line.vm { color: #81c784; }
+
+        /* Keyboard shortcut hint */
+        .shortcut-hint { font-size: 11px; color: #666; margin-left: 8px; }
+        .shortcut-hint kbd { background: #333; padding: 2px 6px; border-radius: 3px; font-family: inherit; }
+
+        /* ChucK syntax colors */
         .cm-s-material-darker .cm-chuck-ugen { color: #82aaff; }
         .cm-s-material-darker .cm-chuck-time { color: #c792ea; }
-        .cm-s-material-darker .cm-chuck-operator { color: #89ddff; }
+        .cm-s-material-darker .cm-chuck-operator { color: #89ddff; font-weight: bold; }
         .cm-s-material-darker .cm-chuck-keyword { color: #c792ea; }
         .cm-s-material-darker .cm-chuck-type { color: #ffcb6b; }
         .cm-s-material-darker .cm-chuck-builtin { color: #82aaff; }
+        .cm-s-material-darker .cm-string-2 { color: #c3e88d; } /* <<< >>> */
     </style>
 </head>
 <body>
     <header>
-        <h1>numchuck</h1>
-        <span id="status" class="status stopped">Stopped</span>
-        <div class="toolbar">
-            <button id="btn-start" class="btn-primary" onclick="startAudio()">Start Audio</button>
-            <button id="btn-stop" class="btn-danger" onclick="stopAudio()" style="display:none">Stop Audio</button>
-            <button class="btn-primary" onclick="sporkCode()">Spork</button>
-            <button class="btn-secondary" onclick="clearAll()">Clear All</button>
+        <div class="logo">
+            <svg viewBox="0 0 24 24"><path fill="#4fc3f7" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+            <span>numchuck</span>
         </div>
+        <div id="status" class="status-badge stopped">Stopped</div>
+
+        <div class="toolbar">
+            <button class="tool-btn play" onclick="sporkCode()" title="Spork Code (Cmd+Enter)">
+                <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+            </button>
+            <button class="tool-btn replace" onclick="replaceShred()" title="Replace Last Shred">
+                <svg viewBox="0 0 24 24"><path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8 0 1.57.46 3.03 1.24 4.26L6.7 14.8c-.45-.83-.7-1.79-.7-2.8 0-3.31 2.69-6 6-6zm6.76 1.74L17.3 9.2c.44.84.7 1.79.7 2.8 0 3.31-2.69 6-6 6v-3l-4 4 4 4v-3c4.42 0 8-3.58 8-8 0-1.57-.46-3.03-1.24-4.26z"/></svg>
+            </button>
+            <button class="tool-btn stop" onclick="clearAll()" title="Remove All Shreds">
+                <svg viewBox="0 0 24 24"><path d="M19 13H5v-2h14v2z"/></svg>
+            </button>
+        </div>
+
+        <span class="shortcut-hint"><kbd>Cmd</kbd>+<kbd>Enter</kbd> to spork</span>
+        <div class="spacer"></div>
+
+        <button id="btn-audio" class="tool-btn play" onclick="toggleAudio()" title="Start/Stop Audio">
+            <svg id="audio-icon" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+        </button>
     </header>
+
     <main>
-        <div class="editor-panel">
-            <div class="editor-header">untitled.ck</div>
+        <div class="file-sidebar">
+            <div class="sidebar-header">File Explorer</div>
+            <div class="file-list">
+                <div class="file-item active">
+                    <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13z"/></svg>
+                    untitled.ck
+                </div>
+            </div>
+        </div>
+
+        <div class="editor-area">
+            <div class="editor-tabs">
+                <div class="editor-tab active">
+                    <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13z"/></svg>
+                    untitled.ck
+                </div>
+            </div>
             <div class="editor-container">
                 <textarea id="editor">// numchuck Web IDE
-// Write ChucK code here and click Spork to run
+// Press Cmd+Enter (Mac) or Ctrl+Enter (Windows/Linux) to spork
 
 SinOsc s => dac;
 440 => s.freq;
@@ -400,25 +483,42 @@ SinOsc s => dac;
 </textarea>
             </div>
         </div>
-        <div class="sidebar">
-            <div class="panel">
-                <div class="panel-header">SHREDS</div>
-                <div class="panel-content">
-                    <ul id="shreds-list">
-                        <li class="empty-state">No shreds running</li>
-                    </ul>
+
+        <div class="right-sidebar">
+            <div class="shred-panel">
+                <div class="panel-header">Shreds</div>
+                <div class="shred-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width:50px">ID</th>
+                                <th>Code</th>
+                                <th style="width:60px">Time</th>
+                                <th style="width:40px"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="shreds-body">
+                            <tr class="empty-row"><td colspan="4">No shreds running</td></tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
-            <div class="panel">
-                <div class="panel-header">CONSOLE</div>
-                <div class="panel-content" id="console">
+
+            <div class="console-panel">
+                <div class="panel-tabs">
+                    <div class="panel-tab active">Console</div>
+                </div>
+                <div class="console-content" id="console">
                     <div class="console-line info">numchuck Web IDE ready</div>
                 </div>
             </div>
         </div>
     </main>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/mode/simple.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
     <script>
         // Define ChucK syntax mode
         CodeMirror.defineSimpleMode("chuck", {
@@ -430,7 +530,7 @@ SinOsc s => dac;
                 {regex: /'(?:[^\\]|\\.)*?(?:'|$)/, token: "string"},
                 {regex: /\b(if|else|while|for|until|repeat|break|continue|return|class|extends|public|private|static|pure|function|fun|spork|new|null|NULL|true|false|maybe|this|super|me|now|dac|adc|blackhole)\b/, token: "chuck-keyword"},
                 {regex: /\b(int|float|time|dur|void|string|complex|polar|vec3|vec4|Object|Event|UGen|UAna|Shred|Thread|Class|IO|FileIO|OscIn|OscOut|OscMsg|Hid|HidMsg|SerialIO|MidiIn|MidiOut|MidiMsg|MidiFileIn)\b/, token: "chuck-type"},
-                {regex: /\b(SinOsc|TriOsc|SqrOsc|SawOsc|PulseOsc|Phasor|Noise|Impulse|Step|Gain|Pan2|Mix2|dac|adc|blackhole|Envelope|ADSR|Delay|DelayL|DelayA|Echo|JCRev|NRev|PRCRev|Chorus|Modulate|PitShift|SubNoise|Blit|BlitSaw|BlitSquare|WvIn|WvOut|WvOut2|SndBuf|SndBuf2|LiSa|Dyno|LPF|HPF|BPF|BRF|ResonZ|BiQuad|OnePole|TwoPole|OneZero|TwoZero|PoleZero|FilterBasic|Mandolin|Moog|Saxofony|Shakers|Sitar|StifKarp|BeeThree|FM|FMVoices|HevyMetl|PercFlut|Rhodey|TubeBell|Wurley|VoicForm|KrstlChr|Gen5|Gen7|Gen9|Gen10|Gen17|CurveTable|WarpTable|Chugraph|Chugen)\b/, token: "chuck-ugen"},
+                {regex: /\b(SinOsc|TriOsc|SqrOsc|SawOsc|PulseOsc|Phasor|Noise|Impulse|Step|Gain|Pan2|Mix2|Envelope|ADSR|Delay|DelayL|DelayA|Echo|JCRev|NRev|PRCRev|Chorus|Modulate|PitShift|SubNoise|Blit|BlitSaw|BlitSquare|WvIn|WvOut|WvOut2|SndBuf|SndBuf2|LiSa|Dyno|LPF|HPF|BPF|BRF|ResonZ|BiQuad|OnePole|TwoPole|OneZero|TwoZero|PoleZero|FilterBasic|Mandolin|Moog|Saxofony|Shakers|Sitar|StifKarp|BeeThree|FM|FMVoices|HevyMetl|PercFlut|Rhodey|TubeBell|Wurley|VoicForm|KrstlChr|Gen5|Gen7|Gen9|Gen10|Gen17|CurveTable|WarpTable|Chugraph|Chugen)\b/, token: "chuck-ugen"},
                 {regex: /\b(samp|ms|second|minute|hour|day|week)\b/, token: "chuck-time"},
                 {regex: /\b(Std|Math|Machine|RegEx|Shred|me|Type|Object|string|IO)\b/, token: "chuck-builtin"},
                 {regex: /=>|=<|@=>|=\^|!=>|\+=>|-=>|\*=>|\/=>|%=>|&=>|\|=>|\^=>|>>=>|<<=>|-->|--<|<--|>--/, token: "chuck-operator"},
@@ -450,8 +550,8 @@ SinOsc s => dac;
         let editor;
         let ws;
         let audioRunning = false;
+        let lastShredId = null;
 
-        // Initialize CodeMirror
         document.addEventListener('DOMContentLoaded', function() {
             editor = CodeMirror.fromTextArea(document.getElementById('editor'), {
                 mode: 'chuck',
@@ -501,39 +601,50 @@ SinOsc s => dac;
             line.textContent = text;
             consoleEl.appendChild(line);
             consoleEl.scrollTop = consoleEl.scrollHeight;
+            // Limit console lines
+            while (consoleEl.children.length > 200) {
+                consoleEl.removeChild(consoleEl.firstChild);
+            }
         }
 
         function updateShreds(shreds) {
-            const list = document.getElementById('shreds-list');
+            const tbody = document.getElementById('shreds-body');
             if (shreds.length === 0) {
-                list.innerHTML = '<li class="empty-state">No shreds running</li>';
+                tbody.innerHTML = '<tr class="empty-row"><td colspan="4">No shreds running</td></tr>';
+                lastShredId = null;
                 return;
             }
-            list.innerHTML = shreds.map(s => `
-                <li>
-                    <span class="shred-id">${s.id}</span>
-                    <span class="shred-name">${s.name || 'code'}</span>
-                    <span class="shred-time">${s.time || ''}</span>
-                    <button class="shred-remove" onclick="removeShred(${s.id})">-</button>
-                </li>
+            tbody.innerHTML = shreds.map(s => `
+                <tr>
+                    <td class="shred-id">${s.id}</td>
+                    <td class="shred-name">${s.name || 'code'}</td>
+                    <td class="shred-time">${s.time || '00:00'}</td>
+                    <td><button class="remove-btn" onclick="removeShred(${s.id})">-</button></td>
+                </tr>
             `).join('');
+            // Track last shred for replace
+            if (shreds.length > 0) {
+                lastShredId = shreds[shreds.length - 1].id;
+            }
         }
 
         function setAudioStatus(running) {
             audioRunning = running;
             const status = document.getElementById('status');
-            const btnStart = document.getElementById('btn-start');
-            const btnStop = document.getElementById('btn-stop');
+            const audioBtn = document.getElementById('btn-audio');
+            const audioIcon = document.getElementById('audio-icon');
             if (running) {
                 status.textContent = 'Running';
-                status.className = 'status running';
-                btnStart.style.display = 'none';
-                btnStop.style.display = 'inline-block';
+                status.className = 'status-badge running';
+                audioBtn.classList.remove('play');
+                audioBtn.classList.add('stop');
+                audioIcon.innerHTML = '<path d="M6 6h12v12H6z"/>';
             } else {
                 status.textContent = 'Stopped';
-                status.className = 'status stopped';
-                btnStart.style.display = 'inline-block';
-                btnStop.style.display = 'none';
+                status.className = 'status-badge stopped';
+                audioBtn.classList.remove('stop');
+                audioBtn.classList.add('play');
+                audioIcon.innerHTML = '<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>';
             }
         }
 
@@ -548,33 +659,40 @@ SinOsc s => dac;
             const code = getCode();
             const result = await apiCall('POST', '/compile', { code });
             if (result.success) {
-                log('Sporked shred ' + result.shred_ids.join(', '), 'info');
+                log('[chuck]: sporking incoming shred: ' + result.shred_ids.join(', ') + ' (code)...', 'vm');
             } else {
                 log('Error: ' + (result.error || 'Compilation failed'), 'error');
             }
         }
 
+        async function replaceShred() {
+            if (lastShredId) {
+                await removeShred(lastShredId);
+            }
+            await sporkCode();
+        }
+
         async function removeShred(id) {
+            log('[chuck]: removing shred: ' + id + '...', 'vm');
             await apiCall('DELETE', '/shred/' + id);
         }
 
         async function clearAll() {
+            log('[chuck]: removing all shreds...', 'vm');
             await apiCall('POST', '/clear');
-            log('Cleared all shreds', 'info');
         }
 
-        async function startAudio() {
-            const result = await apiCall('POST', '/audio/start');
-            if (!result.success) log('Failed to start audio: ' + result.error, 'error');
-        }
-
-        async function stopAudio() {
-            const result = await apiCall('POST', '/audio/stop');
-            if (!result.success) log('Failed to stop audio: ' + result.error, 'error');
+        async function toggleAudio() {
+            if (audioRunning) {
+                const result = await apiCall('POST', '/audio/stop');
+                if (!result.success) log('Failed to stop audio: ' + result.error, 'error');
+            } else {
+                const result = await apiCall('POST', '/audio/start');
+                if (!result.success) log('Failed to start audio: ' + result.error, 'error');
+            }
         }
 
         connect();
-        // Poll status every 2 seconds
         setInterval(async () => {
             try {
                 const status = await apiCall('GET', '/status');
