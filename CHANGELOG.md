@@ -375,8 +375,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 - **Circular Import on Package Load** (`src/numchuck/__init__.py`):
   - Fixed circular import when importing from `numchuck` package
-  - Root cause: `api.py` does `from . import _numchuck` before it's in the namespace
-  - Solution: Import `_numchuck` first in `__init__.py` before importing `api.py`
+  - Root cause: `api.py` does `from . import _numchuck` which needs package fully initialized
+  - Solution: Lazy imports via `__getattr__` (PEP 562) defer loading until first access
 
 - **Web IDE Server Crash on Page Load** (`src/_numchuck.cpp`):
   - Fixed segfault (exit code 139) when browser connects to Web IDE
