@@ -18,15 +18,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 ### Added
 
 - **Chugin Directory Search** (`src/numchuck/api.py`, `src/numchuck/tui/common.py`):
-  - Automatic discovery of chugins in `.numchuck/chugins` directory
-  - Uses `PARAM_IMPORT_PATH_SYSTEM` for directory-based chugin search
+  - Automatic discovery of chugins via `PARAM_IMPORT_PATH_SYSTEM` (auto-loads .chug files)
+  - Default search paths:
+    - `~/.numchuck/chugins` - Always included (global user chugins)
+    - `./.numchuck/chugins` - Included if exists (project-local chugins)
   - `user_chugins` parameter accepts both directories and explicit `.chug` files
-  - Directories are searched recursively for `.chug` files
 
 - **Import Path Properties** (`src/numchuck/api.py`):
   - `chuck.import_path_system` - System chugin/import search directories
   - `chuck.import_path_user` - User import search paths
   - `chuck.import_path_packages` - Package import search paths
+
+- **ChucK Command Alignment** (`src/numchuck/tui/parser.py`, `src/numchuck/tui/commands.py`):
+  - `abort.shred <id>` / `abort <id>` - ChucK-native shred abort commands
+  - `exit` / `quit` - Exit the REPL
+  - `= <id> file.ck` / `= <id> "code"` - ChucK-style replace shred shortcuts
+  - `^` - ChucK-style status shortcut
 
 ### Fixed
 

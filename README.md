@@ -123,9 +123,11 @@ numchuck repl --no-sidebar
 * `add <file>` or `+ <file>` - Spork a file
 * `remove <id>` or `- <id>` - Remove a shred
 * `remove all` or `- all` - Remove all shreds
-* `replace <id> <file>` - Replace shred with file
-* `status` - Show VM status
-* `time` - Show ChucK time
+* `abort.shred <id>` or `abort <id>` - Abort a shred (ChucK-native)
+* `replace <id> <file>` or `= <id> <file>` - Replace shred with file
+* `status` or `^` - Show VM status
+* `time` or `.` - Show ChucK time
+* `exit` or `quit` - Exit the REPL
 * `@<name>` - Load a snippet (e.g., `@sine`, `@drum`)
 * `watch <file>` - Auto-reload file on changes
 * `record start/stop/save <name>` - Record session

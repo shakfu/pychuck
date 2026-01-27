@@ -89,6 +89,49 @@ class TestShredManagement:
         assert cmd.args["id"] == 1
         assert cmd.args["code"] == "new code"
 
+    def test_equals_replace_file(self, parser):
+        """Test '= 1 file.ck' ChucK-style replace."""
+        cmd = parser.parse("= 1 new.ck")
+        assert cmd.type == "replace_shred_file"
+        assert cmd.args["id"] == 1
+        assert cmd.args["path"] == "new.ck"
+
+    def test_equals_replace_file_no_space(self, parser):
+        """Test '=1 file.ck' ChucK-style replace without space."""
+        cmd = parser.parse("=1 new.ck")
+        assert cmd.type == "replace_shred_file"
+        assert cmd.args["id"] == 1
+        assert cmd.args["path"] == "new.ck"
+
+    def test_equals_replace_code(self, parser):
+        """Test '= 1 "code"' ChucK-style replace with code."""
+        cmd = parser.parse('= 1 "new code"')
+        assert cmd.type == "replace_shred"
+        assert cmd.args["id"] == 1
+        assert cmd.args["code"] == "new code"
+
+    def test_abort_shred_dot_syntax(self, parser):
+        """Test 'abort.shred 1' ChucK-native abort command."""
+        cmd = parser.parse("abort.shred 1")
+        assert cmd.type == "abort_shred"
+        assert cmd.args["id"] == 1
+
+    def test_abort_shred_word(self, parser):
+        """Test 'abort 1' abort command."""
+        cmd = parser.parse("abort 1")
+        assert cmd.type == "abort_shred"
+        assert cmd.args["id"] == 1
+
+    def test_exit_command(self, parser):
+        """Test 'exit' command."""
+        cmd = parser.parse("exit")
+        assert cmd.type == "exit"
+
+    def test_quit_command(self, parser):
+        """Test 'quit' command."""
+        cmd = parser.parse("quit")
+        assert cmd.type == "exit"
+
 
 class TestStatusCommands:
     """Tests for status and info commands."""
@@ -96,6 +139,11 @@ class TestStatusCommands:
     def test_status(self, parser):
         """Test 'status' command."""
         cmd = parser.parse("status")
+        assert cmd.type == "status"
+
+    def test_caret_status(self, parser):
+        """Test '^' ChucK-style status shortcut."""
+        cmd = parser.parse("^")
         assert cmd.type == "status"
 
     def test_time(self, parser):

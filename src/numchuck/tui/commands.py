@@ -131,6 +131,26 @@ class CommandExecutor:
             return None
         return f"Failed to remove shred {sid}"
 
+    def _cmd_abort_shred(self, args: dict[str, Any]) -> str | None:
+        """Abort a shred by ID (ChucK abort.shred command).
+
+        This is the ChucK-native command for removing shreds.
+        Functionally equivalent to remove_shred.
+        """
+        sid = args["id"]
+        if self.shred_service.remove_shred(sid):
+            self._log(f"[shred {sid}]: abort")
+            return None
+        return f"Failed to abort shred {sid}"
+
+    def _cmd_exit(self, args: dict[str, Any]) -> str | None:
+        """Exit the REPL.
+
+        Returns None to indicate success. The REPL checks for the 'exit'
+        command type and handles the actual termination.
+        """
+        return None
+
     def _cmd_remove_all(self, args: dict[str, Any]) -> str | None:
         """Remove all shreds."""
         self.shred_service.remove_all()

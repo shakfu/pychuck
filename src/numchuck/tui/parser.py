@@ -13,21 +13,29 @@ class Command:
 class CommandParser:
     def __init__(self) -> None:
         self.patterns: list[tuple[str, Callable[[re.Match[str]], Command]]] = [
-            # Chuck-style word commands (new)
+            # Chuck-style word commands
             (r"^add\s+(.+\.ck)$", self._spork_file),
             (r"^remove\s+all$", self._remove_all),
             (r"^remove\s+(\d+)$", self._remove_shred),
             (r"^replace\s+(\d+)\s+(.+\.ck)$", self._replace_shred_file),
+            (r'^replace\s+(\d+)\s+"([^"]+)"$', self._replace_shred),
+            (r"^abort\.shred\s+(\d+)$", self._abort_shred),
+            (r"^abort\s+(\d+)$", self._abort_shred),
             (r"^status$", self._status),
             (r"^time$", self._current_time),
-            # Shred management (shortcut symbols)
+            (r"^exit$", self._exit),
+            (r"^quit$", self._exit),
+            # Shred management (ChucK shortcut symbols: + - = ^)
             (r"^\+\s+(.+\.ck)$", self._spork_file),
             (r'^\+\s+"([^"]+)"$', self._spork_code),
             (r"^\+\s+\'([^\']+)\'$", self._spork_code),
             (r"^-\s+all$", self._remove_all),
             (r"^-\s*(\d+)$", self._remove_shred),  # Accept "- 1" or "-1"
-            (r'^~\s+(\d+)\s+"([^"]+)"$', self._replace_shred),
-            # Status
+            (r"^=\s*(\d+)\s+(.+\.ck)$", self._replace_shred_file),  # = <id> file.ck
+            (r'^=\s*(\d+)\s+"([^"]+)"$', self._replace_shred),  # = <id> "code"
+            (r'^~\s+(\d+)\s+"([^"]+)"$', self._replace_shred),  # Legacy: ~ <id> "code"
+            (r"^\^$", self._status),  # ChucK status shortcut
+            # Status (numchuck extensions)
             (r"^\?$", self._list_shreds),
             (r"^\?\s+(\d+)$", self._shred_info),
             (r"^\?g$", self._list_globals),
@@ -124,6 +132,12 @@ class CommandParser:
 
     def _status(self, m: re.Match[str]) -> Command:
         return Command("status", {})
+
+    def _abort_shred(self, m: re.Match[str]) -> Command:
+        return Command("abort_shred", {"id": int(m.group(1))})
+
+    def _exit(self, m: re.Match[str]) -> Command:
+        return Command("exit", {})
 
     def _list_shreds(self, m: re.Match[str]) -> Command:
         return Command("list_shreds", {})

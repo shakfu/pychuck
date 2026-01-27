@@ -37,7 +37,7 @@ from typing import TYPE_CHECKING, Any, Generic, Iterator, TypeVar
 import numpy as np
 
 from . import _numchuck
-from .paths import get_chugins_dir
+from .paths import get_numchuck_home
 
 if TYPE_CHECKING:
     from types import TracebackType
@@ -105,7 +105,7 @@ class Chuck:
         self._chuck.set_param(_numchuck.PARAM_CHUGIN_ENABLE, int(chugin_enable))
 
         # Set up chugin search paths
-        # PARAM_IMPORT_PATH_SYSTEM is used for directory search (finds .chug files)
+        # PARAM_IMPORT_PATH_SYSTEM is used for directory search (auto-loads .chug files)
         # PARAM_USER_CHUGINS is for explicit individual .chug file paths
         chugin_dirs: list[str] = []
         chugin_files: list[str] = []
@@ -119,12 +119,18 @@ class Chuck:
                 elif p.is_dir():
                     chugin_dirs.append(str(p))
 
-        # Add numchuck's chugins directory if it exists
-        numchuck_chugins_dir = get_chugins_dir()
-        if numchuck_chugins_dir.exists():
-            dir_str = str(numchuck_chugins_dir)
-            if dir_str not in chugin_dirs:
-                chugin_dirs.append(dir_str)
+        # Always include ~/.numchuck/chugins (global user chugins)
+        global_chugins_dir = get_numchuck_home() / "chugins"
+        global_chugins_str = str(global_chugins_dir)
+        if global_chugins_str not in chugin_dirs:
+            chugin_dirs.append(global_chugins_str)
+
+        # Include local .numchuck/chugins if it exists and is different from global
+        local_chugins_dir = Path.cwd() / ".numchuck" / "chugins"
+        if local_chugins_dir.exists():
+            local_chugins_str = str(local_chugins_dir)
+            if local_chugins_str not in chugin_dirs:
+                chugin_dirs.append(local_chugins_str)
 
         # Set search directories (for .chug discovery)
         if chugin_dirs:

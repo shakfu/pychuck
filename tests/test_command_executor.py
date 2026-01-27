@@ -252,6 +252,29 @@ class TestShredCommands:
 
         assert result == "Failed to remove shred 999"
 
+    def test_abort_shred_success(self, executor):
+        """Test abort_shred returns None on success."""
+        executor._shred_service.remove_shred.return_value = True
+
+        result = executor._cmd_abort_shred({"id": 1})
+
+        assert result is None
+        executor._shred_service.remove_shred.assert_called_with(1)
+
+    def test_abort_shred_failure(self, executor):
+        """Test abort_shred returns error on failure."""
+        executor._shred_service.remove_shred.return_value = False
+
+        result = executor._cmd_abort_shred({"id": 999})
+
+        assert result == "Failed to abort shred 999"
+
+    def test_exit_command(self, executor):
+        """Test exit command returns None."""
+        result = executor._cmd_exit({})
+
+        assert result is None
+
     def test_remove_all(self, executor):
         """Test remove_all calls service."""
         result = executor._cmd_remove_all({})
