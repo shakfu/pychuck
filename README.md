@@ -28,9 +28,11 @@ The numchuck library provides interactive control over ChucK, enabling live codi
 
 * **Interactive REPL** — Terminal-style interface supporting ChucK commands and code completion.
 
+* **Command-Line Mode** — Run ChucK files directly from the terminal, with support for duration and silent modes.
+
 * **Automatic Versioning** — Keeps track of live coding sessions (`file.ck → file-1.ck → file-1-1.ck`).
 
-* **Command-Line Mode** — Run ChucK files directly from the terminal, with support for duration and silent modes.
+* **Web IDE** — Browser-based editor and REPL with real-time audio meters, globals panel, and WebSocket updates.
 
 ## Installation
 
@@ -219,25 +221,32 @@ numchuck web --no-browser
 * Theme toggle (dark/light mode) with system preference detection
 * Real-time console output via WebSocket
 * Audio start/stop controls
-* Keyboard shortcuts:
-  - Ctrl+Enter: Spork code (Editor mode)
+* Keyboard shortcuts (Editor mode):
+  - Ctrl+Enter: Spork code
   - Ctrl+S: Save to local storage
   - Ctrl+O: Open file from disk
   - Ctrl+Shift+S: Download/Save As
   - Ctrl+N: New tab
-  - Ctrl+C: Cancel input (REPL mode)
-  - Ctrl+L: Clear terminal (REPL mode)
+* Keyboard shortcuts (REPL mode):
+  - Ctrl+C: Copy selection or cancel input
+  - Ctrl+X: Cut selection
+  - Ctrl+V: Paste from clipboard
+  - Ctrl+L: Clear terminal
+  - Up/Down: Navigate command history
 
-**REPL Commands** (same as TUI REPL):
-* `+ file.ck` - Spork a file
+**REPL Commands** (ChucK-compatible):
+* `+ file.ck` / `+ "code"` - Spork a file or code
 * `- <id>` / `- all` - Remove shred(s)
+* `= <id> file.ck` / `= <id> "code"` - Replace shred
 * `status` / `^` - Show VM status
 * `?` / `?<id>` - List shreds / shred info
 * `?g` - List global variables
+* `?a` - Audio info
 * `name::value` - Set global variable
 * `name?` - Get global value
 * `name!` / `name!!` - Signal/broadcast event
 * `>` - Start audio, `||` - Stop audio
+* `clear` - Clear VM, `reset` - Reset shred ID
 * Or enter ChucK code directly
 
 **REST API Endpoints:**
