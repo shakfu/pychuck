@@ -177,3 +177,42 @@ High priority items from comprehensive code review.
 ### Test Suite
 
 - Total test count: 253 (up from 228)
+
+---
+
+## Future Enhancements
+
+Remaining opportunities from code review.
+
+### API Enhancements
+
+- [ ] **Audio stream iteration API** (`src/numchuck/api.py`)
+  - Iterator-based audio processing: `for frame in chuck.stream(512): process(frame)`
+  - Would enable more Pythonic real-time audio pipelines
+
+### TUI Enhancements
+
+- [ ] **UGen parameter autocomplete** (`src/numchuck/tui/completer.py`)
+  - Tab completion for UGen parameters: `.freq`, `.gain`, `.phase`, etc.
+  - Requires knowledge of UGen parameter names
+
+### Tooling
+
+- [ ] **LSP server for IDE integration**
+  - Language Server Protocol implementation for ChucK
+  - Would enable VS Code, Neovim, etc. integration
+  - Features: syntax errors, completions, hover docs
+
+### Documentation
+
+- [ ] **Interactive tutorial**
+  - Step-by-step livecoding introduction
+  - Could be a guided REPL mode or web-based
+
+- [ ] **Cookbook**
+  - Common patterns and recipes
+  - Examples: FM synthesis, drum machines, effects chains
+
+- [ ] **Video documentation**
+  - Screen recordings of livecoding sessions
+  - Tutorial videos showing REPL/editor workflows
