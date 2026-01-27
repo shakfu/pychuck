@@ -72,7 +72,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
     - Full command parity with TUI REPL (all ChucK commands supported)
     - Supports all REPL commands: +, -, =, status, globals, events, etc.
     - Command history with up/down arrows
-    - Copy/paste support (Ctrl+C/V or Cmd+C/V)
+    - Cut/copy/paste support (Ctrl+X/C/V or Cmd+X/C/V)
     - Right-click to select word
     - Ctrl+C to cancel (when no selection), Ctrl+L to clear
     - ChucK code can be entered directly

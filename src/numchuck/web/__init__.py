@@ -6,7 +6,6 @@ Provides a browser-based IDE for ChucK live coding.
 from __future__ import annotations
 
 import json
-import re
 import threading
 import time
 from pathlib import Path
@@ -414,7 +413,9 @@ class WebChuckServer:
                         self._shred_times[sid] = now
                         self._shred_code[sid] = f"file: {path}"
                     self._broadcast_shreds_update()
-                    return self._repl_output(f"[shred {shred_ids}]: sporking file: {path}", "success")
+                    return self._repl_output(
+                        f"[shred {shred_ids}]: sporking file: {path}", "success"
+                    )
                 else:
                     return self._repl_error(f"Failed to compile: {path}")
 
@@ -465,9 +466,13 @@ class WebChuckServer:
                     self._shred_code.pop(sid, None)
                     now = time.time()
                     self._shred_times[new_id] = now
-                    self._shred_code[new_id] = code[:100] + ("..." if len(code) > 100 else "")
+                    self._shred_code[new_id] = code[:100] + (
+                        "..." if len(code) > 100 else ""
+                    )
                     self._broadcast_shreds_update()
-                    return self._repl_output(f"[shred {sid}]: replaced with [shred {new_id}]", "success")
+                    return self._repl_output(
+                        f"[shred {sid}]: replaced with [shred {new_id}]", "success"
+                    )
                 except Exception as e:
                     return self._repl_error(f"Failed to replace shred {sid}: {e}")
 
@@ -485,7 +490,10 @@ class WebChuckServer:
                     self._shred_times[new_id] = now
                     self._shred_code[new_id] = f"file: {path}"
                     self._broadcast_shreds_update()
-                    return self._repl_output(f"[shred {sid}]: replaced with {path} [shred {new_id}]", "success")
+                    return self._repl_output(
+                        f"[shred {sid}]: replaced with {path} [shred {new_id}]",
+                        "success",
+                    )
                 except FileNotFoundError:
                     return self._repl_error(f"File not found: {path}")
                 except Exception as e:
@@ -510,13 +518,16 @@ class WebChuckServer:
                 now_time = self._chuck.raw.now()
                 srate = self._chuck.sample_rate
                 seconds = now_time / srate
-                return self._repl_output(f"now: {now_time:.0f} samples ({seconds:.3f}s)", "info")
+                return self._repl_output(
+                    f"now: {now_time:.0f} samples ({seconds:.3f}s)", "info"
+                )
 
             elif cmd_type == "list_globals":
                 return self._repl_list_globals()
 
             elif cmd_type == "audio_info":
                 from .._numchuck import audio_info, is_audio_running
+
                 running = is_audio_running()
                 info = audio_info()
                 status = "running" if running else "stopped"
@@ -526,7 +537,7 @@ class WebChuckServer:
                     f"  Output channels: {info.get('num_channels_out', 0)}\n"
                     f"  Input channels: {info.get('num_channels_in', 0)}\n"
                     f"  Buffer size: {info.get('buffer_size', 0)}",
-                    "info"
+                    "info",
                 )
 
             # Global variables
@@ -577,18 +588,21 @@ class WebChuckServer:
             # Audio control
             elif cmd_type == "start_audio":
                 from .._numchuck import start_audio
+
                 start_audio(self._chuck.raw)
                 self._broadcast_audio_status(True)
                 return self._repl_output("Audio started", "success")
 
             elif cmd_type == "stop_audio":
                 from .._numchuck import stop_audio
+
                 stop_audio()
                 self._broadcast_audio_status(False)
                 return self._repl_output("Audio stopped", "info")
 
             elif cmd_type == "shutdown_audio":
                 from .._numchuck import shutdown_audio
+
                 shutdown_audio()
                 self._broadcast_audio_status(False)
                 return self._repl_output("Audio shutdown", "info")
@@ -622,7 +636,9 @@ class WebChuckServer:
                     self._shred_times[sid] = now
                     self._shred_code[sid] = preview
                 self._broadcast_shreds_update()
-                return self._repl_output(f"[shred {shred_ids}]: sporking code", "success")
+                return self._repl_output(
+                    f"[shred {shred_ids}]: sporking code", "success"
+                )
             else:
                 return self._repl_error("Compilation failed")
         except Exception as e:
@@ -646,7 +662,7 @@ class WebChuckServer:
         lines = [
             f"Audio: {'running' if running else 'stopped'}",
             f"Shreds: {len(shreds)} running",
-            f"Now: {now_time:.0f} samples ({now_time/srate:.3f}s)",
+            f"Now: {now_time:.0f} samples ({now_time / srate:.3f}s)",
         ]
         if shreds:
             lines.append("Active shreds: " + ", ".join(str(s) for s in shreds))
@@ -677,17 +693,16 @@ class WebChuckServer:
             lines = ["Type    Name                 Value"]
             lines.append("-" * 45)
             for var_type, name in globals_list:
+                value: str = "?"
                 try:
                     if var_type == "int":
-                        value = self._chuck.get_int(name)
+                        value = str(self._chuck.get_int(name))
                     elif var_type == "float":
                         value = f"{self._chuck.get_float(name):.4f}"
                     elif var_type == "string":
                         value = f'"{self._chuck.get_string(name)}"'
-                    else:
-                        value = "?"
                 except Exception:
-                    value = "?"
+                    pass
                 lines.append(f"{var_type:<7} {name:<20} {value}")
 
             return self._repl_output("\n".join(lines), "info")

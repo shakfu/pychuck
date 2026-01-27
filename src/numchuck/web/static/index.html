@@ -954,7 +954,7 @@
                 } else if (code === 9) { // Tab - ignore for now
                     ev.preventDefault();
                 } else if ((ev.ctrlKey || ev.metaKey) && code === 67) { // Ctrl+C or Cmd+C
-                    // If there's a selection, copy it (let browser handle)
+                    // If there's a selection, copy it
                     var selection = term.getSelection();
                     if (selection) {
                         navigator.clipboard.writeText(selection);
@@ -963,6 +963,12 @@
                         term.writeln('^C');
                         replInput = '';
                         writePrompt();
+                    }
+                } else if ((ev.ctrlKey || ev.metaKey) && code === 88) { // Ctrl+X or Cmd+X (Cut)
+                    var selection = term.getSelection();
+                    if (selection) {
+                        navigator.clipboard.writeText(selection);
+                        term.clearSelection();
                     }
                 } else if ((ev.ctrlKey || ev.metaKey) && code === 86) { // Ctrl+V or Cmd+V
                     // Handle paste via clipboard API
@@ -1008,10 +1014,10 @@
                 }
             }
 
-            // Enable right-click context menu for copy/paste
+            // Enable right-click context menu for copy/paste/cut
             term.attachCustomKeyEventHandler(function(e) {
-                // Allow Cmd+C, Cmd+V, Ctrl+C, Ctrl+V to pass through for copy/paste
-                if ((e.ctrlKey || e.metaKey) && (e.keyCode === 67 || e.keyCode === 86)) {
+                // Allow Cmd/Ctrl + C, V, X to pass through for copy/paste/cut
+                if ((e.ctrlKey || e.metaKey) && (e.keyCode === 67 || e.keyCode === 86 || e.keyCode === 88)) {
                     return false; // Let our onKey handler handle it
                 }
                 return true;
