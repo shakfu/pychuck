@@ -203,12 +203,17 @@ numchuck web --no-browser
 * Examples dropdown with built-in ChucK examples (click to load)
 * Globals panel with auto-discovery of ChucK global variables
   - Interactive sliders for int/float globals with real-time control
+  - Real-time sync via WebSocket (updates pushed, not polled)
   - Event buttons to signal/broadcast global events
 * Shred management panel:
   - View all running shreds with elapsed time
   - Replace shred with current editor code
   - Preview shred source code
   - Remove individual shreds
+* Real-time audio level meters:
+  - RMS and peak levels for left/right channels
+  - Visual meter bars updated in real-time
+  - Calculated in C++ audio callback for accuracy
 * Theme toggle (dark/light mode) with system preference detection
 * Real-time console output via WebSocket
 * Audio start/stop controls
