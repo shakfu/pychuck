@@ -45,7 +45,7 @@ def watch_files(
     from ..api import Chuck
     from ..tui.session import ChuckSession
     from ..watcher import FileWatcher
-    from .._numchuck import start_audio, stop_audio
+    from ..services import AudioService
 
     if not files:
         raise WatchError("No files provided to watch")
@@ -114,12 +114,15 @@ def watch_files(
         if verbose:
             print()
 
-        # Start audio (needs raw ChucK instance)
-        start_audio(chuck.raw)
-        session.audio_running = True
-        if verbose:
-            print("Audio started")
-            print()
+        # Start audio using AudioService
+        audio = AudioService(chuck.raw)
+        if audio.start():
+            session.audio_running = True
+            if verbose:
+                print("Audio started")
+                print()
+        else:
+            raise WatchError("Failed to start audio")
 
         # Start watching
         watcher.start()
@@ -145,10 +148,7 @@ def watch_files(
     finally:
         # Cleanup
         watcher.stop()
-        try:
-            stop_audio()
-        except RuntimeError:
-            pass
+        audio.stop()
         chuck.close()
 
         if verbose:

@@ -595,18 +595,32 @@ UGEN_PARAMS: dict[str, set[str]] = {
     "Pan2": UGEN_PARAMS_COMMON | UGEN_PARAMS_PAN,
     "Mix2": UGEN_PARAMS_COMMON | UGEN_PARAMS_PAN,
     # STK Instruments (shared params)
-    "Mandolin": UGEN_PARAMS_COMMON | UGEN_PARAMS_STK | {"bodySize", "pluckPos", "stringDamping", "stringDetune"},
+    "Mandolin": UGEN_PARAMS_COMMON
+    | UGEN_PARAMS_STK
+    | {"bodySize", "pluckPos", "stringDamping", "stringDetune"},
     "Bowed": UGEN_PARAMS_COMMON | UGEN_PARAMS_STK,
     "Brass": UGEN_PARAMS_COMMON | UGEN_PARAMS_STK | {"lip"},
     "Clarinet": UGEN_PARAMS_COMMON | UGEN_PARAMS_STK | {"reed", "noiseGain"},
-    "Flute": UGEN_PARAMS_COMMON | UGEN_PARAMS_STK | {"jetDelay", "jetReflection", "endReflection"},
-    "Saxofony": UGEN_PARAMS_COMMON | UGEN_PARAMS_STK | {"stiffness", "aperture", "noiseGain", "pressure"},
+    "Flute": UGEN_PARAMS_COMMON
+    | UGEN_PARAMS_STK
+    | {"jetDelay", "jetReflection", "endReflection"},
+    "Saxofony": UGEN_PARAMS_COMMON
+    | UGEN_PARAMS_STK
+    | {"stiffness", "aperture", "noiseGain", "pressure"},
     "Wurley": UGEN_PARAMS_COMMON | UGEN_PARAMS_STK,
     "Rhodey": UGEN_PARAMS_COMMON | UGEN_PARAMS_STK,
-    "Moog": UGEN_PARAMS_COMMON | UGEN_PARAMS_STK | {"filterQ", "filterSweepRate", "lfoSpeed", "lfoDepth"},
-    "ModalBar": UGEN_PARAMS_COMMON | UGEN_PARAMS_STK | {"preset", "stickHardness", "strikePosition", "directGain", "masterGain"},
-    "Shakers": UGEN_PARAMS_COMMON | UGEN_PARAMS_STK | {"preset", "energy", "decay", "objects"},
-    "StifKarp": UGEN_PARAMS_COMMON | UGEN_PARAMS_STK | {"pickupPosition", "sustain", "stretch"},
+    "Moog": UGEN_PARAMS_COMMON
+    | UGEN_PARAMS_STK
+    | {"filterQ", "filterSweepRate", "lfoSpeed", "lfoDepth"},
+    "ModalBar": UGEN_PARAMS_COMMON
+    | UGEN_PARAMS_STK
+    | {"preset", "stickHardness", "strikePosition", "directGain", "masterGain"},
+    "Shakers": UGEN_PARAMS_COMMON
+    | UGEN_PARAMS_STK
+    | {"preset", "energy", "decay", "objects"},
+    "StifKarp": UGEN_PARAMS_COMMON
+    | UGEN_PARAMS_STK
+    | {"pickupPosition", "sustain", "stretch"},
     # Special
     "dac": UGEN_PARAMS_COMMON,
     "adc": UGEN_PARAMS_COMMON,

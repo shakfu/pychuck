@@ -36,7 +36,8 @@ def test_signal_global_event():
     chuck.signal_global_event("myEvent")
     run_audio_cycles(chuck)
 
-    assert True
+    # Verify shred was created (signal completed without crash)
+    assert len(shred_ids) == 1
 
 
 def test_broadcast_global_event():
@@ -56,7 +57,8 @@ def test_broadcast_global_event():
     chuck.broadcast_global_event("broadcastEvent")
     run_audio_cycles(chuck)
 
-    assert True
+    # Verify shred was created (broadcast completed without crash)
+    assert len(shred_ids) == 1
 
 
 def test_event_nonexistent():

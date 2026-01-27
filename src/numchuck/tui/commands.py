@@ -15,6 +15,7 @@ from ..paths import (
     ensure_numchuck_directories,
     list_all_snippets,
 )
+from ..services import ShredService, GlobalsService
 from .logging import get_logger, TUILogger
 
 if TYPE_CHECKING:
@@ -36,16 +37,34 @@ class CommandExecutor:
         self,
         session: ChuckSession,
         logger: TUILogger | None = None,
+        shred_service: ShredService | None = None,
+        globals_service: GlobalsService | None = None,
     ) -> None:
         """Initialize CommandExecutor.
 
         Args:
             session: ChuckSession for state tracking
             logger: Optional logger (uses global logger if None)
+            shred_service: Optional ShredService (created if None)
+            globals_service: Optional GlobalsService (created if None)
         """
         self.session = session
         self._chuck = session.chuck
         self._logger = logger or get_logger()
+
+        # Create ShredService if not provided
+        self._shred_service: ShredService | None
+        if shred_service is None and self._chuck is not None:
+            self._shred_service = ShredService(self._chuck, session, self._logger)
+        else:
+            self._shred_service = shred_service
+
+        # Create GlobalsService if not provided
+        self._globals_service: GlobalsService | None
+        if globals_service is None and self._chuck is not None:
+            self._globals_service = GlobalsService(self._chuck, self._logger)
+        else:
+            self._globals_service = globals_service
 
     @property
     def chuck(self) -> ChucK:
@@ -53,6 +72,20 @@ class CommandExecutor:
         if self._chuck is None:
             raise RuntimeError("ChucK instance not available")
         return self._chuck
+
+    @property
+    def shred_service(self) -> ShredService:
+        """Get ShredService, raising if not available."""
+        if self._shred_service is None:
+            raise RuntimeError("ShredService not available")
+        return self._shred_service
+
+    @property
+    def globals_service(self) -> GlobalsService:
+        """Get GlobalsService, raising if not available."""
+        if self._globals_service is None:
+            raise RuntimeError("GlobalsService not available")
+        return self._globals_service
 
     def execute(self, cmd: Command) -> str | None:
         """Execute command and return error message if any.
@@ -71,92 +104,35 @@ class CommandExecutor:
 
     def _cmd_spork_file(self, args: dict[str, Any]) -> str | None:
         """Spork a ChucK file."""
-        # Convert relative path to absolute path
-        path = os.path.abspath(args["path"])
-
-        # Read file content for project versioning
-        try:
-            content = Path(path).read_text()
-        except (OSError, UnicodeDecodeError) as e:
-            self._logger.warning(f"Could not read file content: {e}")
-            content = None
-
-        success, shred_ids = self.chuck.compile_file(args["path"])
-        if success:
-            for sid in shred_ids:
-                self.session.add_shred(sid, path, content=content, shred_type="file")
-            return None
-        else:
-            return f"Failed to spork {args['path']}"
+        result = self.shred_service.spork_file(args["path"])
+        return result.error
 
     def _cmd_spork_code(self, args: dict[str, Any]) -> str | None:
         """Spork inline ChucK code."""
-        code = args["code"]
-        success, shred_ids = self.chuck.compile_code(code)
-        if success:
-            for sid in shred_ids:
-                self.session.add_shred(
-                    sid, f"code-{sid}", content=code, shred_type="code"
-                )
-            return None
-        else:
-            return "Failed to spork code"
+        result = self.shred_service.spork_code(args["code"])
+        return result.error
 
     def _cmd_remove_shred(self, args: dict[str, Any]) -> str | None:
         """Remove a shred by ID."""
         sid = args["id"]
-        try:
-            self.chuck.remove_shred(sid)
-            self.session.remove_shred(sid)
+        if self.shred_service.remove_shred(sid):
             return None
-        except RuntimeError as e:
-            return f"Failed to remove shred {sid}: {e}"
+        return f"Failed to remove shred {sid}"
 
     def _cmd_remove_all(self, args: dict[str, Any]) -> str | None:
         """Remove all shreds."""
-        self.chuck.remove_all_shreds()
-        self.session.clear_shreds()
+        self.shred_service.remove_all()
         return None
 
     def _cmd_replace_shred(self, args: dict[str, Any]) -> str | None:
         """Replace a shred with new code."""
-        try:
-            code = args["code"]
-            old_id = args["id"]
-            new_id = self.chuck.replace_shred(old_id, code)
-            if new_id > 0:
-                # Save replacement to project if available
-                if self.session.project:
-                    self.session.replace_shred(old_id, code)
-
-                self.session.remove_shred(old_id)
-                self.session.add_shred(
-                    new_id, f"code-{new_id}", content=code, shred_type="code"
-                )
-                return None
-            else:
-                return f"Failed to replace shred {old_id}"
-        except RuntimeError as e:
-            return f"Error replacing shred: {e}"
+        result = self.shred_service.replace_shred(args["id"], args["code"])
+        return result.error
 
     def _cmd_replace_shred_file(self, args: dict[str, Any]) -> str | None:
         """Replace shred with code from file."""
-        try:
-            filepath = args["path"]
-            code = Path(filepath).read_text()
-
-            new_id = self.chuck.replace_shred(args["id"], code)
-            if new_id > 0:
-                self.session.remove_shred(args["id"])
-                # Save to project if available
-                if self.session.project:
-                    self.session.replace_shred(new_id, code)
-                self.session.add_shred(new_id, filepath, shred_type="file")
-                return None
-            else:
-                return f"Failed to replace shred {args['id']}"
-        except (RuntimeError, OSError) as e:
-            return f"Error replacing shred: {e}"
+        result = self.shred_service.replace_shred_file(args["id"], args["path"])
+        return result.error
 
     def _cmd_status(self, args: dict[str, Any]) -> str | None:
         """Show VM status (Chuck-style)."""
@@ -200,15 +176,15 @@ class CommandExecutor:
 
     def _cmd_list_globals(self, args: dict[str, Any]) -> str | None:
         """List all global variables."""
-        globals_list = self.chuck.get_all_globals()
+        globals_list = self.globals_service.list_globals()
         if not globals_list:
             self._log("no globals defined")
             return None
 
         self._log(f"{'Type':<20} {'Name':<30}")
         self._log("-" * 52)
-        for typ, name in globals_list:
-            self._log(f"{typ:<20} {name:<30}")
+        for info in globals_list:
+            self._log(f"{info.type:<20} {info.name:<30}")
         return None
 
     def _cmd_audio_info(self, args: dict[str, Any]) -> str | None:
@@ -235,77 +211,40 @@ class CommandExecutor:
         val = args["value"]
         name = args["name"]
 
-        try:
-            if isinstance(val, int):
-                self.chuck.set_global_int(name, val)
-            elif isinstance(val, float):
-                self.chuck.set_global_float(name, val)
-            elif isinstance(val, str):
-                self.chuck.set_global_string(name, val)
-            elif isinstance(val, list):
-                if all(isinstance(x, int) for x in val):
-                    self.chuck.set_global_int_array(name, val)
-                elif all(isinstance(x, float) for x in val):
-                    self.chuck.set_global_float_array(name, val)
-
+        if self.globals_service.set_global(name, val):
             self._log(f"set {name} = {val}")
             return None
-        except RuntimeError as e:
-            return f"Failed to set global '{name}': {e}"
+        return f"Failed to set global '{name}'"
 
     def _cmd_get_global(self, args: dict[str, Any]) -> str | None:
         """Get a global variable value."""
         name = args["name"]
 
-        # Try int first (callback logs value)
-        found = [False]  # Use list to allow modification in nested function
-
-        def handle_int(v: int) -> None:
-            found[0] = True
-            self._log(f"{name} = {v}")
-
-        def handle_float(v: float) -> None:
-            found[0] = True
-            self._log(f"{name} = {v}")
-
-        def handle_string(v: str) -> None:
-            found[0] = True
-            self._log(f'{name} = "{v}"')
-
-        # Try each type in sequence
-        try:
-            self.chuck.get_global_int(name, handle_int)
+        result = self.globals_service.get_global(name)
+        if result is not None:
+            typ, val = result
+            if typ == "string":
+                self._log(f'{name} = "{val}"')
+            else:
+                self._log(f"{name} = {val}")
             return None
-        except RuntimeError:
-            pass
-
-        try:
-            self.chuck.get_global_float(name, handle_float)
-            return None
-        except RuntimeError:
-            pass
-
-        try:
-            self.chuck.get_global_string(name, handle_string)
-            return None
-        except RuntimeError:
-            pass
-
-        if not found[0]:
-            return f"Global variable '{name}' not found or wrong type"
-        return None
+        return f"Global variable '{name}' not found or wrong type"
 
     def _cmd_signal_event(self, args: dict[str, Any]) -> str | None:
         """Signal a global event."""
-        self.chuck.signal_global_event(args["name"])
-        self._log(f"signaled event '{args['name']}'")
-        return None
+        name = args["name"]
+        if self.globals_service.signal_event(name):
+            self._log(f"signaled event '{name}'")
+            return None
+        return f"Failed to signal event '{name}'"
 
     def _cmd_broadcast_event(self, args: dict[str, Any]) -> str | None:
         """Broadcast a global event."""
-        self.chuck.broadcast_global_event(args["name"])
-        self._log(f"broadcast event '{args['name']}'")
-        return None
+        name = args["name"]
+        if self.globals_service.broadcast_event(name):
+            self._log(f"broadcast event '{name}'")
+            return None
+        return f"Failed to broadcast event '{name}'"
 
     def _cmd_start_audio(self, args: dict[str, Any]) -> str | None:
         """Start real-time audio playback."""
@@ -339,16 +278,17 @@ class CommandExecutor:
 
     def _cmd_clear_vm(self, args: dict[str, Any]) -> str | None:
         """Clear all shreds from VM."""
-        self.chuck.clear_vm()
-        self.session.clear_shreds()
-        self._log("VM cleared")
-        return None
+        if self.shred_service.clear_vm():
+            self._log("VM cleared")
+            return None
+        return "Failed to clear VM"
 
     def _cmd_reset_id(self, args: dict[str, Any]) -> str | None:
         """Reset shred ID counter."""
-        self.chuck.reset_shred_id()
-        self._log("shred ID reset")
-        return None
+        if self.shred_service.reset_shred_id():
+            self._log("shred ID reset")
+            return None
+        return "Failed to reset shred ID"
 
     def _cmd_clear_screen(self, args: dict[str, Any]) -> str | None:
         """Clear the terminal screen."""
@@ -358,21 +298,17 @@ class CommandExecutor:
 
     def _cmd_compile_file(self, args: dict[str, Any]) -> str | None:
         """Compile a file without running."""
-        success, _ = self.chuck.compile_file(args["path"], count=0)
-        if success:
+        if self.shred_service.compile_file(args["path"]):
             self._log(f"compiled {args['path']}")
             return None
-        else:
-            return f"Compilation failed for {args['path']}"
+        return f"Compilation failed for {args['path']}"
 
     def _cmd_exec_code(self, args: dict[str, Any]) -> str | None:
         """Execute code immediately."""
-        success, _ = self.chuck.compile_code(args["code"], immediate=True)
-        if success:
+        if self.shred_service.exec_code(args["code"]):
             self._log("executed")
             return None
-        else:
-            return "Execution failed"
+        return "Execution failed"
 
     def _cmd_edit_shred(self, args: dict[str, Any]) -> str | None:
         """Edit and replace a shred by ID."""
@@ -383,7 +319,7 @@ class CommandExecutor:
 
         shred_info = self.session.shreds[shred_id]
         source = shred_info["source"]
-        shred_type = shred_info["type"]
+        name = shred_info["name"]
 
         # Get editor from environment or use default
         editor = os.environ.get("EDITOR", "nano")
@@ -403,20 +339,8 @@ class CommandExecutor:
 
             # Replace the shred if content changed
             if new_code.strip() and new_code != source:
-                new_id = self.chuck.replace_shred(shred_id, new_code)
-                if new_id > 0:
-                    # Save replacement to project if available
-                    if self.session.project:
-                        self.session.replace_shred(shred_id, new_code)
-
-                    self.session.remove_shred(shred_id)
-                    name = shred_info["name"]
-                    self.session.add_shred(
-                        new_id, name, content=new_code, shred_type=shred_type
-                    )
-                    return None
-                else:
-                    return f"Failed to replace shred {shred_id}"
+                result = self.shred_service.replace_shred(shred_id, new_code, name=name)
+                return result.error
             return None
         except (OSError, subprocess.SubprocessError) as e:
             return f"Error editing shred: {e}"
@@ -455,12 +379,9 @@ class CommandExecutor:
 
             # Spork it if not empty/template
             if code.strip() and "// ChucK code" not in code:
-                success, shred_ids = self.chuck.compile_code(code)
-                if success:
-                    for sid in shred_ids:
-                        self.session.add_shred(
-                            sid, f"editor-{sid}", content=code, shred_type="code"
-                        )
+                result = self.shred_service.spork_code(code, name="editor")
+                if result.success:
+                    for sid in result.shred_ids:
                         self._log(f"sporked from editor -> shred {sid}")
                 else:
                     return "Failed to spork editor code"
@@ -526,21 +447,15 @@ class CommandExecutor:
                 self._log(f"Add .ck files to {snippets_dir} to create snippets")
             return None
 
-        # Read snippet content for project versioning
-        try:
-            content = snippet_path.read_text()
-        except (OSError, UnicodeDecodeError) as e:
-            self._logger.warning(f"Could not read snippet content: {e}")
-            content = None
-
-        # Spork the snippet
-        success, shred_ids = self.chuck.compile_file(str(snippet_path))
-        if success:
+        # Spork the snippet using ShredService
+        # Note: we use the custom name @{name} for the snippet
+        result = self.shred_service.spork_file(snippet_path)
+        if result.success:
             source_tag = " (global)" if source == "global" else ""
-            for sid in shred_ids:
-                self.session.add_shred(
-                    sid, f"@{name}", content=content, shred_type="file"
-                )
+            # Update session with snippet name instead of path
+            for sid in result.shred_ids:
+                if self.session and sid in self.session.shreds:
+                    self.session.shreds[sid]["name"] = f"@{name}"
                 self._log(f"sporked snippet @{name}{source_tag} -> shred {sid}")
             return None
         else:
@@ -585,16 +500,9 @@ class CommandExecutor:
 
         # First, compile the file if not already running
         shred_id = None
-        success, shred_ids = self.chuck.compile_file(str(path))
-        if success and shred_ids:
-            shred_id = shred_ids[0]
-            try:
-                content = path.read_text()
-            except (OSError, UnicodeDecodeError):
-                content = None
-            self.session.add_shred(
-                shred_id, str(path), content=content, shred_type="file"
-            )
+        result = self.shred_service.spork_file(path)
+        if result.success:
+            shred_id = result.shred_id
             self._log(f"sporked {path.name} -> shred {shred_id}")
 
         # Add to watch list

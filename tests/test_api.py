@@ -261,25 +261,31 @@ class TestEventCallbacks:
     def test_signal_event(self):
         """Test signaling a global event."""
         chuck = Chuck()
-        chuck.compile("global Event myEvent; myEvent => now; 1::second => now;")
+        success, shred_ids = chuck.compile(
+            "global Event myEvent; myEvent => now; 1::second => now;"
+        )
+        assert success, "Compilation should succeed"
         chuck.run(100)  # Let shred start waiting
 
-        # Signal should wake the shred
+        # Signal should wake the shred (no exception means success)
         chuck.signal_event("myEvent")
         chuck.run(100)
-        # Test passes if no crash occurs
+        assert len(shred_ids) == 1, "Expected one shred to be created"
 
     def test_broadcast_event(self):
         """Test broadcasting a global event."""
         chuck = Chuck()
         # Create two shreds waiting on same event
-        chuck.compile("global Event myEvent; myEvent => now; 1::second => now;", count=2)
+        success, shred_ids = chuck.compile(
+            "global Event myEvent; myEvent => now; 1::second => now;", count=2
+        )
+        assert success, "Compilation should succeed"
         chuck.run(100)
 
-        # Broadcast should wake all shreds
+        # Broadcast should wake all shreds (no exception means success)
         chuck.broadcast_event("myEvent")
         chuck.run(100)
-        # Test passes if no crash occurs
+        assert len(shred_ids) == 2, "Expected two shreds to be created"
 
     def test_on_event_callback(self):
         """Test registering an event callback."""

@@ -177,13 +177,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Global logger functions: `get_logger()`, `set_logger()`, `debug()`, `info()`, `warning()`, `error()`
   - 15 new logging tests
 
-- **AudioManager Class** (`src/numchuck/tui/common.py`):
+- **Service Layer Architecture** (`src/numchuck/services/`):
+  - New `services` package providing business logic separation from UI
+  - `AudioService` - Audio lifecycle management (start/stop/restart/shutdown)
+  - `ShredService` - Shred compilation, replacement, and removal with structured results
+  - `GlobalsService` - Global variable get/set operations and event signaling
+  - `FileService` - Snippet loading and project file operations
+  - Services are stateless with dependency injection via constructor
+  - Returns structured dataclasses (`ShredResult`, `GlobalInfo`, `SnippetInfo`) instead of formatted strings
+  - Used by both CLI and TUI for shared business logic
+  - 89 new service tests with 84% coverage
+
+- **TUI Widget Factories** (`src/numchuck/tui/widgets.py`):
+  - `create_help_window()` - Conditional help display
+  - `create_shreds_table()` - Dynamic shreds table
+  - `create_log_window()` - Scrollable log display
+  - `create_status_bar()` - Status bar with dynamic content
+  - `create_message_area()` - Text area for messages
+
+- **AudioManager Class** (now `AudioService` in `src/numchuck/services/audio.py`):
   - RAII-style audio lifecycle management
   - Methods: `start()`, `stop()`, `restart()`
   - Property: `is_running`
   - Logger integration for consistent error reporting
-  - ChuckApplication now uses AudioManager internally
-  - 8 new AudioManager tests
+  - ChuckApplication now uses AudioService internally
+  - Backward compatibility alias: `AudioManager = AudioService`
+  - 8 new AudioService tests
 
 - **TUI Type Hints Completion**:
   - `common.py` - Full annotations for AudioManager and ChuckApplication
@@ -199,6 +218,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Specific exception types instead of broad `Exception` catches
 
 ### Changed
+
+- **CommandExecutor Refactoring** (`src/numchuck/tui/commands.py`):
+  - Now uses `ShredService` and `GlobalsService` for all operations
+  - Added `shred_service` and `globals_service` properties with proper None handling
+  - Simplified command methods to delegate to services
+
+- **ChuckApplication Cleanup** (`src/numchuck/tui/common.py`):
+  - `chuck` and `session` are now properties that raise `RuntimeError` if accessed after cleanup
+  - Cleanup method properly handles None state and circular reference breaking
+  - Fixed `close()` to `shutdown()` for ChucK instance cleanup
 
 - **API Refactoring** - Moved general-purpose modules from `tui/` to top level for library use:
   - `numchuck.render` - Offline rendering API (new, from `cli/export.py`)
@@ -229,13 +258,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Now requires Python 3.9+
   - Added Python 3.13 classifier
 
-- **Test Count**: 575 tests (up from 280)
+- **Test Count**: 603 tests (up from 280)
+
+- **CLI Test Suite** (`tests/test_executor.py`, `tests/test_watcher_cli.py`):
+  - Added 28 new tests for CLI executor and watcher modules
+  - Mock-based testing for `execute_files()` and `watch_files()` functions
+  - Tests cover: file validation, compilation, audio start/stop, signal handling, cleanup
+  - Refactored `executor.py` to use high-level API for better testability
 
 ### Removed
 
 - **`tui` CLI subcommand** - Use `numchuck repl` instead (the `tui` alias is no longer supported)
 
 ### Fixed
+
+- **Type Safety Improvements** (full `mypy --strict` compliance):
+  - `api.py`: Added `_chuck` property with proper None handling after `close()`
+  - `common.py`: `chuck` and `session` properties raise `RuntimeError` if accessed after cleanup
+  - `commands.py`: `shred_service` and `globals_service` properties with None checks
+  - `globals.py`: Fixed variable reuse in `get_global()` method, explicit array type annotations
+  - `completer.py`: Renamed shadowed `match` variable, added explicit `return None`
+  - `_chump.py`: Created placeholder module with `TYPE_CHECKING` stubs for package manager
 
 - **Nanobind memory leak warnings on REPL exit**:
   - `ChuckCompleter` was holding references to `chuck` and `session` that weren't cleaned up

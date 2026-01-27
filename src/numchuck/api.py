@@ -89,7 +89,7 @@ class Chuck:
         tty_width_hint: int = 80,
         auto_init: bool = True,
     ) -> None:
-        self._chuck = _numchuck.ChucK()
+        self.__chuck: _numchuck.ChucK | None = _numchuck.ChucK()
 
         # Set parameters before init
         self._chuck.set_param(_numchuck.PARAM_SAMPLE_RATE, sample_rate)
@@ -121,6 +121,17 @@ class Chuck:
         self._reuse_input_buf: NDArray[np.float32] | None = None
         self._reuse_output_buf: NDArray[np.float32] | None = None
         self._reuse_num_frames: int = 0
+
+    # -------------------------------------------------------------------------
+    # Internal property for ChucK instance access
+    # -------------------------------------------------------------------------
+
+    @property
+    def _chuck(self) -> _numchuck.ChucK:
+        """Get the internal ChucK instance, raising if closed."""
+        if self.__chuck is None:
+            raise RuntimeError("ChucK instance has been closed")
+        return self.__chuck
 
     # -------------------------------------------------------------------------
     # Context manager support
@@ -162,9 +173,9 @@ class Chuck:
 
         Safe to call multiple times.
         """
-        if self._chuck is not None:
-            self._chuck.shutdown()
-            self._chuck = None
+        if self.__chuck is not None:
+            self.__chuck.shutdown()
+            self.__chuck = None
 
     def compile(
         self,

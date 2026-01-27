@@ -34,8 +34,8 @@ DMG = $(DIST_NAME).dmg
 ZIP = $(DIST_NAME).zip
 
 
-.PHONY: all build clean test install repl snap typecheck lint format \
-		qa check publish publish-test
+.PHONY: all build clean test coverage install repl snap typecheck lint format \
+		qa check publish publish-test test-review
 
 all: build
 
@@ -47,6 +47,12 @@ clean:
 
 test:
 	@uv run pytest
+
+test-review:
+	@uv run pytest --review
+
+coverage:
+	@uv run pytest --cov=numchuck --cov-report=term-missing --cov-report=html
 
 repl:
 	@uv run numchuck repl

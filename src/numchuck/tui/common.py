@@ -26,108 +26,17 @@ from .._numchuck import (
     PARAM_SAMPLE_RATE,
     PARAM_OUTPUT_CHANNELS,
     PARAM_INPUT_CHANNELS,
-    start_audio,
-    stop_audio,
-    shutdown_audio,
 )
+from ..services.audio import AudioService
 from .session import ChuckSession
 from .logging import TUILogger, get_logger
 from ..config import get_config, KeybindingsConfig
 
+# Backward compatibility alias - AudioManager is now AudioService
+AudioManager = AudioService
+
 if TYPE_CHECKING:
     from prompt_toolkit.key_binding.key_processor import KeyPressEvent
-
-
-class AudioManager:
-    """Manages audio lifecycle for ChucK instances.
-
-    Provides consistent start/stop/shutdown operations with proper
-    error handling and state tracking.
-
-    Usage:
-        audio = AudioManager(chuck)
-        if audio.start():
-            # Audio is running
-            pass
-        audio.stop()
-    """
-
-    def __init__(
-        self,
-        chuck: ChucK,
-        logger: TUILogger | None = None,
-    ) -> None:
-        """Initialize AudioManager.
-
-        Args:
-            chuck: ChucK instance to manage
-            logger: Optional logger for messages (uses global logger if None)
-        """
-        self._chuck = chuck
-        self._running = False
-        self._logger = logger or get_logger()
-
-    @property
-    def is_running(self) -> bool:
-        """Check if audio is currently running."""
-        return self._running
-
-    def start(self) -> bool:
-        """Start real-time audio playback.
-
-        Returns:
-            True if audio started successfully, False otherwise
-        """
-        if self._running:
-            self._logger.debug("Audio already running")
-            return True
-
-        try:
-            start_audio(self._chuck)
-            self._running = True
-            self._logger.info("Audio started")
-            return True
-        except Exception as e:
-            self._logger.error("Could not start audio", exc=e)
-            return False
-
-    def stop(self) -> bool:
-        """Stop real-time audio playback.
-
-        Returns:
-            True if stopped successfully, False if error occurred
-        """
-        if not self._running:
-            self._logger.debug("Audio not running")
-            return True
-
-        success = True
-
-        try:
-            stop_audio()
-            self._logger.debug("Audio stopped")
-        except (RuntimeError, OSError) as e:
-            self._logger.error("Error stopping audio", exc=e)
-            success = False
-
-        try:
-            shutdown_audio(500)
-            self._logger.debug("Audio shutdown complete")
-        except (RuntimeError, OSError) as e:
-            self._logger.error("Error shutting down audio", exc=e)
-            success = False
-
-        self._running = False
-        return success
-
-    def restart(self) -> bool:
-        """Restart audio (stop then start).
-
-        Returns:
-            True if restart successful
-        """
-        self.stop()
-        return self.start()
 
 
 def format_elapsed_time(elapsed_sec: float) -> str:
@@ -361,7 +270,7 @@ class ChuckApplication:
             auto_init: If True, initialize ChucK immediately
             logger: Optional logger instance (uses global logger if None)
         """
-        self.chuck = ChucK()
+        self.__chuck: ChucK | None = ChucK()
         self._sample_rate = sample_rate
         self._output_channels = output_channels
         self._input_channels = input_channels
@@ -370,9 +279,11 @@ class ChuckApplication:
         self._logger = logger or get_logger()
 
         # Audio management via AudioManager
-        self._audio_manager = AudioManager(self.chuck, self._logger)
+        self._audio_manager = AudioManager(self.__chuck, self._logger)
 
-        self.session = ChuckSession(self.chuck, project_name=project_name)
+        self.__session: ChuckSession | None = ChuckSession(
+            self.__chuck, project_name=project_name
+        )
 
         # Shared UI state
         self.show_help = False
@@ -385,6 +296,20 @@ class ChuckApplication:
 
         if auto_init:
             self.setup()
+
+    @property
+    def chuck(self) -> ChucK:
+        """Get the ChucK instance, raising if closed."""
+        if self.__chuck is None:
+            raise RuntimeError("ChucK instance has been closed")
+        return self.__chuck
+
+    @property
+    def session(self) -> ChuckSession:
+        """Get the session, raising if closed."""
+        if self.__session is None:
+            raise RuntimeError("Session has been closed")
+        return self.__session
 
     def setup(self) -> None:
         """Initialize ChucK with configured parameters.
@@ -584,7 +509,8 @@ class ChuckApplication:
         """
         # Remove all shreds first
         try:
-            self.chuck.remove_all_shreds()
+            if self.__chuck is not None:
+                self.__chuck.remove_all_shreds()
         except (RuntimeError, AttributeError):
             pass
 
@@ -594,13 +520,13 @@ class ChuckApplication:
 
         # Close ChucK instance (required for proper C++ cleanup)
         try:
-            self.chuck.close()
+            if self.__chuck is not None:
+                self.__chuck.shutdown()
         except (RuntimeError, AttributeError):
             pass
 
         # Break circular references to allow proper garbage collection
-        if hasattr(self, "session"):
-            self.session.chuck = None
-            self.session = None
-        if hasattr(self, "chuck"):
-            self.chuck = None
+        if self.__session is not None:
+            self.__session.chuck = None
+            self.__session = None
+        self.__chuck = None

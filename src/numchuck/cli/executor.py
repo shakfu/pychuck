@@ -40,12 +40,8 @@ def execute_files(
     Raises:
         ExecutionError: If compilation or execution fails
     """
-    from .._numchuck import (
-        ChucK,
-        PARAM_SAMPLE_RATE,
-        PARAM_OUTPUT_CHANNELS,
-        PARAM_INPUT_CHANNELS,
-    )
+    from ..api import Chuck
+    from ..services import AudioService
 
     # Validate files exist
     missing_files = []
@@ -59,28 +55,24 @@ def execute_files(
             print(f"  {f}", file=sys.stderr)
         raise ExecutionError("One or more files not found")
 
-    # Initialize ChucK VM
+    # Initialize ChucK VM using high-level API
     try:
-        chuck = ChucK()
-        chuck.set_param(PARAM_SAMPLE_RATE, srate)
-        chuck.set_param(PARAM_OUTPUT_CHANNELS, channels)
-        chuck.set_param(PARAM_INPUT_CHANNELS, 0)
-        chuck.init()
+        chuck = Chuck(
+            sample_rate=srate,
+            output_channels=channels,
+            input_channels=0,
+        )
     except Exception as e:
         print(f"Error: Failed to create ChucK VM: {e}", file=sys.stderr)
         raise ExecutionError(f"ChucK initialization failed: {e}")
 
-    # Start audio if not silent
-    audio_started = False
-    if not silent:
-        try:
-            from .._numchuck import start_audio
-
-            start_audio(chuck)
-            audio_started = True
-        except Exception as e:
-            print(f"Warning: Failed to start audio: {e}", file=sys.stderr)
+    # Set up audio service
+    audio = AudioService(chuck.raw) if not silent else None
+    if audio:
+        if not audio.start():
+            print("Warning: Failed to start audio", file=sys.stderr)
             print("Continuing in silent mode...", file=sys.stderr)
+            audio = None
 
     # Setup signal handler for graceful shutdown
     shutdown_requested = [False]  # Use list to allow modification in nested function
@@ -96,12 +88,8 @@ def execute_files(
     shred_ids = []
     for filepath in files:
         try:
-            # Read file content
-            with open(filepath, "r") as fh:
-                code = fh.read()
-
-            # Compile and run
-            success, new_shred_ids = chuck.compile_code(code)
+            # Compile and run file
+            success, new_shred_ids = chuck.compile_file(filepath)
             if not success or not new_shred_ids:
                 raise ExecutionError(f"Failed to compile {filepath}")
 
@@ -109,13 +97,14 @@ def execute_files(
             for sid in new_shred_ids:
                 print(f"[shred {sid}] {filepath}")
 
+        except ExecutionError:
+            raise
         except Exception as e:
             print(f"Error compiling {filepath}: {e}", file=sys.stderr)
             # Cleanup
-            if audio_started:
-                from .._numchuck import stop_audio
-
-                stop_audio()
+            if audio:
+                audio.stop()
+            chuck.close()
             raise ExecutionError(f"Compilation failed: {e}")
 
     # Run for specified duration or until interrupted
@@ -147,14 +136,11 @@ def execute_files(
                 pass
 
         # Stop audio
-        if audio_started:
-            try:
-                from .._numchuck import stop_audio, shutdown_audio
+        if audio:
+            audio.stop()
 
-                stop_audio()
-                shutdown_audio()
-            except Exception:
-                pass
+        # Close ChucK instance
+        chuck.close()
 
         print("Done.")
 

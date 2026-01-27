@@ -112,7 +112,7 @@ def cmd_pkg_info(name: str) -> None:
         if pkg.latest_version and pkg.latest_version != pkg.installed_version:
             print(f"Update available: {pkg.latest_version}")
     else:
-        print(f"Status: Not installed")
+        print("Status: Not installed")
         if pkg.latest_version:
             print(f"Latest version: {pkg.latest_version}")
 

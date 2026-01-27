@@ -81,10 +81,13 @@ class TestShredHandles:
         """Test Shred equality comparison."""
         chuck = Chuck()
         shred1 = chuck.spork("SinOsc s => dac; 1::second => now;")
+        shred2 = chuck.spork("TriOsc t => dac; 1::second => now;")
         # Compare with int
         assert shred1 == shred1.id
-        # Compare with self
-        assert shred1 == shred1
+        # Compare with different shred (should not be equal)
+        assert shred1 != shred2
+        # Verify different IDs
+        assert shred1.id != shred2.id
 
     def test_spork_failure_raises(self):
         """Test that spork raises on compilation failure."""

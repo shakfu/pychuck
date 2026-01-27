@@ -155,10 +155,12 @@ class ChuckCompleter(Completer):
         # Check if we're accessing a known variable with a dot
         # Pattern: "varname." at the end
         access_pattern = r"(\w+)\.\s*$"
-        match = re.search(access_pattern, text)
-        if match:
-            var_name = match.group(1)
+        access_match = re.search(access_pattern, text)
+        if access_match:
+            var_name = access_match.group(1)
             return ugen_vars.get(var_name)
+
+        return None
 
     def get_completions(
         self, document: Document, complete_event: CompleteEvent
