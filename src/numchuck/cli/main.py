@@ -13,17 +13,6 @@ Provides subcommands for different numchuck modes:
 import sys
 import argparse
 
-
-def _chump_available() -> bool:
-    """Check if the _chump module is available."""
-    try:
-        from .. import _chump  # noqa: F401
-
-        return True
-    except ImportError:
-        return False
-
-
 def create_parser() -> argparse.ArgumentParser:
     """Create the argument parser with all subcommands."""
     parser = argparse.ArgumentParser(
@@ -182,71 +171,7 @@ def create_parser() -> argparse.ArgumentParser:
         help="Suppress status messages",
     )
 
-    # pkg subcommand - package management (only if _chump is available)
-    if _chump_available():
-        pkg_parser = subparsers.add_parser("pkg", help="Manage ChucK packages")
-        pkg_subparsers = pkg_parser.add_subparsers(
-            dest="pkg_command", help="Package commands"
-        )
-
-        # pkg list
-        pkg_list_parser = pkg_subparsers.add_parser(
-            "list", help="List available packages"
-        )
-        pkg_list_parser.add_argument(
-            "--installed",
-            action="store_true",
-            help="Show only installed packages",
-        )
-
-        # pkg info
-        pkg_info_parser = pkg_subparsers.add_parser("info", help="Show package details")
-        pkg_info_parser.add_argument("name", help="Package name")
-
-        # pkg install
-        pkg_install_parser = pkg_subparsers.add_parser(
-            "install", help="Install a package"
-        )
-        pkg_install_parser.add_argument(
-            "package",
-            help="Package name (optionally with version: name@version)",
-        )
-
-        # pkg uninstall
-        pkg_uninstall_parser = pkg_subparsers.add_parser(
-            "uninstall", help="Uninstall a package"
-        )
-        pkg_uninstall_parser.add_argument("name", help="Package name")
-        pkg_uninstall_parser.add_argument(
-            "--force",
-            action="store_true",
-            help="Force removal even if files have been modified",
-        )
-
-        # pkg update
-        pkg_update_parser = pkg_subparsers.add_parser(
-            "update", help="Update a package or all packages"
-        )
-        pkg_update_parser.add_argument(
-            "name",
-            nargs="?",
-            help="Package name (omit to update all)",
-        )
-
-        # pkg refresh
-        pkg_subparsers.add_parser("refresh", help="Update package manifest from server")
-
-        # pkg search
-        pkg_search_parser = pkg_subparsers.add_parser(
-            "search", help="Search for packages"
-        )
-        pkg_search_parser.add_argument("query", help="Search query")
-
-        # pkg path
-        pkg_subparsers.add_parser("path", help="Show packages directory path")
-
     return parser
-
 
 def cmd_edit(args: argparse.Namespace) -> None:
     """Launch the multi-tab editor."""
@@ -255,7 +180,6 @@ def cmd_edit(args: argparse.Namespace) -> None:
     editor_main(
         files=args.files, project_name=args.project, start_audio=args.start_audio
     )
-
 
 def cmd_repl(args: argparse.Namespace) -> None:
     """Launch the interactive REPL."""
@@ -274,7 +198,6 @@ def cmd_repl(args: argparse.Namespace) -> None:
         force_stdin=force_stdin,
     )
 
-
 def cmd_run(args: argparse.Namespace) -> None:
     """Execute ChucK files from command line."""
     from .executor import execute_files
@@ -287,7 +210,6 @@ def cmd_run(args: argparse.Namespace) -> None:
         duration=args.duration,
     )
 
-
 def cmd_version(args: argparse.Namespace) -> None:
     """Show version information."""
     from .._numchuck import version
@@ -295,7 +217,6 @@ def cmd_version(args: argparse.Namespace) -> None:
 
     print(f"numchuck version: {__version__}")
     print(f"ChucK version: {version()}")
-
 
 def cmd_info(args: argparse.Namespace) -> None:
     """Show ChucK and numchuck info."""
@@ -306,7 +227,6 @@ def cmd_info(args: argparse.Namespace) -> None:
     print(f"ChucK: {version()}")
     print(f"ChucK int size: {ChucK.int_size()} bits")
     print(f"Active VMs: {ChucK.num_vms()}")
-
 
 def cmd_export(args: argparse.Namespace) -> None:
     """Export ChucK files to WAV audio."""
@@ -331,7 +251,6 @@ def cmd_export(args: argparse.Namespace) -> None:
         print(f"Export failed: {e}")
         sys.exit(1)
 
-
 def cmd_snippets(args: argparse.Namespace) -> None:
     """Manage code snippets."""
     from .snippets import (
@@ -350,7 +269,6 @@ def cmd_snippets(args: argparse.Namespace) -> None:
         # Default to list if no subcommand
         cmd_snippets_list()
 
-
 def cmd_watch(args: argparse.Namespace) -> None:
     """Watch ChucK files and auto-reload on changes."""
     from .watcher import cmd_watch as run_watch
@@ -361,40 +279,6 @@ def cmd_watch(args: argparse.Namespace) -> None:
         channels=args.channels,
         quiet=args.quiet,
     )
-
-
-def cmd_pkg(args: argparse.Namespace) -> None:
-    """Manage ChucK packages."""
-    from .packages import (
-        cmd_pkg_info,
-        cmd_pkg_install,
-        cmd_pkg_list,
-        cmd_pkg_path,
-        cmd_pkg_refresh,
-        cmd_pkg_search,
-        cmd_pkg_uninstall,
-        cmd_pkg_update,
-    )
-
-    if args.pkg_command == "list" or args.pkg_command is None:
-        cmd_pkg_list(installed_only=getattr(args, "installed", False))
-    elif args.pkg_command == "info":
-        cmd_pkg_info(args.name)
-    elif args.pkg_command == "install":
-        cmd_pkg_install(args.package)
-    elif args.pkg_command == "uninstall":
-        cmd_pkg_uninstall(args.name, force=args.force)
-    elif args.pkg_command == "update":
-        cmd_pkg_update(args.name)
-    elif args.pkg_command == "refresh":
-        cmd_pkg_refresh()
-    elif args.pkg_command == "search":
-        cmd_pkg_search(args.query)
-    elif args.pkg_command == "path":
-        cmd_pkg_path()
-    else:
-        cmd_pkg_list()
-
 
 def main() -> None:
     """Main CLI entry point."""
@@ -413,17 +297,12 @@ def main() -> None:
         "watch": cmd_watch,
     }
 
-    # Add pkg handler only if _chump is available
-    if _chump_available():
-        command_handlers["pkg"] = cmd_pkg
-
     # Execute command
     if args.command in command_handlers:
         command_handlers[args.command](args)
     else:
         parser.print_help()
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()

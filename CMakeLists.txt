@@ -12,7 +12,6 @@ endif()
 
 project(numchuck_project LANGUAGES CXX)
 
-
 enable_language(C)
 
 if (CMAKE_VERSION VERSION_LESS 3.18)
@@ -75,11 +74,6 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/nanobind)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/chuck)
 
 # Optional chump package manager support (disabled by default)
-option(NUMCHUCK_ENABLE_CHUMP "Enable chump package manager integration" OFF)
-if(NUMCHUCK_ENABLE_CHUMP)
-    message(STATUS "Building with chump package manager support")
-    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/chump)
-endif()
 
 # Fix Windows naming conflict: chuck_lib outputs "chuck.lib" which conflicts
 # with the chuck executable's import library. Rename to "chuckcore.lib".

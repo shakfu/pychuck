@@ -1,7 +1,0 @@
-[wrap-git]
-url = https://github.com/ccrma/cheaders.git
-revision = chuck-1.5.4.2
-depth = 1
-
-[provide]
-cheaders = cheaders_dep

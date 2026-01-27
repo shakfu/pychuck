@@ -74,104 +74,126 @@ fi
 echo ""
 
 # ============================================================================
+# Use Python for all file modifications (cross-platform compatible)
+# ============================================================================
+
+python3 << 'PYTHON_SCRIPT'
+import re
+import os
+
+# ============================================================================
 # Modify CMakeLists.txt (root)
 # ============================================================================
 
-echo "Modifying CMakeLists.txt..."
+print("Modifying CMakeLists.txt...")
 
-# Remove chump-related lines from root CMakeLists.txt
-if [ -f "CMakeLists.txt" ]; then
+cmake_file = "CMakeLists.txt"
+if os.path.exists(cmake_file):
+    with open(cmake_file, "r") as f:
+        content = f.read()
+
     # Create backup
-    cp CMakeLists.txt CMakeLists.txt.bak
+    with open(cmake_file + ".bak", "w") as f:
+        f.write(content)
 
-    # Remove lines related to chump
-    sed -i.tmp '/# Optional chump package manager support/d' CMakeLists.txt
-    sed -i.tmp '/option(NUMCHUCK_ENABLE_CHUMP/d' CMakeLists.txt
-    sed -i.tmp '/if(NUMCHUCK_ENABLE_CHUMP)/,/endif()/d' CMakeLists.txt
+    # Remove chump-related lines
+    content = re.sub(r'^# Optional chump package manager support\n', '', content, flags=re.MULTILINE)
+    content = re.sub(r'^option\(NUMCHUCK_ENABLE_CHUMP.*?\n', '', content, flags=re.MULTILINE)
+    content = re.sub(r'if\(NUMCHUCK_ENABLE_CHUMP\).*?endif\(\)\n', '', content, flags=re.DOTALL)
 
-    rm -f CMakeLists.txt.tmp
-    echo "  Modified CMakeLists.txt (backup: CMakeLists.txt.bak)"
-fi
+    # Clean up multiple blank lines
+    content = re.sub(r'\n{3,}', '\n\n', content)
+
+    with open(cmake_file, "w") as f:
+        f.write(content)
+
+    print("  Modified CMakeLists.txt (backup: CMakeLists.txt.bak)")
 
 # ============================================================================
 # Modify src/CMakeLists.txt
 # ============================================================================
 
-echo "Modifying src/CMakeLists.txt..."
+print("Modifying src/CMakeLists.txt...")
 
-if [ -f "src/CMakeLists.txt" ]; then
+src_cmake_file = "src/CMakeLists.txt"
+if os.path.exists(src_cmake_file):
+    with open(src_cmake_file, "r") as f:
+        content = f.read()
+
     # Create backup
-    cp src/CMakeLists.txt src/CMakeLists.txt.bak
+    with open(src_cmake_file + ".bak", "w") as f:
+        f.write(content)
 
-    # Remove the entire _chump section (from comment to endif)
-    sed -i.tmp '/# ============================================================================/,/endif()/{/# _chump module/,/endif()/d}' src/CMakeLists.txt
+    # Remove the entire _chump section (from the separator comment to endif)
+    # Pattern: separator + _chump comment + separator + if block + endif
+    pattern = r'\n# =+\n# _chump module.*?endif\(\)\n'
+    content = re.sub(pattern, '\n', content, flags=re.DOTALL)
 
-    # Also remove the header comment block for _chump
-    sed -i.tmp '/# _chump module - ChucK package manager bindings/d' src/CMakeLists.txt
-    sed -i.tmp '/# ============================================================================/{N;/\n$/d}' src/CMakeLists.txt
+    # Clean up multiple blank lines
+    content = re.sub(r'\n{3,}', '\n\n', content)
 
-    rm -f src/CMakeLists.txt.tmp
-    echo "  Modified src/CMakeLists.txt (backup: src/CMakeLists.txt.bak)"
-fi
+    with open(src_cmake_file, "w") as f:
+        f.write(content)
+
+    print("  Modified src/CMakeLists.txt (backup: src/CMakeLists.txt.bak)")
 
 # ============================================================================
 # Modify src/numchuck/cli/main.py
 # ============================================================================
 
-echo "Modifying src/numchuck/cli/main.py..."
+print("Modifying src/numchuck/cli/main.py...")
 
-if [ -f "src/numchuck/cli/main.py" ]; then
+main_file = "src/numchuck/cli/main.py"
+if os.path.exists(main_file):
+    with open(main_file, "r") as f:
+        content = f.read()
+
     # Create backup
-    cp src/numchuck/cli/main.py src/numchuck/cli/main.py.bak
+    with open(main_file + ".bak", "w") as f:
+        f.write(content)
 
-    # Use Python to do the more complex modifications
-    python3 << 'PYTHON_SCRIPT'
-import re
+    # Remove _chump_available function
+    content = re.sub(
+        r'\ndef _chump_available\(\).*?return False\n',
+        '\n',
+        content,
+        flags=re.DOTALL
+    )
 
-with open("src/numchuck/cli/main.py", "r") as f:
-    content = f.read()
+    # Remove pkg subcommand parser section
+    content = re.sub(
+        r'\n    # pkg subcommand - package management.*?pkg_subparsers\.add_parser\("path".*?\)\n',
+        '\n',
+        content,
+        flags=re.DOTALL
+    )
 
-# Remove _chump_available function
-content = re.sub(
-    r'\ndef _chump_available\(\).*?return False\n',
-    '\n',
-    content,
-    flags=re.DOTALL
-)
+    # Remove cmd_pkg function
+    content = re.sub(
+        r'\ndef cmd_pkg\(args: argparse\.Namespace\).*?cmd_pkg_list\(\)\n',
+        '\n',
+        content,
+        flags=re.DOTALL
+    )
 
-# Remove pkg subcommand parser section
-content = re.sub(
-    r'\n    # pkg subcommand - package management.*?pkg_subparsers\.add_parser\("path".*?\)\n',
-    '\n',
-    content,
-    flags=re.DOTALL
-)
+    # Remove pkg handler registration
+    content = re.sub(
+        r'\n    # Add pkg handler only if _chump is available\n.*?command_handlers\["pkg"\] = cmd_pkg\n',
+        '\n',
+        content,
+        flags=re.DOTALL
+    )
 
-# Remove cmd_pkg function
-content = re.sub(
-    r'\ndef cmd_pkg\(args: argparse\.Namespace\).*?cmd_pkg_list\(\)\n',
-    '\n',
-    content,
-    flags=re.DOTALL
-)
+    # Clean up any double blank lines
+    content = re.sub(r'\n{3,}', '\n\n', content)
 
-# Remove pkg handler registration
-content = re.sub(
-    r'\n    # Add pkg handler only if _chump is available\n.*?command_handlers\["pkg"\] = cmd_pkg\n',
-    '\n',
-    content,
-    flags=re.DOTALL
-)
+    with open(main_file, "w") as f:
+        f.write(content)
 
-# Clean up any double blank lines
-content = re.sub(r'\n{3,}', '\n\n', content)
+    print("  Modified src/numchuck/cli/main.py (backup: src/numchuck/cli/main.py.bak)")
 
-with open("src/numchuck/cli/main.py", "w") as f:
-    f.write(content)
-
-print("  Modified src/numchuck/cli/main.py (backup: src/numchuck/cli/main.py.bak)")
+print("")
 PYTHON_SCRIPT
-fi
 
 echo ""
 

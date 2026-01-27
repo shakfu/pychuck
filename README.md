@@ -70,16 +70,16 @@ numchuck provides three modes of operation:
 
 ```sh
 # Launch the editor
-python -m numchuck edit
+numchuck edit
 
 # Open specific files in tabs
-python -m numchuck edit bass.ck melody.ck
+numchuck edit bass.ck melody.ck
 
 # Enable project versioning
-python -m numchuck edit --project mymusic
+numchuck edit --project mymusic
 
 # Start with audio enabled
-python -m numchuck edit --start-audio --project mymusic
+numchuck edit --start-audio --project mymusic
 ```
 
 **Editor Features:**
@@ -187,54 +187,6 @@ numchuck version
 # Show ChucK and numchuck info
 numchuck info
 ```
-
-#### 8. Package Management (Optional)
-
-Package management requires building with chump support enabled (disabled by default):
-
-```sh
-# Build with chump support
-pip install . --config-settings=cmake.define.NUMCHUCK_ENABLE_CHUMP=ON
-```
-
-Once enabled, you can manage ChucK packages:
-
-```sh
-# List available packages
-numchuck pkg list
-
-# Show only installed packages
-numchuck pkg list --installed
-
-# Show package details
-numchuck pkg info Patch
-
-# Install a package
-numchuck pkg install Patch
-
-# Install specific version
-numchuck pkg install Patch@1.0.0
-
-# Uninstall a package
-numchuck pkg uninstall Patch
-
-# Update a package
-numchuck pkg update Patch
-
-# Update all installed packages
-numchuck pkg update
-
-# Refresh package manifest from server
-numchuck pkg refresh
-
-# Search for packages
-numchuck pkg search reverb
-
-# Show packages directory
-numchuck pkg path
-```
-
-Packages are installed to `~/.chuck/packages/` (shared with native chump).
 
 **Interface Features:**
 
