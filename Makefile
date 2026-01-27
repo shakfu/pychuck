@@ -1,5 +1,5 @@
 PROJECT_NAME = numchuck
-VERSION = 0.1.0
+VERSION = 0.1.9
 
 PLATFORM = $(shell uname)
 CONFIG = Release
