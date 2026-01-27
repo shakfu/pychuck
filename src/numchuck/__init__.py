@@ -33,6 +33,9 @@ Error Handling:
 
 from ._version import __version__, __version_info__
 
+# Import _numchuck first so it's available when api.py does "from . import _numchuck"
+from . import _numchuck  # noqa: F401
+
 # Core API
 from .api import Chuck, GlobalFloat, GlobalInt, GlobalString, Shred
 

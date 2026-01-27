@@ -373,9 +373,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Added `#define NOMINMAX` to prevent Windows `min`/`max` macros from conflicting with `std::min`/`std::max`
   - Fixes C2589 "illegal token" errors in audio metering code
 
-- **Circular Import in Tests** (test files):
-  - Fixed circular import when tests imported `import numchuck._numchuck`
-  - Changed to `from numchuck import _numchuck` which ensures package is fully initialized first
+- **Circular Import on Package Load** (`src/numchuck/__init__.py`):
+  - Fixed circular import when importing from `numchuck` package
+  - Root cause: `api.py` does `from . import _numchuck` before it's in the namespace
+  - Solution: Import `_numchuck` first in `__init__.py` before importing `api.py`
 
 - **Web IDE Server Crash on Page Load** (`src/_numchuck.cpp`):
   - Fixed segfault (exit code 139) when browser connects to Web IDE
