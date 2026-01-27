@@ -23,9 +23,6 @@ endif()
 # general macos options
 option(CM_MACOS_HOMEBREW "On MacOS, build using Homebrew dependencies")
 option(CM_MACOS_UNIVERSAL "On MacOS, build universal architecture externals")
-option(CM_HOST_EMBED_EXAMPLE "Build embedded host example")
-
-# web server option
 option(NUMCHUCK_ENABLE_WEB "Enable web server for browser-based IDE" ON)
 
 # use ccache if available

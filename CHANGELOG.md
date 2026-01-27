@@ -365,6 +365,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ### Fixed
 
+- **Linux Build Failure** (`src/_web.cpp`):
+  - Added missing `#include <algorithm>` for `std::remove`
+  - GCC 14 was resolving `std::remove` to C's `remove(const char*)` from `<cstdio>`
+
+- **Windows Build Failure** (`src/_numchuck.cpp`):
+  - Added `#define NOMINMAX` to prevent Windows `min`/`max` macros from conflicting with `std::min`/`std::max`
+  - Fixes C2589 "illegal token" errors in audio metering code
+
 - **Web IDE Server Crash on Page Load** (`src/_numchuck.cpp`):
   - Fixed segfault (exit code 139) when browser connects to Web IDE
   - Root cause: `get_all_globals()` called `self.globals()->get_all_global_variables()` without null check

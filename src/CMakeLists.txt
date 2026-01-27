@@ -8,7 +8,7 @@ nanobind_add_module(
   # Target the stable ABI for Python 3.12+, which reduces
   # the number of binary wheels that must be built. This
   # does nothing on older Python versions
-  STABLE_ABI
+  # STABLE_ABI
 
   # Build libnanobind statically and merge it into the
   # extension (which itself remains a shared library)
