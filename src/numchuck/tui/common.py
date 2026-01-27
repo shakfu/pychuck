@@ -5,7 +5,7 @@ Provides base class with common functionality:
 - ChucK instance management
 - Audio lifecycle management
 - Session tracking
-- Shared UI components (help, shreds table, log)
+- Shared UI components (via widgets module)
 - Common key bindings
 """
 
@@ -16,9 +16,6 @@ from typing import TYPE_CHECKING, Callable
 
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout.containers import ConditionalContainer, Window
-from prompt_toolkit.layout.controls import FormattedTextControl
-from prompt_toolkit.layout.dimension import Dimension as D
-from prompt_toolkit.filters import Condition
 from prompt_toolkit.widgets import TextArea
 
 from .._numchuck import (
@@ -31,9 +28,7 @@ from ..services.audio import AudioService
 from .session import ChuckSession
 from .logging import TUILogger, get_logger
 from ..config import get_config, KeybindingsConfig
-
-# Backward compatibility alias - AudioManager is now AudioService
-AudioManager = AudioService
+from . import widgets
 
 if TYPE_CHECKING:
     from prompt_toolkit.key_binding.key_processor import KeyPressEvent
@@ -246,7 +241,7 @@ class ChuckApplication:
 
     Provides common functionality for both REPL and Editor:
     - ChucK instance lifecycle management
-    - Audio start/stop/shutdown via AudioManager
+    - Audio start/stop/shutdown via AudioService
     - Output capture (chout/cherr)
     - Session tracking with optional project support
     - Shared UI components
@@ -279,8 +274,8 @@ class ChuckApplication:
         # Logger for consistent error reporting
         self._logger = logger or get_logger()
 
-        # Audio management via AudioManager
-        self._audio_manager = AudioManager(self.__chuck, self._logger)
+        # Audio management via AudioService
+        self._audio_manager = AudioService(self.__chuck, self._logger)
 
         self.__session: ChuckSession | None = ChuckSession(
             self.__chuck, project_name=project_name
@@ -393,7 +388,7 @@ class ChuckApplication:
     @audio_running.setter
     def audio_running(self, value: bool) -> None:
         """Set audio running state (for compatibility)."""
-        # This is handled by AudioManager, but we sync session state
+        # This is handled by AudioService, but we sync session state
         self.session.audio_running = value
 
     def start_audio_playback(self) -> bool:
@@ -463,19 +458,9 @@ class ChuckApplication:
         Returns:
             ConditionalContainer with help window
         """
-        help_area = TextArea(
-            text=help_text,
-            scrollbar=True,
-            focusable=False,
-            read_only=True,
-            wrap_lines=True,
-        )
-
-        return ConditionalContainer(
-            Window(
-                content=help_area.control, height=D(min=10, max=30), wrap_lines=True
-            ),
-            filter=Condition(lambda: self.show_help),
+        return widgets.create_help_window(
+            show_condition=lambda: self.show_help,
+            help_text=help_text,
         )
 
     def create_shreds_table(self) -> ConditionalContainer:
@@ -490,9 +475,9 @@ class ChuckApplication:
                 self.session.shreds, self.chuck, use_pipes=True
             )
 
-        return ConditionalContainer(
-            Window(content=FormattedTextControl(get_text), height=D(min=5, max=15)),
-            filter=Condition(lambda: self.show_shreds),
+        return widgets.create_shreds_table(
+            show_condition=lambda: self.show_shreds,
+            get_table_text=get_text,
         )
 
     def create_log_window(
@@ -506,10 +491,10 @@ class ChuckApplication:
         Returns:
             ConditionalContainer with log window
         """
-        if log_area is None:
-            log_area = TextArea(
-                text="", scrollbar=True, focusable=False, read_only=True
-            )
+        container, log_area = widgets.create_log_window(
+            show_condition=lambda: self.show_log,
+            log_area=log_area,
+        )
 
         def log_callback(msg: str) -> None:
             """Callback for ChucK output"""
@@ -523,7 +508,7 @@ class ChuckApplication:
         self.set_log_callback(log_callback)
         self.setup_output_capture()
 
-        return ConditionalContainer(log_area, filter=Condition(lambda: self.show_log))
+        return container
 
     def create_status_bar(self, status_text_func: Callable[[], str]) -> Window:
         """Create status bar at bottom of screen.
@@ -534,11 +519,7 @@ class ChuckApplication:
         Returns:
             Window with status bar
         """
-        return Window(
-            content=FormattedTextControl(status_text_func),
-            height=1,
-            style="bg:#444444 fg:#ffffff",
-        )
+        return widgets.create_status_bar(status_text_func)
 
     def cleanup(self) -> None:
         """Cleanup ChucK and audio resources.

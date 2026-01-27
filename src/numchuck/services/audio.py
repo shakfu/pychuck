@@ -190,7 +190,3 @@ class AudioService:
         """
         self.stop()
         return self.start()
-
-
-# Backward compatibility alias
-AudioManager = AudioService

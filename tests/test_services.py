@@ -83,9 +83,10 @@ class TestAudioService:
         service = AudioService(mock_chuck)
         service.set_callbacks(on_start=mock_callback)
 
-        service.start()
+        result = service.start()
 
-        mock_callback.assert_called_once()
+        assert result is True
+        assert mock_callback.call_count == 1
 
     @patch("numchuck.services.audio.stop_audio")
     @patch("numchuck.services.audio.shutdown_audio")
@@ -124,9 +125,10 @@ class TestAudioService:
         service._running = True
         service.set_callbacks(on_stop=mock_callback)
 
-        service.stop()
+        result = service.stop()
 
-        mock_callback.assert_called_once()
+        assert result is True
+        assert mock_callback.call_count == 1
 
     @patch("numchuck.services.audio.stop_audio")
     @patch("numchuck.services.audio.shutdown_audio")
@@ -179,9 +181,11 @@ class TestAudioService:
         service = AudioService(mock_chuck)
         service._running = True
 
-        service.shutdown(timeout_ms=2000)
+        result = service.shutdown(timeout_ms=2000)
 
-        mock_shutdown.assert_called_once_with(2000)
+        assert result is True
+        assert mock_shutdown.call_count == 1
+        assert mock_shutdown.call_args[0][0] == 2000
 
     @patch("numchuck.services.audio.start_audio")
     @patch("numchuck.services.audio.stop_audio")
@@ -426,9 +430,11 @@ class TestShredService:
         mock_session = MagicMock()
         service = ShredService(mock_chuck, session=mock_session)
 
-        service.remove_shred(1)
+        result = service.remove_shred(1)
 
-        mock_session.remove_shred.assert_called_with(1)
+        assert result is True
+        assert mock_session.remove_shred.call_count == 1
+        assert mock_session.remove_shred.call_args[0][0] == 1
 
     def test_remove_all(self):
         """Test remove all shreds."""
@@ -448,9 +454,10 @@ class TestShredService:
         mock_session = MagicMock()
         service = ShredService(mock_chuck, session=mock_session)
 
-        service.remove_all()
+        result = service.remove_all()
 
-        mock_session.clear_shreds.assert_called()
+        assert result is True
+        assert mock_session.clear_shreds.call_count >= 1
 
     def test_clear_vm(self):
         """Test clear VM."""

@@ -38,8 +38,10 @@ class TestCommandExecutorInit:
             with patch("numchuck.tui.commands.GlobalsService") as MockGlobalsService:
                 executor = CommandExecutor(session)
 
-                MockShredService.assert_called_once()
-                MockGlobalsService.assert_called_once()
+                assert MockShredService.call_count == 1
+                assert MockGlobalsService.call_count == 1
+                assert executor._shred_service is not None
+                assert executor._globals_service is not None
 
     def test_init_no_services_when_chuck_none(self):
         """Test services remain None when chuck is None."""

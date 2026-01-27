@@ -1,9 +1,9 @@
-"""Tests for AudioManager class."""
+"""Tests for AudioService class."""
 
 import pytest
 
 from numchuck._numchuck import ChucK, PARAM_SAMPLE_RATE, PARAM_OUTPUT_CHANNELS
-from numchuck.tui.common import AudioManager
+from numchuck.services import AudioService
 from numchuck.tui.logging import TUILogger, LogLevel
 
 
@@ -18,17 +18,17 @@ def initialized_chuck():
     # Cleanup handled by test
 
 
-class TestAudioManager:
-    """Test AudioManager class."""
+class TestAudioService:
+    """Test AudioService class."""
 
     def test_init_not_running(self, initialized_chuck):
-        """Test AudioManager starts not running."""
-        audio = AudioManager(initialized_chuck)
+        """Test AudioService starts not running."""
+        audio = AudioService(initialized_chuck)
         assert audio.is_running is False
 
     def test_start_success(self, initialized_chuck):
         """Test successful audio start."""
-        audio = AudioManager(initialized_chuck)
+        audio = AudioService(initialized_chuck)
 
         # Start audio
         result = audio.start()
@@ -43,7 +43,7 @@ class TestAudioManager:
 
     def test_start_already_running(self, initialized_chuck):
         """Test start when already running returns True."""
-        audio = AudioManager(initialized_chuck)
+        audio = AudioService(initialized_chuck)
 
         try:
             audio.start()
@@ -56,7 +56,7 @@ class TestAudioManager:
 
     def test_stop_success(self, initialized_chuck):
         """Test successful audio stop."""
-        audio = AudioManager(initialized_chuck)
+        audio = AudioService(initialized_chuck)
 
         try:
             audio.start()
@@ -72,7 +72,7 @@ class TestAudioManager:
 
     def test_stop_not_running(self, initialized_chuck):
         """Test stop when not running returns True."""
-        audio = AudioManager(initialized_chuck)
+        audio = AudioService(initialized_chuck)
 
         # Stop without starting should be OK
         result = audio.stop()
@@ -81,7 +81,7 @@ class TestAudioManager:
 
     def test_restart(self, initialized_chuck):
         """Test audio restart."""
-        audio = AudioManager(initialized_chuck)
+        audio = AudioService(initialized_chuck)
 
         try:
             audio.start()
@@ -95,12 +95,12 @@ class TestAudioManager:
             audio.stop()
 
     def test_custom_logger(self, initialized_chuck):
-        """Test AudioManager uses custom logger."""
+        """Test AudioService uses custom logger."""
         messages = []
         logger = TUILogger(level=LogLevel.DEBUG)
         logger.set_callback(lambda msg, lvl: messages.append(msg))
 
-        audio = AudioManager(initialized_chuck, logger=logger)
+        audio = AudioService(initialized_chuck, logger=logger)
 
         try:
             audio.start()
@@ -114,7 +114,7 @@ class TestAudioManager:
 
     def test_is_running_property(self, initialized_chuck):
         """Test is_running property reflects state correctly."""
-        audio = AudioManager(initialized_chuck)
+        audio = AudioService(initialized_chuck)
 
         assert audio.is_running is False
 

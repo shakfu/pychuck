@@ -2,7 +2,7 @@
 Tests for shared TUI utilities in common.py.
 
 Tests the helper functions used for shreds table formatting,
-AudioManager, keybinding helpers, and ChuckApplication.
+AudioService, keybinding helpers, and ChuckApplication.
 """
 
 import warnings
@@ -11,8 +11,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from numchuck.services import AudioService
 from numchuck.tui.common import (
-    AudioManager,
     ChuckApplication,
     create_keybinding,
     format_elapsed_time,
@@ -189,30 +189,30 @@ class TestGenerateShedsTable:
         assert "3" in lines[4] and "third.ck" in lines[4]
 
 
-class TestAudioManager:
-    """Test AudioManager class."""
+class TestAudioService:
+    """Test AudioService class."""
 
     def test_init_basic(self):
-        """Test basic AudioManager initialization."""
+        """Test basic AudioService initialization."""
         mock_chuck = MagicMock()
-        manager = AudioManager(mock_chuck)
+        manager = AudioService(mock_chuck)
 
         assert manager._chuck is mock_chuck
         assert manager._running is False
 
     def test_init_with_logger(self):
-        """Test AudioManager initialization with custom logger."""
+        """Test AudioService initialization with custom logger."""
         mock_chuck = MagicMock()
         mock_logger = MagicMock()
 
-        manager = AudioManager(mock_chuck, logger=mock_logger)
+        manager = AudioService(mock_chuck, logger=mock_logger)
 
         assert manager._logger is mock_logger
 
     def test_is_running_property(self):
         """Test is_running property returns _running state."""
         mock_chuck = MagicMock()
-        manager = AudioManager(mock_chuck)
+        manager = AudioService(mock_chuck)
 
         assert manager.is_running is False
 
@@ -224,7 +224,7 @@ class TestAudioManager:
         """Test successful audio start."""
         mock_chuck = MagicMock()
         mock_logger = MagicMock()
-        manager = AudioManager(mock_chuck, logger=mock_logger)
+        manager = AudioService(mock_chuck, logger=mock_logger)
 
         result = manager.start()
 
@@ -238,7 +238,7 @@ class TestAudioManager:
         """Test start when audio already running."""
         mock_chuck = MagicMock()
         mock_logger = MagicMock()
-        manager = AudioManager(mock_chuck, logger=mock_logger)
+        manager = AudioService(mock_chuck, logger=mock_logger)
         manager._running = True
 
         result = manager.start()
@@ -253,7 +253,7 @@ class TestAudioManager:
         mock_start_audio.side_effect = RuntimeError("Audio device error")
         mock_chuck = MagicMock()
         mock_logger = MagicMock()
-        manager = AudioManager(mock_chuck, logger=mock_logger)
+        manager = AudioService(mock_chuck, logger=mock_logger)
 
         result = manager.start()
 
@@ -267,7 +267,7 @@ class TestAudioManager:
         """Test successful audio stop."""
         mock_chuck = MagicMock()
         mock_logger = MagicMock()
-        manager = AudioManager(mock_chuck, logger=mock_logger)
+        manager = AudioService(mock_chuck, logger=mock_logger)
         manager._running = True
 
         result = manager.stop()
@@ -283,7 +283,7 @@ class TestAudioManager:
         """Test stop when audio not running."""
         mock_chuck = MagicMock()
         mock_logger = MagicMock()
-        manager = AudioManager(mock_chuck, logger=mock_logger)
+        manager = AudioService(mock_chuck, logger=mock_logger)
 
         result = manager.stop()
 
@@ -298,7 +298,7 @@ class TestAudioManager:
         mock_stop.side_effect = RuntimeError("Error stopping")
         mock_chuck = MagicMock()
         mock_logger = MagicMock()
-        manager = AudioManager(mock_chuck, logger=mock_logger)
+        manager = AudioService(mock_chuck, logger=mock_logger)
         manager._running = True
 
         result = manager.stop()
@@ -314,7 +314,7 @@ class TestAudioManager:
         mock_shutdown.side_effect = RuntimeError("Error shutting down")
         mock_chuck = MagicMock()
         mock_logger = MagicMock()
-        manager = AudioManager(mock_chuck, logger=mock_logger)
+        manager = AudioService(mock_chuck, logger=mock_logger)
         manager._running = True
 
         result = manager.stop()
@@ -328,7 +328,7 @@ class TestAudioManager:
     def test_restart(self, mock_shutdown, mock_stop, mock_start):
         """Test restart stops then starts audio."""
         mock_chuck = MagicMock()
-        manager = AudioManager(mock_chuck)
+        manager = AudioService(mock_chuck)
         manager._running = True
 
         result = manager.restart()
@@ -542,7 +542,7 @@ class TestChuckApplication:
     @patch("numchuck.tui.common.ChucK")
     @patch("numchuck.tui.common.get_logger")
     def test_audio_running_property(self, mock_get_logger, mock_chuck_class):
-        """Test audio_running property delegates to AudioManager."""
+        """Test audio_running property delegates to AudioService."""
         mock_chuck = MagicMock()
         mock_chuck_class.return_value = mock_chuck
 
