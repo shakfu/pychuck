@@ -161,6 +161,7 @@ class TestChuckREPLStdinCommands:
         exit_code = repl.run(input_stream=stdin)
         assert exit_code == 0
 
+    @pytest.mark.realtime
     def test_audio_commands(self):
         """Test audio start/stop commands."""
         stdin = StringIO(">\n||\n")
