@@ -771,6 +771,10 @@ class Chuck:
         # Run VM in executor to avoid blocking
         await loop.run_in_executor(None, self.run, run_frames)
 
+        # Yield to event loop so call_soon_threadsafe callbacks are processed
+        # before we check future.done() (fixes race on slower platforms)
+        await asyncio.sleep(0)
+
         if not future.done():
             raise RuntimeError(
                 f"Failed to get global int '{name}' - callback not invoked. "
@@ -799,6 +803,7 @@ class Chuck:
 
         self._chuck.get_global_float(name, callback)
         await loop.run_in_executor(None, self.run, run_frames)
+        await asyncio.sleep(0)
 
         if not future.done():
             raise RuntimeError(
@@ -828,6 +833,7 @@ class Chuck:
 
         self._chuck.get_global_string(name, callback)
         await loop.run_in_executor(None, self.run, run_frames)
+        await asyncio.sleep(0)
 
         if not future.done():
             raise RuntimeError(

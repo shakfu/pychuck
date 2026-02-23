@@ -58,6 +58,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Added `del chuck` before temp directory cleanup in all tests to release file handles
   - Fixes `PermissionError` on Windows where files can't be deleted while open
 
+- **Async awaitable race condition** (`src/numchuck/api.py`):
+  - `get_int_awaitable`, `get_float_awaitable`, `get_string_awaitable` had a race between `run_in_executor` completion and `call_soon_threadsafe` callback delivery
+  - Added `await asyncio.sleep(0)` after `run_in_executor` to yield to the event loop and process pending callbacks before checking `future.done()`
+  - Fixes intermittent "callback not invoked" failures on slower platforms (macOS x86_64 under Rosetta)
+
 ## [0.1.9]
 
 ### Added
