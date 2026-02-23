@@ -46,6 +46,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - New `_get_chugins_dir()` helper checks bundled package directory first, falls back to `examples/chugins/` for dev builds
   - All chugin tests (`test_chugin_loading`, `test_chugin_bitcrusher_strict`, `test_chugin_gverb_strict`, `test_chugin_convrev_example`) use the unified helper
 
+### Fixed
+
+- **TUI tests skipped on Windows** (`tests/conftest.py`):
+  - Added `pytest_collection_modifyitems` hook to skip `@pytest.mark.tui` tests on Windows
+  - prompt_toolkit raises `NoConsoleScreenBufferError` on Windows in non-console environments
+  - 42 TUI tests now skip gracefully on Windows instead of failing
+
+- **WAV file rendering tests** (`tests/test_wavfile.py`):
+  - Fixed `test_render_sine_to_wav` run duration: `chuck.run(44100)` changed to `chuck.run(44100 * 4)` to match 4-second ChucK code duration
+  - Added `del chuck` before temp directory cleanup in all tests to release file handles
+  - Fixes `PermissionError` on Windows where files can't be deleted while open
+
 ## [0.1.9]
 
 ### Added

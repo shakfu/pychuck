@@ -48,8 +48,11 @@ class TestWvOut:
             assert success, "Failed to compile WvOut code"
             assert len(shred_ids) == 1
 
-            # Run for 1 second of audio
-            chuck.run(44100)
+            # Run for 4 seconds of audio (must match the ChucK code duration)
+            chuck.run(44100 * 4)
+
+            # Clean up Chuck to release file handles (required on Windows)
+            del chuck
 
             # Verify WAV file was created
             assert os.path.exists(output_path), "WAV file was not created"
@@ -89,6 +92,9 @@ class TestWvOut:
 
             chuck.run(44100)
 
+            # Clean up Chuck to release file handles (required on Windows)
+            del chuck
+
             assert os.path.exists(output_path), "Stereo WAV file was not created"
             file_size = os.path.getsize(output_path)
             # Stereo file should be larger
@@ -119,5 +125,8 @@ class TestWvOut:
             assert success, "Failed to compile me.dir() code"
 
             chuck.run(22050)  # 0.5 seconds
+
+            # Clean up Chuck to release file handles (required on Windows)
+            del chuck
 
             assert os.path.exists(output_path), "me.dir() WAV file was not created"
