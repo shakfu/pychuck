@@ -117,6 +117,11 @@ class Chuck:
         chugin_dirs: list[str] = []
         chugin_files: list[str] = []
 
+        # Bundled chugins (from the installed package)
+        _bundled = Path(__file__).parent / "chugins"
+        if _bundled.is_dir():
+            chugin_dirs.append(str(_bundled))
+
         # Process user-provided chugin paths
         if user_chugins:
             for path in user_chugins:

@@ -59,7 +59,7 @@ def test_chugin_loading():
     # Check if Bitcrusher is available (static or dynamic)
     is_available, is_static = _check_chugin_available("Bitcrusher")
 
-    chugins_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../examples/chugins'))
+    chugins_dir = _get_chugins_dir()
 
     chuck = numchuck.ChucK()
     chuck.set_param(numchuck.PARAM_SAMPLE_RATE, 44100)
@@ -67,7 +67,7 @@ def test_chugin_loading():
     chuck.set_param(numchuck.PARAM_CHUGIN_ENABLE, 1)
 
     # Only set import path if using dynamic chugins
-    if not is_static and os.path.exists(chugins_dir):
+    if not is_static and chugins_dir:
         chuck.set_param_string_list(numchuck.PARAM_IMPORT_PATH_SYSTEM, [chugins_dir])
 
     chuck.init()
@@ -184,14 +184,31 @@ def test_file_with_syntax_error():
     os.remove(error_file)
 
 
+def _get_chugins_dir() -> str | None:
+    """Return the chugins directory path (bundled or dev), or None if unavailable."""
+    # Check bundled chugins in the installed package first
+    try:
+        import numchuck
+        bundled = Path(numchuck.__file__).parent / "chugins"
+        if bundled.is_dir() and any(bundled.glob("*.chug")):
+            return str(bundled)
+    except Exception:
+        pass
+
+    # Fall back to dev tree
+    dev_dir = os.path.join(os.path.dirname(__file__), '../examples/chugins')
+    if os.path.exists(dev_dir):
+        chug_files = [f for f in os.listdir(dev_dir) if f.endswith('.chug')]
+        if chug_files:
+            return os.path.abspath(dev_dir)
+
+    return None
+
+
 # Helper to check if dynamic chugins are available
 def _dynamic_chugins_available():
     """Check if chugins directory exists and has .chug files"""
-    chugins_dir = os.path.join(os.path.dirname(__file__), '../examples/chugins')
-    if not os.path.exists(chugins_dir):
-        return False
-    chug_files = [f for f in os.listdir(chugins_dir) if f.endswith('.chug')]
-    return len(chug_files) > 0
+    return _get_chugins_dir() is not None
 
 
 def _check_chugin_available(chugin_name: str) -> tuple[bool, bool]:
@@ -213,8 +230,8 @@ def _check_chugin_available(chugin_name: str) -> tuple[bool, bool]:
         return (True, True)  # Available via static linking
 
     # Try with dynamic chugins path
-    chugins_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../examples/chugins'))
-    if not os.path.exists(chugins_dir):
+    chugins_dir = _get_chugins_dir()
+    if not chugins_dir:
         return (False, False)
 
     chuck2 = numchuck.ChucK()
@@ -239,7 +256,7 @@ def test_chugin_bitcrusher_strict():
     if not is_available:
         pytest.skip("Bitcrusher chugin not available (neither static nor dynamic)")
 
-    chugins_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../examples/chugins'))
+    chugins_dir = _get_chugins_dir()
 
     chuck = numchuck.ChucK()
     chuck.set_param(numchuck.PARAM_SAMPLE_RATE, 44100)
@@ -286,7 +303,7 @@ def test_chugin_gverb_strict():
     if not is_available:
         pytest.skip("GVerb chugin not available (neither static nor dynamic)")
 
-    chugins_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../examples/chugins'))
+    chugins_dir = _get_chugins_dir()
 
     chuck = numchuck.ChucK()
     chuck.set_param(numchuck.PARAM_SAMPLE_RATE, 44100)
@@ -330,7 +347,7 @@ def test_chugin_convrev_example():
     if not is_available:
         pytest.skip("ConvRev chugin not available (neither static nor dynamic)")
 
-    chugins_dir = normalize_path(os.path.join(os.path.dirname(__file__), '../examples/chugins'))
+    chugins_dir = _get_chugins_dir()
     example_file = normalize_path(os.path.join(os.path.dirname(__file__), '../examples/convrev/ConvRev.ck'))
     ir_file = normalize_path(os.path.join(os.path.dirname(__file__), '../examples/convrev/IRs/hagia-sophia.wav'))
 

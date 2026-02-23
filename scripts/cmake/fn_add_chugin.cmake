@@ -3,6 +3,8 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR})
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR})
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR})
 
+option(NUMCHUCK_INSTALL_CHUGINS "Install chugins into the Python package" OFF)
+
 function(add_chugin)
     unset(CMAKE_OSX_DEPLOYMENT_TARGET)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "requires >= 10.15" FORCE)
@@ -146,6 +148,10 @@ function(add_chugin)
             COMMAND codesign -vf -s - "${CHUGINS_DIR}/${CHUGIN_NAME}.chug"
             COMMENT "Codesigning ${CHUGIN_NAME}.chug"
         )
+    endif()
+
+    if(NUMCHUCK_INSTALL_CHUGINS)
+        install(TARGETS ${CHUGIN_NAME} LIBRARY DESTINATION numchuck/chugins)
     endif()
 
 endfunction()

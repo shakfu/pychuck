@@ -68,6 +68,9 @@ sdist.include = []
 # Files to exclude from the SDist even if they are included by default. Supports gitignore syntax.
 sdist.exclude = []
 
+# Install chugins into the wheel
+cmake.args = ["-DNUMCHUCK_INSTALL_CHUGINS=ON"]
+
 # Setuptools-style build caching in a local directory
 build-dir = "build/{wheel_tag}"
 

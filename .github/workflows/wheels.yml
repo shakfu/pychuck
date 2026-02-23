@@ -61,10 +61,15 @@ jobs:
           CIBW_ARCHS_MACOS: "x86_64 arm64"
           # macOS: Set deployment target (11.0 required for ARM64)
           CIBW_ENVIRONMENT_MACOS: MACOSX_DEPLOYMENT_TARGET=11.0
+          CIBW_BEFORE_BUILD_WINDOWS: pip install delvewheel
+          # Repair wheels with .chug support (repair tools skip non-standard extensions)
+          CIBW_REPAIR_WHEEL_COMMAND_LINUX: python {project}/scripts/repair_wheel.py {wheel} {dest_dir}
+          CIBW_REPAIR_WHEEL_COMMAND_MACOS: python {project}/scripts/repair_wheel.py {wheel} {dest_dir} --delocate-archs {delocate_archs}
+          CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: python {project}/scripts/repair_wheel.py {wheel} {dest_dir}
           # Test the built wheels
           CIBW_TEST_REQUIRES: pytest numpy pytest-asyncio
-          # Skip: realtime (no audio device), wavfile (WvOut timing), chugin (not bundled in wheel), tui (requires console)
-          CIBW_TEST_COMMAND: pytest {project}/tests -v --tb=short -k "not realtime and not wavfile and not chugin and not tui"
+          # Skip: realtime (no audio device), wavfile (WvOut timing), tui (requires console)
+          CIBW_TEST_COMMAND: pytest {project}/tests -v --tb=short -k "not realtime and not wavfile and not tui"
           # Skip: aarch64 Linux (cross-compiled, no native runner)
           CIBW_TEST_SKIP: "*-manylinux_aarch64"
 

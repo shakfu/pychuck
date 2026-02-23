@@ -15,6 +15,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- **Bundled Chugins in Wheels** (`scripts/cmake/fn_add_chugin.cmake`, `pyproject.toml`, `src/numchuck/api.py`):
+  - Pre-built chugins (~37 `.chug` files) are now included in distributed wheels
+  - `NUMCHUCK_INSTALL_CHUGINS` CMake option gates installation (ON for wheel builds, OFF for local dev)
+  - `cmake.args = ["-DNUMCHUCK_INSTALL_CHUGINS=ON"]` in `pyproject.toml` enables bundling during `pip install` / `uv build`
+  - Bundled chugins directory (`<package>/chugins/`) automatically added to ChucK search path in `Chuck.__init__`
+  - Users no longer need to build from source to use chugins
+
+- **Cross-Platform Wheel Repair for Chugins** (`scripts/repair_wheel.py`):
+  - Wheel repair tools (delocate, auditwheel, delvewheel) skip `.chug` files since they only scan platform-standard extensions
+  - New repair script temporarily renames `.chug` to the native extension (`.dylib`/`.so`/`.dll`), runs the repair tool, then renames back
+  - Ensures chugin shared library dependencies are properly bundled if any chugin gains external (non-system) dependencies
+  - Uses only stdlib (`zipfile`, `hashlib`, `csv`) -- no dependency on the `wheel` CLI package
+  - RECORD file correctly regenerated after rename operations
+  - Platform-specific handling:
+    - macOS: `.chug` -> `.dylib`, delocate-wheel with `--require-archs`
+    - Linux: `.chug` -> `.so`, auditwheel repair
+    - Windows: `.chug` -> `.dll`, delvewheel with `--analyze-existing --no-mangle`
+
+### Changed
+
+- **CI: Chugin tests enabled in wheel builds** (`.github/workflows/wheels.yml`):
+  - Removed `and not chugin` from `CIBW_TEST_COMMAND` filter
+  - All three platforms (Linux, macOS, Windows) now use the custom repair script
+  - Windows builds install delvewheel via `CIBW_BEFORE_BUILD_WINDOWS`
+
+- **Chugin test helpers updated** (`tests/test_examples.py`):
+  - New `_get_chugins_dir()` helper checks bundled package directory first, falls back to `examples/chugins/` for dev builds
+  - All chugin tests (`test_chugin_loading`, `test_chugin_bitcrusher_strict`, `test_chugin_gverb_strict`, `test_chugin_convrev_example`) use the unified helper
+
 ## [0.1.9]
 
 ### Added
