@@ -32,6 +32,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - macOS and Linux only -- all three depend on POSIX APIs (`dlfcn.h`, `dirent.h`, pthreads) not available on Windows
   - Fixed VST3 SDK option names (`SMTG_ENABLE_VST3_PLUGIN_EXAMPLES`/`SMTG_ENABLE_VST3_HOSTING_EXAMPLES`) to correctly disable SDK samples that require `gtk+-3.0` on Linux
 
+### Fixed
+
+- **Wheels workflow collect job** (`.github/workflows/wheels.yml`):
+  - Reordered `collect` job steps to run `checkout` before artifact downloads -- `actions/checkout@v4` cleans the working directory by default, which was wiping the downloaded `dist/` directory
+
 ## [0.1.10]
 
 ### Added
