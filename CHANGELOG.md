@@ -15,6 +15,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ## [Unreleased]
 
+## [0.1.10]
+
 ### Added
 
 - **Bundled Chugins in Wheels** (`scripts/cmake/fn_add_chugin.cmake`, `pyproject.toml`, `src/numchuck/api.py`):
@@ -23,6 +25,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - `cmake.args = ["-DNUMCHUCK_INSTALL_CHUGINS=ON"]` in `pyproject.toml` enables bundling during `pip install` / `uv build`
   - Bundled chugins directory (`<package>/chugins/`) automatically added to ChucK search path in `Chuck.__init__`
   - Users no longer need to build from source to use chugins
+
+- **`numchuck info` lists bundled chugins** (`src/numchuck/cli/main.py`):
+  - Shows count and names of all bundled `.chug` files from the installed package
+  - Displays "none" for editable/dev installs where chugins are in `examples/chugins/` instead
 
 - **Cross-Platform Wheel Repair for Chugins** (`scripts/repair_wheel.py`):
   - Wheel repair tools (delocate, auditwheel, delvewheel) skip `.chug` files since they only scan platform-standard extensions
@@ -34,6 +40,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
     - macOS: `.chug` -> `.dylib`, delocate-wheel with `--require-archs`
     - Linux: `.chug` -> `.so`, auditwheel repair
     - Windows: `.chug` -> `.dll`, delvewheel with `--analyze-existing --no-mangle`
+
+- **README: Bundled chugins documentation** (`README.md`):
+  - Categorized table of all 37 bundled chugins (38 on macOS with AudioUnit)
+  - Updated "Using Chugins" section to show automatic discovery (no manual path setup)
+  - Plugin Support overview links to the bundled chugins table
 
 ### Changed
 

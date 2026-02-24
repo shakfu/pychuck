@@ -40,7 +40,8 @@ The `bind()` function was called after `ChucK::init()` completed.
 ### Symbols Are Linked But Not Registered
 
 1. **Symbols present**: `nm` shows the chugin symbols are in the extension:
-   ```
+
+   ```text
    0000000000000000 T _ck_Bitcrusher_query
    0000000000000000 T _ck_GVerb_query
    ```
@@ -96,4 +97,3 @@ The following changes were made and subsequently removed:
 - `src/_numchuck.cpp`: Static chugin registration code
 - `scripts/cmake/fn_add_chugin.cmake`: `__CK_DLL_STATIC__` define
 - `pyproject.toml`: `cmake.args = ["-DCM_STATIC_CHUGINS=ON"]`
-

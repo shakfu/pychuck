@@ -4,7 +4,7 @@ This directory serves as a template for the `.numchuck` user directory.
 
 ## Directory Structure
 
-```
+```text
 .numchuck/
   snippets/         # ChucK code snippets (use @name in REPL)
   examples/         # Example ChucK files
@@ -22,6 +22,7 @@ This directory serves as a template for the `.numchuck` user directory.
 ## Search Order
 
 numchuck searches for `.numchuck` in this order:
+
 1. Current working directory (`./.numchuck`)
 2. Home directory (`~/.numchuck`)
 
@@ -31,7 +32,7 @@ This allows project-specific configuration to override global settings.
 
 Place `.ck` files in the `snippets/` directory and load them in the REPL:
 
-```
+```text
 [=>] @sine        # Loads snippets/sine.ck
 [=>] @drum        # Loads snippets/drum.ck
 ```

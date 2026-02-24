@@ -9,7 +9,7 @@ The Chorus output is always stereo, while its input may be either mono or stereo
 ## Parameters
 
 Parameter     | MIDI CC # | Description | Physical Control |
-|---|---|---|---|
+---|---|---|---|
 **Enable**    | `CC-105`  | Turn on/off the effect | switch`SW-4` |
 **Rate**      | `CC-2`    | The Chorus Rate (performable) sets the highest frequency used in its LFOs for modulating the delay-line lengths |knob`HADC-0` |
 **Depth**     | `CC-3`    | The Depth parameter (performable) controls the mixture of the input sound with the delayed-and-scaled copies of itself: 0 means input only (no chorus effect), 1/2 means equal balance (maximum incidental "flanging" effects), and 1 means modulated delay-line outputs only (pure chorus effect containing only scaling, onset spreading, and decorrelated Doppler shift). | knob`HADC-1` |
@@ -20,21 +20,21 @@ Parameter     | MIDI CC # | Description | Physical Control |
 
 The faust code (.dsp) in this directory has been compiled using faust2sam into chorus-sam
 
-```
+```text
 % faust2sam -midi chorus.dsp
 ```
 
 The result of this compile is a zip file `chorus-sam.zip` containing the following three files:
 
-  - `fast_pow2.h`
-  - `samFaustDSP.cpp`
-  - `samFaustDSP.h`
+- `fast_pow2.h`
+- `samFaustDSP.cpp`
+- `samFaustDSP.h`
 
 These 3 files should be placed into the directory `sam_baremetal_framework_core1/src/faust`
 
-In addition there is a header file that is common across all cores called `audio_system_config.h`. In this file the following pre-processor variables should be set in the following way. The example below indicates that a Faust algorithm will only be running on Core1 and that Core2 will be simply passing audio to the codec. 
+In addition there is a header file that is common across all cores called `audio_system_config.h`. In this file the following pre-processor variables should be set in the following way. The example below indicates that a Faust algorithm will only be running on Core1 and that Core2 will be simply passing audio to the codec.
 
-```
+```text
 #define USE_FAUST_ALGORITHM_CORE1           TRUE
 #define USE_FAUST_ALGORITHM_CORE2           FALSE
 ```

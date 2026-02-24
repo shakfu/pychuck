@@ -109,11 +109,13 @@ numchuck edit --project <TAB>
 ### Options by Subcommand
 
 **edit**:
+
 - `--project` - Completes with existing project names
 - `--start-audio` - Flag (no completion)
 - Files: Completes `.ck` files
 
 **repl / tui**:
+
 - `--start-audio` - Flag
 - `--no-smart-enter` - Flag
 - `--no-sidebar` - Flag
@@ -121,6 +123,7 @@ numchuck edit --project <TAB>
 - Files: Completes `.ck` files
 
 **run**:
+
 - `--srate` - Suggests: 22050, 44100, 48000, 96000
 - `--channels` - Suggests: 1, 2
 - `--silent` - Flag
@@ -128,6 +131,7 @@ numchuck edit --project <TAB>
 - Files: Completes `.ck` files
 
 **version / info**:
+
 - No options
 
 ## Testing
@@ -150,6 +154,7 @@ numchuck <TAB>
 **Bash: Completion not working**
 
 1. Check if bash-completion is installed:
+
    ```bash
    # macOS
    brew install bash-completion
@@ -163,17 +168,20 @@ numchuck <TAB>
 **Zsh: Completion not working**
 
 1. Check your fpath:
+
    ```bash
    echo $fpath
    ```
 
 2. Rebuild completion cache:
+
    ```bash
    rm ~/.zcompdump*
    compinit
    ```
 
 3. Check permissions:
+
    ```bash
    # Completion files should be readable
    chmod 644 /path/to/_numchuck

@@ -10,29 +10,29 @@ The numchuck library provides interactive control over ChucK, enabling live codi
 
 ### Library
 
-* **Python Programmatic Access to ChucK API** — Load, compile, and concurrently execute `.ck` files and ChucK code into audio processing or generated shreds. Manage the VM using python code: configure parameters, monitor timing, and control shred lifecycles.
+- **Python Programmatic Access to ChucK API** — Load, compile, and concurrently execute `.ck` files and ChucK code into audio processing or generated shreds. Manage the VM using python code: configure parameters, monitor timing, and control shred lifecycles.
 
-* **Flexible Execution** — Choose between real-time audio playback and recording using asynchronous RtAudio or offline input from and rendering to `numpy` arrays.
+- **Flexible Execution** — Choose between real-time audio playback and recording using asynchronous RtAudio or offline input from and rendering to `numpy` arrays.
 
-* **Advanced Audio Processing** — Harness ChucK's complete synthesis, filtering, and DSP capabilities.
+- **Advanced Audio Processing** — Harness ChucK's complete synthesis, filtering, and DSP capabilities.
 
-* **Live Coding** — Hot-swap code, replace active shreds, and inspect VM state in real time.
+- **Live Coding** — Hot-swap code, replace active shreds, and inspect VM state in real time.
 
-* **Plugin Support** — Extend functionality with ChucK *chugins* for additional instruments and effects.
+- **Plugin Support** — 37 ChucK *chugins* bundled in the wheel for additional instruments and effects (see [Bundled Chugins](#bundled-chugins)). Works out of the box with `pip install`.
 
-* **Dynamic Interaction** - Bidirectional communication between ChucK and Python through global variables, event triggers, and callbacks.
+- **Dynamic Interaction** - Bidirectional communication between ChucK and Python through global variables, event triggers, and callbacks.
 
 ### User Interface
 
-* **Multi-Tab Editor** — Full-screen ChucK editor with syntax highlighting; use F5 to spork and F6 to replace.
+- **Multi-Tab Editor** — Full-screen ChucK editor with syntax highlighting; use F5 to spork and F6 to replace.
 
-* **Interactive REPL** — Terminal-style interface supporting ChucK commands and code completion.
+- **Interactive REPL** — Terminal-style interface supporting ChucK commands and code completion.
 
-* **Command-Line Mode** — Run ChucK files directly from the terminal, with support for duration and silent modes.
+- **Command-Line Mode** — Run ChucK files directly from the terminal, with support for duration and silent modes.
 
-* **Automatic Versioning** — Keeps track of live coding sessions (`file.ck → file-1.ck → file-1-1.ck`).
+- **Automatic Versioning** — Keeps track of live coding sessions (`file.ck → file-1.ck → file-1-1.ck`).
 
-* **Web IDE** — Browser-based editor and REPL with real-time audio meters, globals panel, and WebSocket updates.
+- **Web IDE** — Browser-based editor and REPL with real-time audio meters, globals panel, and WebSocket updates.
 
 ## Installation
 
@@ -86,17 +86,17 @@ numchuck edit --start-audio --project mymusic
 
 **Editor Features:**
 
-* Multi-tab editing with ChucK syntax highlighting
-* F5 or Ctrl-R to spork (compile and run current buffer)
-* F6 to replace running shred with current buffer
-* Ctrl-O to open files with interactive dialog (Tab for path completion)
-* Ctrl-S to save files
-* Ctrl-T for new tab, Ctrl-W to close tab
-* Ctrl-N/Ctrl-P (or Ctrl-PageDown/PageUp) to navigate tabs
-* Tab names show shred IDs after sporking (e.g., `bass-1.ck`)
-* Project versioning: file.ck → file-1.ck → file-1-1.ck
-* F1/F2/F3 for help/shreds/log windows
-* Ctrl-Q to exit
+- Multi-tab editing with ChucK syntax highlighting
+- F5 or Ctrl-R to spork (compile and run current buffer)
+- F6 to replace running shred with current buffer
+- Ctrl-O to open files with interactive dialog (Tab for path completion)
+- Ctrl-S to save files
+- Ctrl-T for new tab, Ctrl-W to close tab
+- Ctrl-N/Ctrl-P (or Ctrl-PageDown/PageUp) to navigate tabs
+- Tab names show shred IDs after sporking (e.g., `bass-1.ck`)
+- Project versioning: file.ck → file-1.ck → file-1-1.ck
+- F1/F2/F3 for help/shreds/log windows
+- Ctrl-Q to exit
 
 #### 2. Interactive REPL
 
@@ -122,19 +122,19 @@ numchuck repl --no-sidebar
 
 **REPL Commands:**
 
-* `add <file>` or `+ <file>` - Spork a file
-* `remove <id>` or `- <id>` - Remove a shred
-* `remove all` or `- all` - Remove all shreds
-* `abort.shred <id>` or `abort <id>` - Abort a shred (ChucK-native)
-* `replace <id> <file>` or `= <id> <file>` - Replace shred with file
-* `status` or `^` - Show VM status
-* `time` or `.` - Show ChucK time
-* `exit` or `quit` - Exit the REPL
-* `@<name>` - Load a snippet (e.g., `@sine`, `@drum`)
-* `watch <file>` - Auto-reload file on changes
-* `record start/stop/save <name>` - Record session
-* `playback <name>` - Replay recorded session
-* Type `help` or press F1 for full command reference
+- `add <file>` or `+ <file>` - Spork a file
+- `remove <id>` or `- <id>` - Remove a shred
+- `remove all` or `- all` - Remove all shreds
+- `abort.shred <id>` or `abort <id>` - Abort a shred (ChucK-native)
+- `replace <id> <file>` or `= <id> <file>` - Replace shred with file
+- `status` or `^` - Show VM status
+- `time` or `.` - Show ChucK time
+- `exit` or `quit` - Exit the REPL
+- `@<name>` - Load a snippet (e.g., `@sine`, `@drum`)
+- `watch <file>` - Auto-reload file on changes
+- `record start/stop/save <name>` - Record session
+- `playback <name>` - Replay recorded session
+- Type `help` or press F1 for full command reference
 
 #### 3. Command-Line Execution
 
@@ -206,48 +206,49 @@ numchuck web --no-browser
 * Open files from disk and download/save-as to disk
 * Examples dropdown with built-in ChucK examples (click to load)
 * Globals panel with auto-discovery of ChucK global variables
-  - Interactive sliders for int/float globals with real-time control
-  - Real-time sync via WebSocket (updates pushed, not polled)
-  - Event buttons to signal/broadcast global events
+  * Interactive sliders for int/float globals with real-time control
+  * Real-time sync via WebSocket (updates pushed, not polled)
+  * Event buttons to signal/broadcast global events
 * Shred management panel:
-  - View all running shreds with elapsed time
-  - Replace shred with current editor code
-  - Preview shred source code
-  - Remove individual shreds
+  * View all running shreds with elapsed time
+  * Replace shred with current editor code
+  * Preview shred source code
+  * Remove individual shreds
 * Real-time audio level meters:
-  - RMS and peak levels for left/right channels
-  - Visual meter bars updated in real-time
-  - Calculated in C++ audio callback for accuracy
+  * RMS and peak levels for left/right channels
+  * Visual meter bars updated in real-time
+  * Calculated in C++ audio callback for accuracy
 * Theme toggle (dark/light mode) with system preference detection
 * Real-time console output via WebSocket
 * Audio start/stop controls
 * Keyboard shortcuts (Editor mode):
-  - Ctrl+Enter: Spork code
-  - Ctrl+S: Save to local storage
-  - Ctrl+O: Open file from disk
-  - Ctrl+Shift+S: Download/Save As
-  - Ctrl+N: New tab
+  * Ctrl+Enter: Spork code
+  * Ctrl+S: Save to local storage
+  * Ctrl+O: Open file from disk
+  * Ctrl+Shift+S: Download/Save As
+  * Ctrl+N: New tab
 * Keyboard shortcuts (REPL mode):
-  - Ctrl+C: Copy selection or cancel input
-  - Ctrl+X: Cut selection
-  - Ctrl+V: Paste from clipboard
-  - Ctrl+L: Clear terminal
-  - Up/Down: Navigate command history
+  * Ctrl+C: Copy selection or cancel input
+  * Ctrl+X: Cut selection
+  * Ctrl+V: Paste from clipboard
+  * Ctrl+L: Clear terminal
+  * Up/Down: Navigate command history
 
 **REPL Commands** (ChucK-compatible):
-* `+ file.ck` / `+ "code"` - Spork a file or code
-* `- <id>` / `- all` - Remove shred(s)
-* `= <id> file.ck` / `= <id> "code"` - Replace shred
-* `status` / `^` - Show VM status
-* `?` / `?<id>` - List shreds / shred info
-* `?g` - List global variables
-* `?a` - Audio info
-* `name::value` - Set global variable
-* `name?` - Get global value
-* `name!` / `name!!` - Signal/broadcast event
-* `>` - Start audio, `||` - Stop audio
-* `clear` - Clear VM, `reset` - Reset shred ID
-* Or enter ChucK code directly
+
+- `+ file.ck` / `+ "code"` - Spork a file or code
+- `- <id>` / `- all` - Remove shred(s)
+- `= <id> file.ck` / `= <id> "code"` - Replace shred
+- `status` / `^` - Show VM status
+- `?` / `?<id>` - List shreds / shred info
+- `?g` - List global variables
+- `?a` - Audio info
+- `name::value` - Set global variable
+- `name?` - Get global value
+- `name!` / `name!!` - Signal/broadcast event
+- `>` - Start audio, `||` - Stop audio
+- `clear` - Clear VM, `reset` - Reset shred ID
+- Or enter ChucK code directly
 
 **REST API Endpoints:**
 
@@ -276,46 +277,48 @@ numchuck info
 
 **Interface Features:**
 
-* **Full-screen layout**: Professional terminal UI with multiple display areas
-* **Live topbar**: Minimal display showing shred IDs `[1] [2] [3]`
-* **Shreds table**: Detailed shred information table (F2) with ID, name (folder/file), and elapsed time since spork
-* **Error display bar**: Red error bar shows command errors without disrupting layout
-* **Help window**: Built-in command reference (toggle with F1)
-* **Log window**: Scrollable ChucK VM output capture (toggle with Ctrl+L)
-* **Mouse support**: Scroll through log output with mouse wheel
-* **Scrollable input**: Main input area with scrollbar for long code
+- **Full-screen layout**: Professional terminal UI with multiple display areas
+- **Live topbar**: Minimal display showing shred IDs `[1] [2] [3]`
+- **Shreds table**: Detailed shred information table (F2) with ID, name (folder/file), and elapsed time since spork
+- **Error display bar**: Red error bar shows command errors without disrupting layout
+- **Help window**: Built-in command reference (toggle with F1)
+- **Log window**: Scrollable ChucK VM output capture (toggle with Ctrl+L)
+- **Mouse support**: Scroll through log output with mouse wheel
+- **Scrollable input**: Main input area with scrollbar for long code
 
 **Editing Features:**
 
-* **Smart Enter mode**: Enter submits commands immediately, but allows multiline ChucK code editing
-* **ChucK syntax highlighting**: Full Pygments lexer for ChucK language with color themes
-* **ChucK code completion**: Tab completion for keywords, types, UGens, and standard library
-* **Intelligent code detection**: Automatically compiles multiline ChucK code
-* **Tab completion**: Commands, `.ck` files, and ChucK language elements
-* **Command history**: Persistent history with Ctrl+R search
-* **Colored prompt**: `[=>]` matches ChucK logo styling
+- **Smart Enter mode**: Enter submits commands immediately, but allows multiline ChucK code editing
+- **ChucK syntax highlighting**: Full Pygments lexer for ChucK language with color themes
+- **ChucK code completion**: Tab completion for keywords, types, UGens, and standard library
+- **Intelligent code detection**: Automatically compiles multiline ChucK code
+- **Tab completion**: Commands, `.ck` files, and ChucK language elements
+- **Command history**: Persistent history with Ctrl+R search
+- **Colored prompt**: `[=>]` matches ChucK logo styling
 
 **Common Keyboard Shortcuts (Editor & REPL):**
 
-* `F1` - Toggle help window
-* `F2` - Toggle shreds table (detailed view with ID, folder/filename, elapsed time)
-* `F3` - Toggle log window (ChucK VM output)
-* `Ctrl+Q` - Exit application
-* `Tab` - Command and ChucK code completion
-* `Up/Down` - Navigate command history
+- `F1` - Toggle help window
+- `F2` - Toggle shreds table (detailed view with ID, folder/filename, elapsed time)
+- `F3` - Toggle log window (ChucK VM output)
+- `Ctrl+Q` - Exit application
+- `Tab` - Command and ChucK code completion
+- `Up/Down` - Navigate command history
 
 ### User Directory (`.numchuck`)
 
 numchuck uses a `.numchuck` directory for user configuration, snippets, and customization.
 
 **Search Order:**
+
 1. Local: `./.numchuck` (current working directory)
 2. Global: `~/.numchuck` (home directory)
 
 Local configuration takes precedence over global. This allows project-specific settings.
 
 **Directory Structure:**
-```
+
+```text
 .numchuck/
   snippets/     # Code snippets loaded with @<name>
   themes/       # Color theme configurations (.toml)
@@ -329,7 +332,7 @@ Local configuration takes precedence over global. This allows project-specific s
 
 The `_numchuck/` directory in the repository contains a template with examples:
 
-```
+```text
 _numchuck/
   snippets/
     sine.ck     # Simple sine wave oscillator
@@ -351,11 +354,13 @@ _numchuck/
 ```
 
 Copy to your home directory to use globally:
+
 ```bash
 cp -r _numchuck ~/.numchuck
 ```
 
 Or copy to a project directory for project-specific settings:
+
 ```bash
 cp -r _numchuck .numchuck
 ```
@@ -365,7 +370,8 @@ cp -r _numchuck .numchuck
 Snippets are reusable ChucK code files that can be loaded with `@<name>` in the REPL.
 
 **Usage in REPL:**
-```
+
+```text
 [=>] @sine        # Loads snippets/sine.ck
 [=>] @drum        # Loads snippets/drum.ck
 [=>] @<TAB>       # Tab completion for available snippets
@@ -422,10 +428,11 @@ to_wav("output.wav", files=["sine.ck"], duration=10.0, sample_rate=48000)
 | `to_wav(output, code, files, duration, ...)` | Export to WAV file (provide either `code` or `files`) |
 
 All functions support:
-- `duration` - Seconds to render (default: 10.0)
-- `sample_rate` - Sample rate in Hz (default: 44100)
-- `channels` - Output channels (default: 2)
-- `dtype` - Output type: `np.float32` or `np.int16` (default: float32)
+
+* `duration` - Seconds to render (default: 10.0)
+* `sample_rate` - Sample rate in Hz (default: 44100)
+* `channels` - Output channels (default: 2)
+* `dtype` - Output type: `np.float32` or `np.int16` (default: float32)
 
 ### High-Level API (Recommended)
 
@@ -682,58 +689,58 @@ Chuck(
 
 #### Core Methods
 
-* **`init() -> bool`** - Initialize ChucK (called automatically if `auto_init=True`)
-* **`close() -> None`** - Shutdown ChucK instance (important on Windows)
-* **`__enter__() -> Chuck`** - Context manager entry (returns self)
-* **`__exit__(...) -> None`** - Context manager exit (calls close())
-* **`compile(code, args="", count=1, immediate=False) -> tuple[bool, list[int]]`** - Compile ChucK code
-* **`compile_file(path, args="", count=1, immediate=False) -> tuple[bool, list[int]]`** - Compile from file
-* **`run(num_frames, *, output=None, input=None, reuse=False) -> np.ndarray`** - Run VM and return output audio
+- **`init() -> bool`** - Initialize ChucK (called automatically if `auto_init=True`)
+- **`close() -> None`** - Shutdown ChucK instance (important on Windows)
+- **`__enter__() -> Chuck`** - Context manager entry (returns self)
+- **`__exit__(...) -> None`** - Context manager exit (calls close())
+- **`compile(code, args="", count=1, immediate=False) -> tuple[bool, list[int]]`** - Compile ChucK code
+- **`compile_file(path, args="", count=1, immediate=False) -> tuple[bool, list[int]]`** - Compile from file
+- **`run(num_frames, *, output=None, input=None, reuse=False) -> np.ndarray`** - Run VM and return output audio
   * No args: allocates new buffer each call
   * `output=buf`: uses provided buffer (zero allocation)
   * `input=buf`: uses provided input buffer
   * `reuse=True`: uses internal buffer (zero GC without manual management)
-* **`advance(num_frames) -> None`** - Advance VM time without returning audio (for callbacks/events)
-* **`spork(code, args="") -> Shred`** - Compile code and return Shred handle
-* **`spork_file(path, args="") -> Shred`** - Compile file and return Shred handle
+- **`advance(num_frames) -> None`** - Advance VM time without returning audio (for callbacks/events)
+- **`spork(code, args="") -> Shred`** - Compile code and return Shred handle
+- **`spork_file(path, args="") -> Shred`** - Compile file and return Shred handle
 
 #### Shred Management
 
-* **`remove_shred(shred_id) -> None`** - Remove a shred by ID
-* **`replace_shred(shred_id, code, args="") -> int`** - Replace running shred with new code, returns new shred ID
-* **`shred_info(shred_id) -> dict | None`** - Get shred information
-* **`clear()`** - Remove all shreds from VM
-* **`reset_id()`** - Reset shred ID counter
+- **`remove_shred(shred_id) -> None`** - Remove a shred by ID
+- **`replace_shred(shred_id, code, args="") -> int`** - Replace running shred with new code, returns new shred ID
+- **`shred_info(shred_id) -> dict | None`** - Get shred information
+- **`clear()`** - Remove all shreds from VM
+- **`reset_id()`** - Reset shred ID counter
 
 #### Global Variables
 
-* **`set_int(name, value)`** - Set global int
-* **`get_int(name, run_frames=256) -> int`** - Get global int (synchronous)
-* **`set_float(name, value)`** - Set global float
-* **`get_float(name, run_frames=256) -> float`** - Get global float (synchronous)
-* **`set_string(name, value)`** - Set global string
-* **`get_string(name, run_frames=256) -> str`** - Get global string (synchronous)
-* **`get_int_async(name, callback)`** - Get global int via callback
-* **`get_float_async(name, callback)`** - Get global float via callback
-* **`get_string_async(name, callback)`** - Get global string via callback
-* **`get_int_awaitable(name, run_frames=256) -> Awaitable[int]`** - Get global int (async/await)
-* **`get_float_awaitable(name, run_frames=256) -> Awaitable[float]`** - Get global float (async/await)
-* **`get_string_awaitable(name, run_frames=256) -> Awaitable[str]`** - Get global string (async/await)
-* **`global_int(name) -> GlobalInt`** - Create typed int proxy
-* **`global_float(name) -> GlobalFloat`** - Create typed float proxy
-* **`global_string(name) -> GlobalString`** - Create typed string proxy
+- **`set_int(name, value)`** - Set global int
+- **`get_int(name, run_frames=256) -> int`** - Get global int (synchronous)
+- **`set_float(name, value)`** - Set global float
+- **`get_float(name, run_frames=256) -> float`** - Get global float (synchronous)
+- **`set_string(name, value)`** - Set global string
+- **`get_string(name, run_frames=256) -> str`** - Get global string (synchronous)
+- **`get_int_async(name, callback)`** - Get global int via callback
+- **`get_float_async(name, callback)`** - Get global float via callback
+- **`get_string_async(name, callback)`** - Get global string via callback
+- **`get_int_awaitable(name, run_frames=256) -> Awaitable[int]`** - Get global int (async/await)
+- **`get_float_awaitable(name, run_frames=256) -> Awaitable[float]`** - Get global float (async/await)
+- **`get_string_awaitable(name, run_frames=256) -> Awaitable[str]`** - Get global string (async/await)
+- **`global_int(name) -> GlobalInt`** - Create typed int proxy
+- **`global_float(name) -> GlobalFloat`** - Create typed float proxy
+- **`global_string(name) -> GlobalString`** - Create typed string proxy
 
 #### Events
 
-* **`signal_event(name) -> None`** - Signal event (wakes one shred)
-* **`broadcast_event(name) -> None`** - Broadcast event (wakes all shreds)
-* **`on_event(name, callback, listen_forever=True) -> int`** - Register event callback, returns callback ID
-* **`stop_listening_for_event(name, callback_id) -> None`** - Stop listening for event
+- **`signal_event(name) -> None`** - Signal event (wakes one shred)
+- **`broadcast_event(name) -> None`** - Broadcast event (wakes all shreds)
+- **`on_event(name, callback, listen_forever=True) -> int`** - Register event callback, returns callback ID
+- **`stop_listening_for_event(name, callback_id) -> None`** - Stop listening for event
 
 #### Console Output
 
-* **`set_stdout_callback(callback)`** - Capture ChucK stdout (chout)
-* **`set_stderr_callback(callback)`** - Capture ChucK stderr (cherr)
+- **`set_stdout_callback(callback)`** - Capture ChucK stdout (chout)
+- **`set_stderr_callback(callback)`** - Capture ChucK stderr (cherr)
 
 ---
 
@@ -747,24 +754,24 @@ from numchuck._numchuck import ChucK
 
 #### Initialization Methods
 
-* **`__init__()`** - Create a new ChucK instance
-* **`init() -> bool`** - Initialize ChucK with current parameters
-* **`start() -> bool`** - Explicitly start ChucK VM (called implicitly by `run()` if needed)
+- **`__init__()`** - Create a new ChucK instance
+- **`init() -> bool`** - Initialize ChucK with current parameters
+- **`start() -> bool`** - Explicitly start ChucK VM (called implicitly by `run()` if needed)
 
 #### Parameter Configuration
 
-* **`set_param(name: str, value: int) -> int`** - Set integer parameter
-* **`set_param_float(name: str, value: float) -> int`** - Set float parameter
-* **`set_param_string(name: str, value: str) -> int`** - Set string parameter
-* **`set_param_string_list(name: str, value: list[str]) -> int`** - Set string list parameter
-* **`get_param_int(name: str) -> int`** - Get integer parameter
-* **`get_param_float(name: str) -> float`** - Get float parameter
-* **`get_param_string(name: str) -> str`** - Get string parameter
-* **`get_param_string_list(name: str) -> list[str]`** - Get string list parameter
+- **`set_param(name: str, value: int) -> int`** - Set integer parameter
+- **`set_param_float(name: str, value: float) -> int`** - Set float parameter
+- **`set_param_string(name: str, value: str) -> int`** - Set string parameter
+- **`set_param_string_list(name: str, value: list[str]) -> int`** - Set string list parameter
+- **`get_param_int(name: str) -> int`** - Get integer parameter
+- **`get_param_float(name: str) -> float`** - Get float parameter
+- **`get_param_string(name: str) -> str`** - Get string parameter
+- **`get_param_string_list(name: str) -> list[str]`** - Get string list parameter
 
 #### Compilation Methods
 
-* **`compile_code(code: str, args: str = "", count: int = 1, immediate: bool = False, filepath: str = "") -> tuple[bool, list[int]]`**
+- **`compile_code(code: str, args: str = "", count: int = 1, immediate: bool = False, filepath: str = "") -> tuple[bool, list[int]]`**
   * Compile ChucK code from string
   * Returns: `(success, shred_ids)`
   * Parameters:
@@ -774,13 +781,13 @@ from numchuck._numchuck import ChucK
     * `immediate`: If True, schedule immediately; if False, queue for next time step
     * `filepath`: Optional filepath for path-related operations
 
-* **`compile_file(path: str, args: str = "", count: int = 1, immediate: bool = False) -> tuple[bool, list[int]]`**
+- **`compile_file(path: str, args: str = "", count: int = 1, immediate: bool = False) -> tuple[bool, list[int]]`**
   * Compile ChucK code from file
   * Returns: `(success, shred_ids)`
 
 #### Audio Processing
 
-* **`run(input: np.ndarray, output: np.ndarray, num_frames: int)`**
+- **`run(input: np.ndarray, output: np.ndarray, num_frames: int)`**
   * Process audio for specified number of frames (synchronous/offline)
   * `input`: Input buffer (1D numpy array, dtype=np.float32)
     * Size must be `num_frames * input_channels`
@@ -790,90 +797,90 @@ from numchuck._numchuck import ChucK
 
 #### Real-Time Audio (RtAudio)
 
-* **`start_audio(chuck: ChucK, sample_rate: int = 44100, num_dac_channels: int = 2, num_adc_channels: int = 0, dac_device: int = 0, adc_device: int = 0, buffer_size: int = 512, num_buffers: int = 8) -> bool`**
+- **`start_audio(chuck: ChucK, sample_rate: int = 44100, num_dac_channels: int = 2, num_adc_channels: int = 0, dac_device: int = 0, adc_device: int = 0, buffer_size: int = 512, num_buffers: int = 8) -> bool`**
   * Start real-time audio playback using RtAudio
   * Audio plays asynchronously in the background
   * Returns: True if successful
 
-* **`stop_audio() -> bool`**
+- **`stop_audio() -> bool`**
   * Stop real-time audio playback
   * Returns: True if successful
 
-* **`shutdown_audio(msWait: int = 0)`**
+- **`shutdown_audio(msWait: int = 0)`**
   * Shutdown audio system completely
   * `msWait`: Milliseconds to wait before shutdown
 
-* **`audio_info() -> dict`**
+- **`audio_info() -> dict`**
   * Get current audio system information
   * Returns dict with keys: `sample_rate`, `num_channels_out`, `num_channels_in`, `buffer_size`
 
 #### Global Variable Management
 
-* **`set_global_int(name: str, value: int)`** - Set a global int variable
-* **`set_global_float(name: str, value: float)`** - Set a global float variable
-* **`set_global_string(name: str, value: str)`** - Set a global string variable
-* **`get_global_int(name: str, callback: Callable[[int], None])`** - Get a global int (async via callback)
-* **`get_global_float(name: str, callback: Callable[[float], None])`** - Get a global float (async via callback)
-* **`get_global_string(name: str, callback: Callable[[str], None])`** - Get a global string (async via callback)
-* **`set_global_int_array(name: str, values: list[int])`** - Set a global int array
-* **`set_global_float_array(name: str, values: list[float])`** - Set a global float array
-* **`set_global_int_array_value(name: str, index: int, value: int)`** - Set array element by index
-* **`set_global_float_array_value(name: str, index: int, value: float)`** - Set array element by index
-* **`set_global_associative_int_array_value(name: str, key: str, value: int)`** - Set map value by key
-* **`set_global_associative_float_array_value(name: str, key: str, value: float)`** - Set map value by key
-* **`get_global_int_array(name: str, callback: Callable[[list[int]], None])`** - Get int array (async)
-* **`get_global_float_array(name: str, callback: Callable[[list[float]], None])`** - Get float array (async)
-* **`get_all_globals() -> list[tuple[str, str]]`** - Get list of all globals as (type, name) pairs
+- **`set_global_int(name: str, value: int)`** - Set a global int variable
+- **`set_global_float(name: str, value: float)`** - Set a global float variable
+- **`set_global_string(name: str, value: str)`** - Set a global string variable
+- **`get_global_int(name: str, callback: Callable[[int], None])`** - Get a global int (async via callback)
+- **`get_global_float(name: str, callback: Callable[[float], None])`** - Get a global float (async via callback)
+- **`get_global_string(name: str, callback: Callable[[str], None])`** - Get a global string (async via callback)
+- **`set_global_int_array(name: str, values: list[int])`** - Set a global int array
+- **`set_global_float_array(name: str, values: list[float])`** - Set a global float array
+- **`set_global_int_array_value(name: str, index: int, value: int)`** - Set array element by index
+- **`set_global_float_array_value(name: str, index: int, value: float)`** - Set array element by index
+- **`set_global_associative_int_array_value(name: str, key: str, value: int)`** - Set map value by key
+- **`set_global_associative_float_array_value(name: str, key: str, value: float)`** - Set map value by key
+- **`get_global_int_array(name: str, callback: Callable[[list[int]], None])`** - Get int array (async)
+- **`get_global_float_array(name: str, callback: Callable[[list[float]], None])`** - Get float array (async)
+- **`get_all_globals() -> list[tuple[str, str]]`** - Get list of all globals as (type, name) pairs
 
 #### Global Event Management
 
-* **`signal_global_event(name: str)`** - Signal a global event (wakes one waiting shred)
-* **`broadcast_global_event(name: str)`** - Broadcast a global event (wakes all waiting shreds)
-* **`listen_for_global_event(name: str, callback: Callable[[], None], listen_forever: bool = True) -> int`** - Listen for event, returns listener ID
-* **`stop_listening_for_global_event(name: str, callback_id: int)`** - Stop listening using listener ID
+- **`signal_global_event(name: str)`** - Signal a global event (wakes one waiting shred)
+- **`broadcast_global_event(name: str)`** - Broadcast a global event (wakes all waiting shreds)
+- **`listen_for_global_event(name: str, callback: Callable[[], None], listen_forever: bool = True) -> int`** - Listen for event, returns listener ID
+- **`stop_listening_for_global_event(name: str, callback_id: int)`** - Stop listening using listener ID
 
 #### Shred Management
 
-* **`remove_shred(shred_id: int)`** - Remove a shred by ID
-* **`remove_all_shreds()`** - Remove all running shreds from VM
-* **`get_all_shred_ids() -> list[int]`** - Get IDs of all running shreds
-* **`get_ready_shred_ids() -> list[int]`** - Get IDs of ready (not blocked) shreds
-* **`get_blocked_shred_ids() -> list[int]`** - Get IDs of blocked shreds
-* **`get_last_shred_id() -> int`** - Get ID of last sporked shred
-* **`get_next_shred_id() -> int`** - Get what the next shred ID will be
-* **`get_shred_info(shred_id: int) -> dict`** - Get shred info (id, name, is_running, is_done)
+- **`remove_shred(shred_id: int)`** - Remove a shred by ID
+- **`remove_all_shreds()`** - Remove all running shreds from VM
+- **`get_all_shred_ids() -> list[int]`** - Get IDs of all running shreds
+- **`get_ready_shred_ids() -> list[int]`** - Get IDs of ready (not blocked) shreds
+- **`get_blocked_shred_ids() -> list[int]`** - Get IDs of blocked shreds
+- **`get_last_shred_id() -> int`** - Get ID of last sporked shred
+- **`get_next_shred_id() -> int`** - Get what the next shred ID will be
+- **`get_shred_info(shred_id: int) -> dict`** - Get shred info (id, name, is_running, is_done)
 
 #### VM Control
 
-* **`clear_vm()`** - Clear the VM (remove all shreds)
-* **`clear_globals()`** - Clear global variables without clearing the VM
-* **`reset_shred_id()`** - Reset the shred ID counter
-* **`replace_shred(shred_id: int, code: str, args: str = "") -> int`** - Replace running shred with new code
+- **`clear_vm()`** - Clear the VM (remove all shreds)
+- **`clear_globals()`** - Clear global variables without clearing the VM
+- **`reset_shred_id()`** - Reset the shred ID counter
+- **`replace_shred(shred_id: int, code: str, args: str = "") -> int`** - Replace running shred with new code
 
 #### Status and Utility
 
-* **`is_init() -> bool`** - Check if ChucK is initialized
-* **`vm_running() -> bool`** - Check if VM is running
-* **`now() -> float`** - Get current ChucK time in samples
+- **`is_init() -> bool`** - Check if ChucK is initialized
+- **`vm_running() -> bool`** - Check if VM is running
+- **`now() -> float`** - Get current ChucK time in samples
 
 #### Console Output Control
 
-* **`set_chout_callback(callback: Callable[[str], None]) -> bool`** - Capture ChucK console output
-* **`set_cherr_callback(callback: Callable[[str], None]) -> bool`** - Capture ChucK error output
-* **`toggle_global_color_textoutput(onOff: bool)`** - Enable/disable color output
-* **`probe_chugins()`** - Print info on all loaded chugins
+- **`set_chout_callback(callback: Callable[[str], None]) -> bool`** - Capture ChucK console output
+- **`set_cherr_callback(callback: Callable[[str], None]) -> bool`** - Capture ChucK error output
+- **`toggle_global_color_textoutput(onOff: bool)`** - Enable/disable color output
+- **`probe_chugins()`** - Print info on all loaded chugins
 
 #### Static Methods
 
-* **`version() -> str`** - Get ChucK version string
-* **`int_size() -> int`** - Get ChucK integer size in bits
-* **`num_vms() -> int`** - Get number of active ChucK VMs
-* **`set_log_level(level: int)`** - Set global log level
-* **`get_log_level() -> int`** - Get global log level
-* **`poop()`** - ChucK poop compatibility
-* **`set_stdout_callback(callback: Callable[[str], None]) -> bool`** - Set global stdout callback (static)
-* **`set_stderr_callback(callback: Callable[[str], None]) -> bool`** - Set global stderr callback (static)
-* **`global_cleanup()`** - Global cleanup for all ChucK instances
+- **`version() -> str`** - Get ChucK version string
+- **`int_size() -> int`** - Get ChucK integer size in bits
+- **`num_vms() -> int`** - Get number of active ChucK VMs
+- **`set_log_level(level: int)`** - Set global log level
+- **`get_log_level() -> int`** - Get global log level
+- **`poop()`** - ChucK poop compatibility
+- **`set_stdout_callback(callback: Callable[[str], None]) -> bool`** - Set global stdout callback (static)
+- **`set_stderr_callback(callback: Callable[[str], None]) -> bool`** - Set global stderr callback (static)
+- **`global_cleanup()`** - Global cleanup for all ChucK instances
 
 ### Parameter Constants
 
@@ -913,10 +920,10 @@ from numchuck._numchuck import ChucK
 
 ### Rendering API (`numchuck.render`)
 
-* **`render(code, duration=10.0, sample_rate=44100, channels=2, dtype=np.float32) -> np.ndarray`** - Render ChucK code to numpy array
-* **`render_file(files, duration=10.0, sample_rate=44100, channels=2, dtype=np.float32) -> np.ndarray`** - Render ChucK files to numpy array
-* **`to_wav(output, code=None, files=None, duration=10.0, sample_rate=44100, channels=2) -> Path`** - Export to WAV file
-* **`RenderError`** - Exception raised for rendering failures
+- **`render(code, duration=10.0, sample_rate=44100, channels=2, dtype=np.float32) -> np.ndarray`** - Render ChucK code to numpy array
+- **`render_file(files, duration=10.0, sample_rate=44100, channels=2, dtype=np.float32) -> np.ndarray`** - Render ChucK files to numpy array
+- **`to_wav(output, code=None, files=None, duration=10.0, sample_rate=44100, channels=2) -> Path`** - Export to WAV file
+- **`RenderError`** - Exception raised for rendering failures
 
 ### File Watcher (`numchuck.watcher`)
 
@@ -924,12 +931,12 @@ from numchuck._numchuck import ChucK
 from numchuck.watcher import FileWatcher, WatchedFile
 ```
 
-* **`FileWatcher(chuck, session, on_reload=None, on_error=None)`** - Watch files for changes and auto-reload
-* **`watch_file(filepath, shred_id=None) -> bool`** - Start watching a file
-* **`unwatch_file(filepath) -> bool`** - Stop watching a file
-* **`start() -> None`** - Start the file watcher
-* **`stop() -> None`** - Stop the file watcher
-* **`WatchedFile`** - Dataclass for watched file info
+- **`FileWatcher(chuck, session, on_reload=None, on_error=None)`** - Watch files for changes and auto-reload
+- **`watch_file(filepath, shred_id=None) -> bool`** - Start watching a file
+- **`unwatch_file(filepath) -> bool`** - Stop watching a file
+- **`start() -> None`** - Start the file watcher
+- **`stop() -> None`** - Stop the file watcher
+- **`WatchedFile`** - Dataclass for watched file info
 
 ### Web Server (`numchuck.web`)
 
@@ -937,13 +944,13 @@ from numchuck.watcher import FileWatcher, WatchedFile
 from numchuck.web import WebChuckServer, WEB_AVAILABLE
 ```
 
-* **`WEB_AVAILABLE`** - Boolean indicating if web module is available
-* **`WebChuckServer(chuck, port=8080, static_dir=None)`** - Browser-based ChucK IDE server
+- **`WEB_AVAILABLE`** - Boolean indicating if web module is available
+- **`WebChuckServer(chuck, port=8080, static_dir=None)`** - Browser-based ChucK IDE server
   * `start() -> None` - Start the web server in background thread
   * `stop() -> None` - Stop the web server
   * `broadcast(msg: str) -> None` - Broadcast message to all WebSocket clients
   * `port` - Server port (read-only)
-  * `url` - Server URL (e.g., "http://localhost:8080")
+  * `url` - Server URL (e.g., "<http://localhost:8080>")
   * `is_running` - Check if server is running
   * `client_count` - Number of connected WebSocket clients
 
@@ -964,11 +971,11 @@ with WebChuckServer(chuck, port=8080) as server:
 from numchuck.midi import MIDIMapping, MIDIMappings, generate_midi_listener_code
 ```
 
-* **`MIDIMapping(channel, cc_number, global_name, min_value=0.0, max_value=1.0)`** - Map MIDI CC to ChucK global
-* **`MIDIMappings`** - Collection of MIDI mappings with `add()`, `remove()`, `get()`, `to_dict()` methods
-* **`MIDILearnState`** - State machine for MIDI learn mode
-* **`generate_midi_listener_code(mappings) -> str`** - Generate ChucK code for MIDI control
-* **`generate_midi_monitor_code() -> str`** - Generate MIDI monitor code
+- **`MIDIMapping(channel, cc_number, global_name, min_value=0.0, max_value=1.0)`** - Map MIDI CC to ChucK global
+- **`MIDIMappings`** - Collection of MIDI mappings with `add()`, `remove()`, `get()`, `to_dict()` methods
+- **`MIDILearnState`** - State machine for MIDI learn mode
+- **`generate_midi_listener_code(mappings) -> str`** - Generate ChucK code for MIDI control
+- **`generate_midi_monitor_code() -> str`** - Generate MIDI monitor code
 
 ### OSC Support (`numchuck.osc`)
 
@@ -976,12 +983,12 @@ from numchuck.midi import MIDIMapping, MIDIMappings, generate_midi_listener_code
 from numchuck.osc import OSCServer, OSCClient, generate_osc_listener_code
 ```
 
-* **`OSCServer(port=9000)`** - UDP server for receiving OSC messages
-* **`OSCClient(host, port)`** - UDP client for sending OSC messages
-* **`OSCController(executor, port=9000)`** - Map OSC addresses to REPL actions
-* **`OSCHandler`** - Dataclass for OSC address handlers
-* **`generate_osc_listener_code(address, port, global_type, global_name) -> str`** - Generate ChucK OSC listener
-* **`generate_osc_sender_code(host, port, address) -> str`** - Generate ChucK OSC sender
+- **`OSCServer(port=9000)`** - UDP server for receiving OSC messages
+- **`OSCClient(host, port)`** - UDP client for sending OSC messages
+- **`OSCController(executor, port=9000)`** - Map OSC addresses to REPL actions
+- **`OSCHandler`** - Dataclass for OSC address handlers
+- **`generate_osc_listener_code(address, port, global_type, global_name) -> str`** - Generate ChucK OSC listener
+- **`generate_osc_sender_code(host, port, address) -> str`** - Generate ChucK OSC sender
 
 ### Waveform Display (`numchuck.tui.waveform`)
 
@@ -989,13 +996,13 @@ from numchuck.osc import OSCServer, OSCClient, generate_osc_listener_code
 from numchuck.tui.waveform import samples_to_waveform, WaveformBuffer
 ```
 
-* **`samples_to_waveform(samples, width=80, height=8, use_unicode=True) -> str`** - Convert audio to waveform string
-* **`WaveformBuffer(size, channels=2)`** - Circular buffer for real-time waveform display
-* **`format_waveform_bar(level, width=40, use_unicode=True) -> str`** - Format a level meter bar
-* **`format_stereo_meters(left, right, width=20) -> str`** - Format stereo level meters
-* **`calculate_rms(samples) -> float`** - Calculate RMS level
-* **`calculate_peak(samples) -> float`** - Calculate peak level
-* **`db_to_linear(db) -> float`** / **`linear_to_db(linear) -> float`** - Decibel conversions
+- **`samples_to_waveform(samples, width=80, height=8, use_unicode=True) -> str`** - Convert audio to waveform string
+- **`WaveformBuffer(size, channels=2)`** - Circular buffer for real-time waveform display
+- **`format_waveform_bar(level, width=40, use_unicode=True) -> str`** - Format a level meter bar
+- **`format_stereo_meters(left, right, width=20) -> str`** - Format stereo level meters
+- **`calculate_rms(samples) -> float`** - Calculate RMS level
+- **`calculate_peak(samples) -> float`** - Calculate peak level
+- **`db_to_linear(db) -> float`** / **`linear_to_db(linear) -> float`** - Decibel conversions
 
 ### Session Recording (`numchuck.recorder`)
 
@@ -1003,17 +1010,17 @@ from numchuck.tui.waveform import samples_to_waveform, WaveformBuffer
 from numchuck.recorder import SessionRecorder, SessionPlayer, list_recordings
 ```
 
-* **`SessionRecorder()`** - Record REPL sessions with timestamps
+- **`SessionRecorder()`** - Record REPL sessions with timestamps
   * `start(name) -> None` - Start recording
   * `stop() -> RecordedSession` - Stop and return session
   * `record_action(action_type, content) -> None` - Record an action
-* **`SessionPlayer(session)`** - Playback recorded sessions
+- **`SessionPlayer(session)`** - Playback recorded sessions
   * `start(speed=1.0) -> None` - Start playback
   * `tick() -> bool` - Advance playback, returns True if still playing
-* **`RecordedAction(timestamp, action_type, content)`** - A recorded action
-* **`RecordedSession(name, actions)`** - A complete recorded session
-* **`get_recording_path(name) -> Path`** - Get path to recording file
-* **`list_recordings() -> list[str]`** - List saved recordings
+- **`RecordedAction(timestamp, action_type, content)`** - A recorded action
+- **`RecordedSession(name, actions)`** - A complete recorded session
+- **`get_recording_path(name) -> Path`** - Get path to recording file
+- **`list_recordings() -> list[str]`** - List saved recordings
 
 ### ChucK Language Support (`numchuck.lang`)
 
@@ -1030,21 +1037,23 @@ get_category("LPF")  # "ugen"
 ```
 
 **Constants:**
-- `KEYWORDS` - ChucK keywords (if, while, class, fun, etc.)
-- `TYPES` - ChucK types (int, float, time, dur, etc.)
-- `OPERATORS` - ChucK operators (=>, +, -, etc.)
-- `TIME_UNITS` - Time units (samp, ms, second, etc.)
-- `UGENS` - Unit generators (SinOsc, LPF, ADSR, etc.)
-- `STD_CLASSES` - Standard library classes (Std, Math, Machine, etc.)
-- `REPL_COMMANDS` - REPL command prefixes (+, -, ~, etc.)
-- `ALL_IDENTIFIERS` - All ChucK identifiers combined
+
+* `KEYWORDS` - ChucK keywords (if, while, class, fun, etc.)
+* `TYPES` - ChucK types (int, float, time, dur, etc.)
+* `OPERATORS` - ChucK operators (=>, +, -, etc.)
+* `TIME_UNITS` - Time units (samp, ms, second, etc.)
+* `UGENS` - Unit generators (SinOsc, LPF, ADSR, etc.)
+* `STD_CLASSES` - Standard library classes (Std, Math, Machine, etc.)
+* `REPL_COMMANDS` - REPL command prefixes (+, -, ~, etc.)
+* `ALL_IDENTIFIERS` - All ChucK identifiers combined
 
 **Lexer:**
-- `ChuckLexer` - Pygments lexer for ChucK syntax highlighting
+
+* `ChuckLexer` - Pygments lexer for ChucK syntax highlighting
 
 ### Module Functions
 
-* **`version() -> str`** - Get ChucK version (convenience function)
+- **`version() -> str`** - Get ChucK version (convenience function)
 
 ## Important Notes
 
@@ -1193,18 +1202,27 @@ numchuck.shutdown_audio()
 
 ### Using Chugins (Plugins)
 
+37 chugins are bundled with numchuck and automatically discovered -- no manual path setup needed. Run `numchuck info` to see what's available on your system.
+
+#### Bundled Chugins
+
+| Category | Chugins |
+|----------|---------|
+| **Effects** | ABSaturator, Bitcrusher, ExpDelay, FoldbackSaturator, GVerb, KasFilter, Multicomb, NHHall, Overdrive, Spectacle |
+| **Filters** | Elliptic, FIR, WPDiodeLadder, WPKorg35 |
+| **Oscillators / Synthesis** | MagicSine, Mesh2D, Wavetable |
+| **Envelopes** | ExpEnv, PowerADSR, WinFuncEnv |
+| **Spatial** | AmbPan, Binaural, MIAP, PanN |
+| **Analysis** | PitchTrack, Sigmund |
+| **Utility** | ConvRev, Ladspa, Line, Patch, Perlin, Random, Range, RegEx, XML |
+| **Networking** | AbletonLink |
+| **macOS only** | AudioUnit |
+
 ```python
-import numchuck
+from numchuck import Chuck
 
-chuck = numchuck.ChucK()
-chuck.set_param(numchuck.PARAM_SAMPLE_RATE, 44100)
-chuck.set_param(numchuck.PARAM_OUTPUT_CHANNELS, 2)
-
-# Enable chugins and set search path
-chuck.set_param(numchuck.PARAM_CHUGIN_ENABLE, 1)
-chuck.set_param_string(numchuck.PARAM_USER_CHUGINS, "./examples/chugins")
-
-chuck.init()
+# Bundled chugins are loaded automatically
+chuck = Chuck(sample_rate=44100, output_channels=2)
 
 # Use a chugin in code
 code = '''
@@ -1214,6 +1232,12 @@ SinOsc s => Bitcrusher bc => dac;
 while(true) { 1::samp => now; }
 '''
 chuck.compile_code(code)
+```
+
+To use additional chugins from a custom directory:
+
+```python
+chuck = Chuck(user_chugins=["~/my-chugins"])
 ```
 
 ### Global Variables (Python/ChucK Communication)

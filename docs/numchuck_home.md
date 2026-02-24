@@ -319,6 +319,5 @@ The `~/.numchuck/` directory may contain:
 
 ## See Also
 
-- [REPL Documentation](dev/REPL_IMPROVEMENTS.md)
 - [ChucK Language Specification](https://chuck.stanford.edu/doc/language/)
 - [Path Management API](../src/numchuck/cli/paths.py)

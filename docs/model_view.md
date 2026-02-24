@@ -6,7 +6,7 @@ This document describes the service layer architecture that separates business l
 
 ## Architecture Overview
 
-```
+```text
 CLI Layer (cli/)              TUI Layer (tui/)
     |                              |
     +-------------+----------------+
@@ -43,6 +43,7 @@ audio.set_callbacks(on_start=..., on_stop=...)
 ```
 
 **Features:**
+
 - Consistent start/stop/shutdown with error handling
 - State tracking via `is_running` property
 - Configurable shutdown timeout
@@ -86,6 +87,7 @@ shreds.get_shred_info(id)      # ShredInfo
 ```
 
 **Features:**
+
 - Structured `ShredResult` return type (not formatted strings)
 - Automatic session tracking when session provided
 - Project integration for versioning
@@ -122,6 +124,7 @@ globals.broadcast_event("reset")
 ```
 
 **Features:**
+
 - Type-aware setters with automatic detection
 - Structured `GlobalInfo` return type for listing
 - Clean event signaling/broadcasting
@@ -159,6 +162,7 @@ content = files.read_file("sound.ck")
 ```
 
 **Features:**
+
 - Structured `SnippetInfo` return type
 - Local/global snippet resolution
 - Project versioning integration
@@ -204,7 +208,7 @@ status_bar = create_status_bar(
 
 ### Sporking a File (After Refactoring)
 
-```
+```text
 User input
     |
 CommandParser.parse() -> Command
@@ -223,7 +227,7 @@ UI: Display result or error
 
 ### Audio Control (After Refactoring)
 
-```
+```text
 CLI executor.py / TUI commands.py
     |
 AudioService.start() / .stop()
@@ -248,12 +252,14 @@ AudioService.start() / .stop()
 ## Test Coverage
 
 Tests in `tests/test_services.py` cover:
+
 - AudioService: start/stop/restart, callbacks, state tracking
 - ShredService: spork/replace/remove, session integration
 - GlobalsService: set/get operations, events, listing
 - FileService: snippet loading, directory management
 
 Tests in `tests/test_widgets.py` cover:
+
 - `create_help_window`: container creation, visibility conditions, custom heights
 - `create_shreds_table`: container creation, visibility conditions, custom heights
 - `create_log_window`: container and textarea creation, provided vs new textarea

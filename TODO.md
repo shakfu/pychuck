@@ -1,6 +1,11 @@
 # TODO
 
-- [ ] enable advanced chugins {faust, warpbug, fluidsynth}
+- [ ] enable advanced chugins {faust, warpbuf, fluidsynth}
+- [ ] evaluate and bundle additional chugins from https://github.com/shakfu/my-chugins:
+  - **CLAP** -- load CLAP (CLever Audio Plugin) format plugins as ChucK UGens. Requires CLAP SDK.
+  - **PdPatch** -- embed Pure Data patches as ChucK UGens. Requires libpd.
+  - **VST3** -- load VST3 format plugins as ChucK UGens. Requires VST3 SDK.
+  - Note: AbletonLink and AudioUnit from that repo are already bundled.
 
 - [x] complete api wrapping, missing a bunch of params, methods, and callbacks
 

@@ -886,6 +886,7 @@ static std::unique_ptr<AudioContext> g_audio_context;
 > - `set_param()` and other parameter modifications - Stop audio first
 >
 > **Safe operations during real-time audio:**
+>
 > - `now()` - Query current VM time
 > - `get_all_shred_ids()` - List active shreds (read-only)
 > - `get_shred_info()` - Query shred metadata (read-only)
@@ -893,6 +894,7 @@ static std::unique_ptr<AudioContext> g_audio_context;
 > - Event signaling (`signal_global_event()`, `broadcast_global_event()`)
 >
 > **Recommended pattern:**
+>
 > ```python
 > # CORRECT: Stop audio before modifications
 > stop_audio()

@@ -7,6 +7,7 @@
 When running tests on Windows, the Python process crashed with an access violation (exit code 3221225477 / 0xC0000005) during ChucK object destruction. The crash occurred when Python's garbage collector destroyed ChucK instances at the end of test functions.
 
 **Symptoms:**
+
 - Tests passed individually but crashed during teardown
 - Exit code: 3221225477 (Windows access violation)
 - Crash happened in pytest's logging/runner code after test completion
@@ -19,16 +20,19 @@ The crash is Windows-specific due to differences in how audio subsystems and thr
 ### 1. Audio Thread Cleanup Timing
 
 **macOS (CoreAudio):**
+
 - Audio threads are managed by the system's audio daemon
 - Thread termination is handled gracefully by the OS
 - Cleanup order is less critical
 
 **Linux (ALSA/PulseAudio):**
+
 - Audio threads are lightweight and terminate quickly
 - POSIX thread cleanup is well-defined
 - No special timing requirements
 
 **Windows (WASAPI/DirectSound):**
+
 - Audio threads run in a different execution model
 - COM initialization/cleanup must happen on the same thread
 - Threads may still be accessing memory when destruction begins
@@ -63,6 +67,7 @@ We went with **Solution 6: Upstream ChucK Fix** since ChucK is included as a sub
 ### Changes Made
 
 1. **`thirdparty/chuck/core/chuck.cpp`** - Added Windows-specific delay in `ChucK::shutdown()`:
+
 ```cpp
 // In ChucK::shutdown(), after the VM stop wait loop:
 #ifdef __PLATFORM_WINDOWS__
@@ -73,6 +78,7 @@ We went with **Solution 6: Upstream ChucK Fix** since ChucK is included as a sub
 ```
 
 2. **`thirdparty/chuck/core/chuck.h`** - Made `shutdown()` public:
+
 ```cpp
 public:
     // shutdown ChucK instance (can be called explicitly before destruction)
@@ -151,6 +157,7 @@ nb::class_<ChucKWrapper>(m, "ChucK")
 ```
 
 **Pros:**
+
 - Cleanup is automatic and guaranteed
 - Runs before ChucK's destructor
 - Works regardless of how Python destroys the object
@@ -159,6 +166,7 @@ nb::class_<ChucKWrapper>(m, "ChucK")
 - Works for both low-level and high-level API users
 
 **Cons:**
+
 - Requires forwarding all ChucK methods through the wrapper
 - Slightly more code in the binding layer
 - Need to maintain method forwarding as ChucK API evolves
@@ -188,11 +196,13 @@ nb::class_<ChucK>(m, "ChucK", nb::type_slots({
 ```
 
 **Pros:**
+
 - No wrapper class needed
 - Less code changes
 - Direct binding to ChucK class preserved
 
 **Cons:**
+
 - `tp_finalize` is called during garbage collection, which has restrictions
 - Cannot reliably call Python code from finalizer
 - Order of finalization not guaranteed
@@ -221,11 +231,13 @@ class Chuck:
 ```
 
 **Pros:**
+
 - No C++ changes required
 - Easy to understand and maintain
 - Pythonic approach
 
 **Cons:**
+
 - `__del__` is not guaranteed to be called (especially during interpreter shutdown)
 - Only works for high-level API; low-level `_numchuck.ChucK` users still affected
 - GIL must be held, potential for deadlocks
@@ -252,11 +264,13 @@ with Chuck() as chuck:
 ```
 
 **Pros:**
+
 - Explicit resource management
 - Pythonic pattern
 - Guaranteed cleanup within the `with` block
 
 **Cons:**
+
 - Doesn't fix automatic cleanup on destruction
 - Breaking API change
 - Inconvenient for interactive/REPL usage
@@ -294,10 +308,12 @@ void cleanup_all_instances() {
 ```
 
 **Pros:**
+
 - Ensures cleanup happens before interpreter shutdown
 - Doesn't require wrapper class
 
 **Cons:**
+
 - Cleanup only happens at exit, not when objects are destroyed
 - Memory leaks for long-running applications
 - Doesn't help with mid-session cleanup
@@ -356,14 +372,14 @@ public:
     t_CKBOOL shutdown();
 ```
 
-
-
 **Pros:**
+
 - Fixes the problem at the source
 - Benefits all ChucK embeddings, not just numchuck
 - No workarounds needed in binding layer
 
 **Cons:**
+
 - Requires upstream changes to ChucK repository
 - Longer timeline to get merged and released
 - May have unintended effects on other ChucK embeddings
@@ -386,6 +402,7 @@ Since ChucK is included as a submodule in numchuck, we have full control over th
 ## Testing
 
 The fix was verified by:
+
 1. Running full test suite locally (216 tests pass)
 2. Re-enabling Windows tests in `wheels.yml`
 3. CI will verify on actual Windows runners

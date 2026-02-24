@@ -5,11 +5,13 @@ This directory contains examples demonstrating various features of the AudioUnit
 ## Running Examples
 
 To run any example:
+
 ```bash
 chuck examples/01-basic-effect.ck
 ```
 
 Make sure the AudioUnit chugin is installed in your ChucK search path, or specify it explicitly:
+
 ```bash
 chuck --chugin:/path/to/AudioUnit.chug examples/01-basic-effect.ck
 ```
@@ -74,6 +76,7 @@ chuck --chugin:/path/to/AudioUnit.chug examples/01-basic-effect.ck
 Most examples use these Apple AudioUnits which are available on all macOS systems:
 
 ### Effects
+
 - `AUDelay` - Delay effect
 - `AULowpass` - Low-pass filter
 - `AUHighpass` - High-pass filter
@@ -85,27 +88,32 @@ Most examples use these Apple AudioUnits which are available on all macOS system
 - `AUNBandEQ` - Multi-band parametric EQ
 
 ### Instruments
+
 - `DLSMusicDevice` - Apple's DLS-based synthesizer
 
 ## Troubleshooting
 
 **No sound output:**
+
 - Check that your audio interface is properly configured
 - Verify the AudioUnit loaded successfully (check console messages)
 - For input-based examples, ensure your microphone/line-in is connected
 
 **AudioUnit fails to load:**
+
 - Run `00-list-audiounit.ck` to see available AudioUnits
 - Some third-party AudioUnits may have specific requirements
 - Verify the AudioUnit name or four-character code is correct
 
 **Parameters don't work as expected:**
+
 - Different AudioUnits have different parameter ranges
 - Use `03-parameters.ck` to discover parameter names and current values
 - Some parameters may be read-only
 - Use `setParamByName()` and `getParamByName()` for more readable code (see `12-parameter-by-name.ck`)
 
 **Presets not available:**
+
 - Many AudioUnits (including Apple's built-in effects) don't define factory presets
 - This is normal behavior - not all AudioUnits provide presets
 - Third-party synthesizers and effects are more likely to have factory presets

@@ -56,7 +56,7 @@ numchuck repl
 
 ### Package Structure
 
-```
+```text
 src/numchuck/
   chugins/
     __init__.py          # get_chugins_path(), ensure_chugins_built()
@@ -355,27 +355,32 @@ numchuck chugins trust  # Runs xattr -d com.apple.quarantine
 ## Implementation Plan
 
 ### Phase 1: Package Structure
+
 - [ ] Create `src/numchuck/chugins/` package
 - [ ] Copy chugin sources to `src/numchuck/chugins/sources/`
 - [ ] Implement `ChuginBuilder` class
 - [ ] Add to `pyproject.toml` package data
 
 ### Phase 2: CLI Integration
+
 - [ ] Add `numchuck chugins` CLI group
 - [ ] Implement `build`, `list`, `path` commands
 - [ ] Add progress reporting
 
 ### Phase 3: Auto-Build Integration
+
 - [ ] Hook into Chuck initialization
 - [ ] Detect missing chugins and offer to build
 - [ ] Update `paths.py` to use built chugins directory
 
 ### Phase 4: Testing
+
 - [ ] Test build process on macOS, Linux, Windows
 - [ ] Test chugin loading after build
 - [ ] Add CI tests for chugin build
 
 ### Phase 5: Documentation
+
 - [ ] Update README with chugin build instructions
 - [ ] Add troubleshooting guide for build failures
 - [ ] Document platform-specific requirements
@@ -385,6 +390,7 @@ numchuck chugins trust  # Runs xattr -d com.apple.quarantine
 **Status:** Proposal - Not yet implemented
 
 The on-demand compilation approach is recommended as it:
+
 - Avoids macOS Gatekeeper issues entirely
 - Keeps the wheel size small
 - Provides a good user experience after initial build

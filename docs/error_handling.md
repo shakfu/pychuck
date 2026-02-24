@@ -164,7 +164,7 @@ chuck.compile_code("...")
 
 Error messages follow a consistent format:
 
-```
+```text
 ValueError: <parameter> cannot be <invalid_value>
 RuntimeError: ChucK instance not initialized. Call init() first.
 RuntimeError: Failed to <operation> '<name>'

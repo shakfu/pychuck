@@ -11,9 +11,11 @@ These examples progressively demonstrate numchuck features from basic synthesis 
 ### Basic Examples
 
 #### 01_basic_sine.py
+
 **Real-time sine wave playback**
 
 Demonstrates:
+
 - Creating a ChucK instance
 - Compiling inline ChucK code
 - Starting real-time audio playback
@@ -24,9 +26,11 @@ python examples/python/01_basic_sine.py
 ```
 
 #### 02_offline_render.py
+
 **Offline audio rendering to numpy arrays**
 
 Demonstrates:
+
 - Synchronous/offline audio processing
 - Rendering ChucK audio to numpy arrays
 - Analyzing generated audio data
@@ -40,9 +44,11 @@ python examples/python/02_offline_render.py
 Requires: `numpy`, optional: `matplotlib`, `scipy`
 
 #### 03_load_chuck_file.py
+
 **Loading external ChucK files**
 
 Demonstrates:
+
 - Loading `.ck` files from disk
 - Using the `examples/basic/` directory
 - File path resolution
@@ -55,9 +61,11 @@ python examples/python/03_load_chuck_file.py
 Uses: `examples/basic/blit2.ck`
 
 #### 04_multiple_shreds.py
+
 **Running multiple concurrent ChucK shreds**
 
 Demonstrates:
+
 - Spawning multiple ChucK threads (shreds)
 - Creating harmonic series
 - Dynamic shred management
@@ -70,9 +78,11 @@ python examples/python/04_multiple_shreds.py
 ### Chugin Examples
 
 #### 05_bitcrusher_chugin.py
+
 **Using the Bitcrusher effect plugin**
 
 Demonstrates:
+
 - Enabling chugin support
 - Setting chugin search paths
 - Using the Bitcrusher effect
@@ -85,9 +95,11 @@ python examples/python/05_bitcrusher_chugin.py
 Requires: `Bitcrusher.chug` in `examples/chugins/`
 
 #### 06_reverb_chugin.py
+
 **Using the GVerb reverb plugin**
 
 Demonstrates:
+
 - Spatial audio effects with GVerb
 - Configuring reverb parameters
 - Mixing dry and wet signals
@@ -102,9 +114,11 @@ Requires: `GVerb.chug` in `examples/chugins/`
 ### Advanced Examples
 
 #### 07_parameter_control.py
+
 **ChucK VM parameter configuration**
 
 Demonstrates:
+
 - Configuring sample rate and channels
 - Setting working directory
 - Reading parameter values
@@ -116,9 +130,11 @@ python examples/python/07_parameter_control.py
 ```
 
 #### 08_advanced_synthesis.py
+
 **FM synthesis with filtering and envelopes**
 
 Demonstrates:
+
 - Frequency modulation (FM) synthesis
 - Low-pass filtering
 - ADSR envelope shaping
@@ -131,9 +147,11 @@ python examples/python/08_advanced_synthesis.py
 ```
 
 #### 09_sequenced_shreds.py
+
 **Time-sequenced shred playback**
 
 Demonstrates:
+
 - Launching shreds at different times (sequencing)
 - Creating rhythmic patterns with delayed starts
 - Building up a composition layer by layer
@@ -151,10 +169,12 @@ python examples/python/09_sequenced_shreds.py
 ### Prerequisites
 
 All examples require:
+
 - `numchuck` installed (from project root: `pip install .` or `pip install -e .`)
 - `numpy`
 
 Some examples have optional dependencies:
+
 - `matplotlib` (for waveform plotting in example 02)
 - `scipy` (for WAV export in example 02)
 
@@ -196,6 +216,7 @@ The examples are numbered to provide a learning path:
 ## ChucK Code Sources
 
 Examples use ChucK code from:
+
 - **Inline code**: Examples 01, 02, 04, 07, 08
 - **External files**: Example 03 (from `examples/basic/blit2.ck`)
 - **Chugins**: Examples 05, 06 (from `examples/chugins/`)
@@ -257,19 +278,23 @@ code = "SinOsc s => Bitcrusher bc => dac;"
 ## Troubleshooting
 
 ### "ChucK instance not initialized"
+
 Call `chuck.init()` before compiling or running audio.
 
 ### "Compilation failed" when using chugins
+
 - Ensure chugins are built: `make build` in project root
 - Check chugin path: `examples/chugins/*.chug`
 - Verify `PARAM_CHUGIN_ENABLE` is set to 1
 
 ### "Buffer size mismatch"
+
 - Use `dtype=np.float32` for all audio buffers
 - Calculate size as: `num_frames * num_channels`
 - Buffers are 1D interleaved: `[L0, R0, L1, R1, ...]`
 
 ### Silent audio output
+
 - Ensure ChucK code advances time: `while(true) { 1::samp => now; }`
 - Check gain levels (not set to 0)
 - Verify dtype is `np.float32`, not `np.float64`
@@ -279,11 +304,12 @@ Call `chuck.init()` before compiling or running audio.
 - [numchuck README](../../README.md) - Main documentation
 - [ChucK Documentation](https://chuck.stanford.edu/doc/) - ChucK language reference
 - [ChucK Examples](../../examples/) - Original ChucK example scripts
-- [Architecture Documentation](../../ARCHITECTURE.md) - Technical details
+
 
 ## Contributing
 
 To add more examples:
+
 1. Number them sequentially (09_, 10_, etc.)
 2. Include comprehensive docstring
 3. Add entry to this README

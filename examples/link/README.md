@@ -7,6 +7,7 @@ This directory contains ChucK examples demonstrating the `AbletonLink` chugin fo
 ### basic_metronome.ck
 
 A simple metronome that demonstrates the fundamental concepts of `AbletonLink` integration:
+
 - Basic Link setup and configuration
 - Reading synchronized timing information
 - Generating audio events based on Link timing
@@ -17,6 +18,7 @@ A simple metronome that demonstrates the fundamental concepts of `AbletonLink` i
 ### tempo_control.ck
 
 Shows how to control and monitor tempo changes with `AbletonLink`:
+
 - Setting tempo from ChucK
 - Monitoring tempo changes from other applications
 - Cycling through different tempos automatically
@@ -27,6 +29,7 @@ Shows how to control and monitor tempo changes with `AbletonLink`:
 ### drum_machine.ck
 
 A synchronized drum machine using sixteenth-note resolution:
+
 - Multi-track drum patterns (kick, snare, hi-hat)
 - High-resolution timing (16 steps per measure)
 - Pattern-based sequencing
@@ -37,6 +40,7 @@ A synchronized drum machine using sixteenth-note resolution:
 ### sequencer.ck
 
 Musical sequencer playing melodic patterns:
+
 - Eighth-note melodic sequences
 - MIDI note to frequency conversion
 - Pattern switching and cycling
@@ -47,6 +51,7 @@ Musical sequencer playing melodic patterns:
 ### quantum_sync.ck
 
 Demonstrates quantum synchronization and measure alignment:
+
 - Different quantum values (1, 2, 4, 8 beats)
 - Measure boundary detection
 - Dynamic quantum changes
@@ -57,6 +62,7 @@ Demonstrates quantum synchronization and measure alignment:
 ### latency_test.ck
 
 Tests and demonstrates latency compensation:
+
 - Offset adjustment for timing compensation
 - Testing different offset values
 - Tight synchronization techniques

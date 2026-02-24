@@ -266,6 +266,8 @@ def cmd_version(args: argparse.Namespace) -> None:
 
 def cmd_info(args: argparse.Namespace) -> None:
     """Show ChucK and numchuck info."""
+    from pathlib import Path
+
     from .._numchuck import ChucK, version
     from .._version import __version__
 
@@ -273,6 +275,14 @@ def cmd_info(args: argparse.Namespace) -> None:
     print(f"ChucK: {version()}")
     print(f"ChucK int size: {ChucK.int_size()} bits")
     print(f"Active VMs: {ChucK.num_vms()}")
+
+    # Bundled chugins
+    bundled_dir = Path(__file__).resolve().parent.parent / "chugins"
+    if bundled_dir.is_dir():
+        chugins = sorted(p.stem for p in bundled_dir.glob("*.chug"))
+        print(f"Bundled chugins ({len(chugins)}): {', '.join(chugins)}")
+    else:
+        print("Bundled chugins: none")
 
 
 def cmd_export(args: argparse.Namespace) -> None:

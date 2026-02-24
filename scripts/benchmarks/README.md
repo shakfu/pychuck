@@ -27,7 +27,7 @@ uv run python benchmarks/benchmark_simple.py
 
 ### Sample Output
 
-```
+```text
 ============================================================
 numchuck Simple Performance Benchmarks
 ============================================================
@@ -76,6 +76,7 @@ Measures how quickly ChucK code can be parsed and compiled:
 - **Complex code**: Multiple UGens with control flow
 
 **What affects performance:**
+
 - Code complexity (number of statements, control flow)
 - Number of UGens and connections
 - Parser overhead
@@ -89,6 +90,7 @@ Measures audio buffer processing throughput:
 - Simulates real-time audio workload
 
 **What affects performance:**
+
 - Buffer size (larger = more efficient but higher latency)
 - Number of active UGens
 - Complexity of signal processing chain
@@ -103,6 +105,7 @@ Measures overhead of shred lifecycle operations:
 - **Remove all**: Bulk removal of multiple shreds
 
 **What affects performance:**
+
 - VM synchronization overhead
 - Shred scheduler complexity
 - Number of active shreds
@@ -116,6 +119,7 @@ Measures Python-ChucK communication latency:
 - Array access by index
 
 **What affects performance:**
+
 - Type conversion overhead
 - Callback dispatch latency
 - Array size (for array operations)
@@ -129,6 +133,7 @@ Measures event-based communication:
 - **Listener registration**: Add/remove listener overhead
 
 **What affects performance:**
+
 - Number of registered listeners
 - Callback dispatch overhead
 - Thread synchronization
@@ -141,6 +146,7 @@ Measures VM-level operations:
 - **Clear VM**: Remove all shreds and reset state
 
 **What affects performance:**
+
 - Resource allocation/deallocation
 - Cleanup overhead
 
@@ -232,12 +238,14 @@ python -m pstats benchmark.prof
 To track performance over time:
 
 1. Run benchmarks on each commit:
+
    ```bash
    git log --oneline -1 > benchmark_results.txt
    python benchmarks/benchmark_audio.py >> benchmark_results.txt
    ```
 
 2. Compare before/after changes:
+
    ```bash
    # Before changes
    python benchmarks/benchmark_audio.py > before.txt
@@ -269,15 +277,18 @@ Run benchmarks on your target platform to establish baselines.
 ## Troubleshooting
 
 **Benchmarks run too fast (< 10ms total time)**:
+
 - Increase number of iterations
 - More iterations = more accurate timing
 
 **Inconsistent results**:
+
 - Close other applications
 - Run multiple times and average
 - Check CPU throttling / power settings
 
 **Lower than expected performance**:
+
 - Check CPU usage (should not be 100%)
 - Verify no other audio applications running
 - Try different buffer sizes

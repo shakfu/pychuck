@@ -9,7 +9,7 @@ functions, and capabilities. They are compiled native code (`.chug` files).
 
 ## Installing Chugins
 
-1. Download or compile chugins from https://github.com/ccrma/chugins
+1. Download or compile chugins from <https://github.com/ccrma/chugins>
 2. Place `.chug` files in this directory
 3. They will be automatically loaded when ChucK starts
 

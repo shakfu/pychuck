@@ -2,11 +2,9 @@
 
 ## Description
 
-An example of an [analog modeling synthesizer](https://en.wikipedia.org/wiki/Analog_modeling_synthesizer) which recreates vintage synthesizer sounds by modeling the original electronic circuitry.   A full manual for this type of circuit model can be found at [Virtual Analog Synthesizer Manual](http://synthpalace.com/SynthPDFs/minimoog%20model%20d_manual.pdf)
+An example of an [analog modeling synthesizer](https://en.wikipedia.org/wiki/Analog_modeling_synthesizer) which recreates vintage synthesizer sounds by modeling the original electronic circuitry. A full manual for this type of circuit model can be found at [Virtual Analog Synthesizer Manual](http://synthpalace.com/SynthPDFs/minimoog%20model%20d_manual.pdf)
 
 ## Parameters
-
-
 
 | Function                    | MIDI CC    | Module                  | Type   | Notes                                                    |
 |-----------------------------|------------|-------------------------|--------|----------------------------------------------------------|
@@ -63,21 +61,21 @@ An example of an [analog modeling synthesizer](https://en.wikipedia.org/wiki/Ana
 
 The faust code (.dsp) in this directory has been compiled using `faust2sam` into `virtualAnalog-sam`
 
-```
+```text
 % faust2sam -midi virtualAnalog.dsp
 ```
 
 The result of this compile is a zip file `virtualAnalog-sam.zip` which contains the following three files:
 
-  - `fast_pow2.h`
-  - `samFaustDSP.cpp`
-  - `samFaustDSP.h`
+- `fast_pow2.h`
+- `samFaustDSP.cpp`
+- `samFaustDSP.h`
 
 These 3 files should be placed into the directory `sam_baremetal_framework_core1/src/faust`
 
-In addition there is a header file that is common across all cores called `audio_system_config.h`. In this file the following pre-processor variables should be set in the following way. The example below indicates that a Faust algorithm will only be running on Core1 and that Core2 will be simply passing audio to the codec. 
+In addition there is a header file that is common across all cores called `audio_system_config.h`. In this file the following pre-processor variables should be set in the following way. The example below indicates that a Faust algorithm will only be running on Core1 and that Core2 will be simply passing audio to the codec.
 
-```
+```text
 #define USE_FAUST_ALGORITHM_CORE1           TRUE
 #define USE_FAUST_ALGORITHM_CORE2           TRUE
 ```
