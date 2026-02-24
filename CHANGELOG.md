@@ -29,6 +29,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - All three are enabled by default via `option(CM_CLAP/CM_PDPATCH/CM_VST3 ... ON)` and bundled in release wheels
   - External dependencies (clap SDK 1.2.6, libpd, VST3 SDK v3.8.0) fetched automatically via CMake `FetchContent`
   - Can be individually disabled with `-DCM_CLAP=OFF`, `-DCM_PDPATCH=OFF`, or `-DCM_VST3=OFF`
+  - macOS and Linux only -- all three depend on POSIX APIs (`dlfcn.h`, `dirent.h`, pthreads) not available on Windows
+  - Fixed VST3 SDK option names (`SMTG_ENABLE_VST3_PLUGIN_EXAMPLES`/`SMTG_ENABLE_VST3_HOSTING_EXAMPLES`) to correctly disable SDK samples that require `gtk+-3.0` on Linux
 
 ## [0.1.10]
 
