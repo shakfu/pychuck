@@ -73,6 +73,9 @@ jobs:
           # Skip: aarch64 Linux (cross-compiled, no native runner)
           CIBW_TEST_SKIP: "*-manylinux_aarch64"
 
+      - name: Validate wheel RECORD
+        run: python scripts/check_wheel_record.py wheelhouse/*.whl
+
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -126,8 +129,19 @@ jobs:
           name: sdist
           path: dist
 
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: List collected files
         run: ls -la dist/
+
+      - name: Validate all wheel RECORDs
+        run: python scripts/check_wheel_record.py dist/*.whl
 
       - name: Upload combined artifacts
         uses: actions/upload-artifact@v4

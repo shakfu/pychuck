@@ -73,6 +73,7 @@ qa: test lint typecheck format
 
 check:
 	@uv run twine check dist/*.whl
+	@uv run python scripts/check_wheel_record.py dist/*.whl
 
 publish-test: check
 	@uv run twine upload -r testpypi dist/*

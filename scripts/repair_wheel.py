@@ -26,7 +26,6 @@ import hashlib
 import io
 import os
 import platform
-import re
 import subprocess
 import sys
 import tempfile
@@ -124,6 +123,55 @@ def _regenerate_record(zf_out: ZipFile, record_path: str) -> None:
     zf_out.writestr(record_path, buf.getvalue())
 
 
+def _validate_record(wheel_path: str) -> None:
+    """Validate that the wheel RECORD matches actual ZIP contents.
+
+    Raises SystemExit on any mismatch (smuggled files, dangling entries,
+    hash or size mismatches).
+
+    See: https://blog.pypi.org/posts/2025-08-07-wheel-archive-confusion-attacks/
+    """
+    errors: list[str] = []
+    with ZipFile(wheel_path, "r") as zf:
+        record_name = _record_path(zf)
+        if record_name is None:
+            print(f"RECORD validation FAILED: no RECORD in {wheel_path}", file=sys.stderr)
+            sys.exit(1)
+
+        record_data = zf.read(record_name).decode("utf-8")
+        recorded: dict[str, tuple[str, str]] = {}
+        for row in csv.reader(io.StringIO(record_data)):
+            if not row or row[0] == record_name:
+                continue
+            name = row[0]
+            file_hash = row[1] if len(row) > 1 else ""
+            file_size = row[2] if len(row) > 2 else ""
+            recorded[name] = (file_hash, file_size)
+
+        actual_files = {n for n in zf.namelist() if n != record_name}
+        recorded_files = set(recorded.keys())
+
+        for name in sorted(actual_files - recorded_files):
+            errors.append(f"file in ZIP but not in RECORD: {name}")
+        for name in sorted(recorded_files - actual_files):
+            errors.append(f"file in RECORD but not in ZIP: {name}")
+
+        for name in sorted(actual_files & recorded_files):
+            data = zf.read(name)
+            exp_hash, exp_size = recorded[name]
+            if exp_hash and _hash_digest(data) != exp_hash:
+                errors.append(f"hash mismatch: {name}")
+            if exp_size and str(len(data)) != exp_size:
+                errors.append(f"size mismatch: {name}")
+
+    if errors:
+        print(f"RECORD validation FAILED for {wheel_path}:", file=sys.stderr)
+        for err in errors:
+            print(f"  {err}", file=sys.stderr)
+        sys.exit(1)
+    print(f"RECORD validation passed: {wheel_path}")
+
+
 def rename_in_wheel(
     src_wheel: str,
     dst_wheel: str,
@@ -193,6 +241,9 @@ def main() -> None:
         # No chugins -- run the standard repair tool directly
         cmd = get_repair_cmd(plat, args.wheel, args.dest_dir, args.delocate_archs)
         subprocess.check_call(cmd)
+        # Validate the repaired wheel's RECORD
+        for whl in Path(args.dest_dir).glob("*.whl"):
+            _validate_record(str(whl))
         return
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -234,6 +285,9 @@ def main() -> None:
         with ZipFile(final_wheel, "r") as zf:
             chug_count = sum(1 for n in zf.namelist() if n.endswith(".chug"))
         print(f"Final wheel: {final_wheel} ({chug_count} .chug files)")
+
+        # Validate the final wheel's RECORD
+        _validate_record(final_wheel)
 
 
 if __name__ == "__main__":
