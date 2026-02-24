@@ -5,6 +5,7 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/libpd/libpd.git
     GIT_TAG        master
     GIT_SUBMODULES "pure-data"
+    EXCLUDE_FROM_ALL
 )
 
 # Configure libpd options before making available

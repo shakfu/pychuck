@@ -37,6 +37,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 - **Wheels workflow collect job** (`.github/workflows/wheels.yml`):
   - Reordered `collect` job steps to run `checkout` before artifact downloads -- `actions/checkout@v4` cleans the working directory by default, which was wiping the downloaded `dist/` directory
 
+- **FetchContent install leaking into wheels** (`thirdparty/chugins/{CLAP,PdPatch}/CMakeLists.txt`):
+  - Added `EXCLUDE_FROM_ALL` to `FetchContent_Declare` for CLAP and PdPatch to prevent their SDK `install()` rules from polluting the wheel with headers, pkgconfig, and cmake config files (reduced wheel from 186 to 100 files)
+
 ## [0.1.10]
 
 ### Added
