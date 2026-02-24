@@ -15,6 +15,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- **Wheel RECORD Validation** (`scripts/check_wheel_record.py`, `scripts/repair_wheel.py`):
+  - New standalone script validates wheel RECORD files against actual ZIP contents -- checks for smuggled files, dangling entries, hash mismatches, and size mismatches
+  - Addresses [wheel archive confusion attacks](https://blog.pypi.org/posts/2025-08-07-wheel-archive-confusion-attacks/)
+  - Integrated into `repair_wheel.py` as a post-repair validation step for both chugin and non-chugin wheels
+  - Added RECORD validation steps to CI wheels workflow (per-platform and combined artifact stages)
+  - `make check` now runs RECORD validation alongside `twine check`
+
 ## [0.1.10]
 
 ### Added
