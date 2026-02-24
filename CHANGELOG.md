@@ -24,6 +24,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Added RECORD validation steps to CI wheels workflow (per-platform and combined artifact stages)
   - `make check` now runs RECORD validation alongside `twine check`
 
+- **CLAP, PdPatch, and VST3 Chugins** (`thirdparty/chugins/{CLAP,PdPatch,VST3}/`):
+  - Added three new chugins from [my-chugins](https://github.com/shakfu/my-chugins): CLAP (host CLAP plugins), PdPatch (embed Pure Data patches), and VST3 (host VST3 plugins)
+  - All three are enabled by default via `option(CM_CLAP/CM_PDPATCH/CM_VST3 ... ON)` and bundled in release wheels
+  - External dependencies (clap SDK 1.2.6, libpd, VST3 SDK v3.8.0) fetched automatically via CMake `FetchContent`
+  - Can be individually disabled with `-DCM_CLAP=OFF`, `-DCM_PDPATCH=OFF`, or `-DCM_VST3=OFF`
+
 ## [0.1.10]
 
 ### Added
