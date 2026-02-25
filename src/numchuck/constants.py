@@ -40,6 +40,9 @@ POLL_INTERVAL = 0.1  # General polling delay (shred checks, etc.)
 SHUTDOWN_DELAY = 0.5  # Clean shutdown delay
 WATCHER_POLL_INTERVAL = 0.5  # File watcher polling delay
 
+# Shell command
+SHELL_COMMAND_TIMEOUT = 30  # Shell command timeout (seconds)
+
 # OSC
 OSC_SOCKET_TIMEOUT = 0.5  # Socket timeout for clean shutdown
 OSC_THREAD_SHUTDOWN_TIMEOUT = 1.0  # OSC thread join timeout

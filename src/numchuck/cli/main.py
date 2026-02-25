@@ -36,6 +36,17 @@ def create_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Start audio automatically on startup",
     )
+    edit_parser.add_argument(
+        "--otf",
+        action="store_true",
+        help="Enable on-the-fly programming listener",
+    )
+    edit_parser.add_argument(
+        "--otf-port",
+        type=int,
+        default=8888,
+        help="OTF listener port (default: 8888)",
+    )
 
     # repl subcommand
     repl_parser = subparsers.add_parser("repl", help="Launch interactive REPL")
@@ -63,6 +74,17 @@ def create_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Read commands from stdin (non-interactive mode for testing/scripting)",
     )
+    repl_parser.add_argument(
+        "--otf",
+        action="store_true",
+        help="Enable on-the-fly programming listener",
+    )
+    repl_parser.add_argument(
+        "--otf-port",
+        type=int,
+        default=8888,
+        help="OTF listener port (default: 8888)",
+    )
 
     # run subcommand
     run_parser = subparsers.add_parser(
@@ -84,6 +106,17 @@ def create_parser() -> argparse.ArgumentParser:
         "--duration",
         type=float,
         help="Run for specified duration in seconds, then exit",
+    )
+    run_parser.add_argument(
+        "--otf",
+        action="store_true",
+        help="Enable on-the-fly programming listener",
+    )
+    run_parser.add_argument(
+        "--otf-port",
+        type=int,
+        default=8888,
+        help="OTF listener port (default: 8888)",
     )
 
     # version subcommand
@@ -220,7 +253,11 @@ def cmd_edit(args: argparse.Namespace) -> None:
     from ..tui.editor import main as editor_main
 
     editor_main(
-        files=args.files, project_name=args.project, start_audio=args.start_audio
+        files=args.files,
+        project_name=args.project,
+        start_audio=args.start_audio,
+        otf_enable=args.otf,
+        otf_port=args.otf_port,
     )
 
 
@@ -239,6 +276,8 @@ def cmd_repl(args: argparse.Namespace) -> None:
         project_name=project_name,
         files=getattr(args, "files", []),
         force_stdin=force_stdin,
+        otf_enable=args.otf,
+        otf_port=args.otf_port,
     )
 
 
@@ -252,6 +291,8 @@ def cmd_run(args: argparse.Namespace) -> None:
         channels=args.channels,
         silent=args.silent,
         duration=args.duration,
+        otf_enable=args.otf,
+        otf_port=args.otf_port,
     )
 
 
@@ -448,6 +489,17 @@ def main() -> None:
     # Execute command
     if args.command in command_handlers:
         command_handlers[args.command](args)
+    elif args.command is None and sys.stdin.isatty():
+        # No subcommand on an interactive terminal -- default to REPL
+        args.start_audio = False
+        args.no_smart_enter = False
+        args.no_sidebar = False
+        args.project = None
+        args.files = []
+        args.stdin = False
+        args.otf = False
+        args.otf_port = 8888
+        cmd_repl(args)
     else:
         parser.print_help()
         sys.exit(1)

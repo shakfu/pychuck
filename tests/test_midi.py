@@ -394,28 +394,45 @@ class TestCommandParserMIDICommands:
     """Tests for MIDI command parsing."""
 
     def test_parse_midi_learn(self) -> None:
-        """Test parsing 'midi learn varname' command."""
+        """Test parsing 'midi learn varname cc' command."""
         from numchuck.tui.parser import CommandParser
 
         parser = CommandParser()
-        cmd = parser.parse("midi learn tempo")
+        cmd = parser.parse("midi learn tempo 74")
 
         assert cmd is not None
         assert cmd.type == "midi_learn"
         assert cmd.args["name"] == "tempo"
+        assert cmd.args["cc"] == 74
+        assert cmd.args["channel"] == 0
         assert cmd.args["min"] == 0.0
         assert cmd.args["max"] == 1.0
 
-    def test_parse_midi_learn_with_range(self) -> None:
-        """Test parsing 'midi learn varname min max' command."""
+    def test_parse_midi_learn_with_channel(self) -> None:
+        """Test parsing 'midi learn varname cc channel' command."""
         from numchuck.tui.parser import CommandParser
 
         parser = CommandParser()
-        cmd = parser.parse("midi learn bpm 60 180")
+        cmd = parser.parse("midi learn tempo 74 1")
+
+        assert cmd is not None
+        assert cmd.type == "midi_learn"
+        assert cmd.args["name"] == "tempo"
+        assert cmd.args["cc"] == 74
+        assert cmd.args["channel"] == 1
+
+    def test_parse_midi_learn_with_range(self) -> None:
+        """Test parsing 'midi learn varname cc channel min max' command."""
+        from numchuck.tui.parser import CommandParser
+
+        parser = CommandParser()
+        cmd = parser.parse("midi learn bpm 74 0 60 180")
 
         assert cmd is not None
         assert cmd.type == "midi_learn"
         assert cmd.args["name"] == "bpm"
+        assert cmd.args["cc"] == 74
+        assert cmd.args["channel"] == 0
         assert cmd.args["min"] == 60.0
         assert cmd.args["max"] == 180.0
 

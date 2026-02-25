@@ -1,19 +1,20 @@
 from __future__ import annotations
 
 import sys
+import threading
 from typing import TYPE_CHECKING, Any
 
 from prompt_toolkit.key_binding import KeyPressEvent
-from prompt_toolkit.formatted_text import AnyFormattedText
 
 from .parser import CommandParser
 from .commands import CommandExecutor
 from ..paths import get_history_file, ensure_numchuck_directories
 from .common import ChuckApplication, generate_shreds_table
 from .completer import ChuckCompleter
+from .waveform import format_waveform_bar
 
 if TYPE_CHECKING:
-    from prompt_toolkit.buffer import Buffer
+    pass
 
 
 class ChuckREPLStdin:
@@ -28,8 +29,14 @@ class ChuckREPLStdin:
     def __init__(
         self,
         project_name: str | None = None,
+        otf_enable: bool = False,
+        otf_port: int = 8888,
     ) -> None:
-        self.app_state = ChuckApplication(project_name=project_name)
+        self.app_state = ChuckApplication(
+            project_name=project_name,
+            otf_enable=otf_enable,
+            otf_port=otf_port,
+        )
         self.chuck = self.app_state.chuck
         self.session = self.app_state.session
         self.parser = CommandParser()
@@ -67,17 +74,20 @@ class ChuckREPLStdin:
             return "EXIT"
 
         # Parse and execute
-        cmd = self.parser.parse(text)
-        if cmd:
-            return self.executor.execute(cmd)
-        else:
-            # If not a recognized command, treat as ChucK code
-            if "\n" in text or "=>" in text or ";" in text or "{" in text:
-                result = self.app_state.shred_service.spork_code(text, name="stdin")
-                if not result.success:
-                    return result.error or "Failed to compile code"
+        try:
+            cmd = self.parser.parse(text)
+            if cmd:
+                return self.executor.execute(cmd)
             else:
-                return f"Unknown command: {text}"
+                # If not a recognized command, treat as ChucK code
+                if "\n" in text or "=>" in text or ";" in text or "{" in text:
+                    result = self.app_state.shred_service.spork_code(text, name="stdin")
+                    if not result.success:
+                        return result.error or "Failed to compile code"
+                else:
+                    return f"Unknown command: {text}"
+        except Exception as e:
+            return f"Error: {e}"
 
         return None
 
@@ -166,13 +176,19 @@ class ChuckREPL:
         smart_enter: bool = True,
         show_sidebar: bool = True,
         project_name: str | None = None,
+        otf_enable: bool = False,
+        otf_port: int = 8888,
     ) -> None:
         # Use ChuckApplication for shared ChucK management
-        self.app_state = ChuckApplication(project_name=project_name)
+        self.app_state = ChuckApplication(
+            project_name=project_name,
+            otf_enable=otf_enable,
+            otf_port=otf_port,
+        )
         self.chuck = self.app_state.chuck  # Convenience reference
         self.session = self.app_state.session  # Convenience reference
         self.parser = CommandParser()
-        self.executor = CommandExecutor(self.session)
+        self.executor = CommandExecutor(self.session, log_callback=self.add_to_log)
         self.smart_enter = smart_enter  # Enable smart Enter behavior
         self.show_sidebar = show_sidebar  # Show/hide sidebar
 
@@ -180,11 +196,8 @@ class ChuckREPL:
         from prompt_toolkit import Application
         from prompt_toolkit.buffer import Buffer
         from prompt_toolkit.history import FileHistory
-        from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
         from prompt_toolkit.key_binding import KeyBindings
-        from prompt_toolkit.lexers import PygmentsLexer
         from prompt_toolkit.styles import Style
-        from prompt_toolkit.formatted_text import HTML
         from prompt_toolkit.layout.containers import (
             HSplit,
             Window,
@@ -197,22 +210,8 @@ class ChuckREPL:
         from prompt_toolkit.filters import Condition
         from prompt_toolkit.widgets import TextArea
 
-        # Try to import ChucK lexer, fall back to C lexer
-        lexer_class: Any
-        try:
-            from ..lang import ChuckLexer
-
-            lexer_class = ChuckLexer
-        except ImportError:
-            from pygments.lexers.c_cpp import CLexer
-
-            lexer_class = CLexer
-
         # Create context-aware completer using the session and chuck instance
         self.completer = ChuckCompleter(self.session, self.chuck)
-
-        # Error message state
-        self.error_message = ""
 
         # Help window visibility
         self.show_help_window = False
@@ -220,10 +219,22 @@ class ChuckREPL:
         # Shreds table window visibility
         self.show_shreds_window = False
 
-        # Log window visibility and buffer
-        self.show_log_window = False
-        self.log_lines: list[str] = []
-        self.max_log_lines = 100  # Keep last 100 messages
+        # Meter display state
+        self._meter_stop = threading.Event()
+        self._meter_thread: threading.Thread | None = None
+        self._current_meters: dict[str, float] = {
+            "rms_left": 0.0,
+            "rms_right": 0.0,
+            "peak_left": 0.0,
+            "peak_right": 0.0,
+        }
+
+        # Single-buffer transcript: all text lives here, user edits after prompt
+        self.prompt_prefix = "[=>] "
+        self.input_start = len(
+            self.prompt_prefix
+        )  # Position where editable text begins
+        self.max_transcript_lines = 500
 
         # Create topbar content function (simplified to show just IDs)
         def get_topbar_text() -> str:
@@ -236,58 +247,58 @@ class ChuckREPL:
             else:
                 return "No active shreds  (F2: table)"
 
-        # Create error bar function
-        def get_error_text() -> str:
-            """Show error message if any"""
-            if self.error_message:
-                return f"✗ {self.error_message}"
-            return ""
-
         # Create help text content
         help_text = """\
 SHRED MANAGEMENT                        STATUS & INFO
-  + <file.ck>    Spork file               ?         List shreds
-  + "<code>"     Spork code               ? <id>    Shred info
-  - <id>         Remove shred             ?g        List globals
-  - all          Remove all               ?a        Audio info
-  edit <id>      Edit shred               .         Current time
+  + <file.ck>  / add <file.ck>            ? / shreds       List shreds
+  + "<code>"     Spork code               ? <id> / shred   Shred info
+  - <id>       / remove <id>              ?g / globals     List globals
+  - all        / remove all               ?a / audio       Audio info
+  edit <id>      Edit shred               .                Current time
 
 GLOBALS                                 EVENTS
-  <name>::<val>  Set global               <ev>!     Signal event
-  <name>?        Get global               <ev>!!    Broadcast event
+  <name>::<val> / set <name> <val>        <ev>! / signal <ev>
+  <name>?       / get <name>              <ev>!! / broadcast <ev>
 
 AUDIO CONTROL                           VM CONTROL
-  >              Start audio              clear     Clear VM
-  ||             Stop audio               reset     Reset shred ID
-  X              Shutdown                 cls       Clear screen
+  > / start      Start audio              clear     Clear VM
+  || / stop      Stop audio               reset     Reset shred ID
+  X / shutdown   Shutdown                 cls       Clear screen
+
+RECORDING                               PLAYBACK
+  record start [name]  Start recording    play <name> [speed]  Start
+  record stop          Stop & save        play pause/resume    Pause/resume
+  record save <name>   Save as name       play stop            Stop
+  record discard       Discard            recordings           List all
+  record status        Show status
+
+MIDI                                    OSC
+  midi learn <var> <cc> [ch] [min max]    osc start [port]  Start server
+  midi list            List mappings      osc stop          Stop server
+  midi start/stop      Listener on/off    osc status        Show status
+  midi status          Show status
+  midi monitor         Monitor CC input   WAVEFORM
+  midi remove <var>    Remove mapping     wave              Toggle display
+                                          wave on/off       Enable/disable
 
 OTHER COMMANDS                          KEYBOARD SHORTCUTS
-  : <file>       Compile only             F1        Toggle help
-  $ <cmd>        Shell cmd                F2        Shreds table
-  edit           Open editor              F3        Toggle log
-  @<name>        Load snippet             Ctrl+Q    Exit REPL
-                                          Ctrl+R    History search
-                                          Esc+Enter Submit code
-                                          Tab       Auto-complete"""
+  : <file> / compile <file>               F1        Toggle help
+  ! "code" / exec "code"                  F2        Shreds table
+  $ <cmd>  / shell <cmd>                  Ctrl+Q    Exit REPL
+  @<name>  / snippet <name>               Ctrl+R    History search
+  edit           Open editor              Esc+Enter Submit code
+  watch <file>   Auto-reload              Tab       Auto-complete
+  unwatch <file> Stop watching
+  watching       List watched"""
 
-        # Create help TextArea (non-scrollable, fits exactly)
+        # Create help TextArea (scrollable, adapts to terminal height)
         self.help_area = TextArea(
             text=help_text,
             read_only=True,
-            scrollbar=False,
-            focusable=False,
-            height=D.exact(20),  # Exact height to fit help text
-            style="class:help-area",
-        )
-
-        # Create log TextArea (scrollable, for VM messages)
-        self.log_area = TextArea(
-            text="",
-            read_only=True,
             scrollbar=True,
             focusable=False,
-            height=D(min=0, max=30),  # Scrollable log area
-            style="class:log-area",
+            height=D(min=10, preferred=30),
+            style="class:help-area",
         )
 
         # Create shreds table function
@@ -313,11 +324,22 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
         # Create bottom toolbar function (shows VM status)
         def get_bottom_toolbar() -> str:
             try:
+                # Sync session shreds with VM (discovers OTF-added/removed shreds).
+                # Runs on the event loop thread via refresh_interval=0.1.
+                self.app_state.sync_shreds()
                 audio_status = "ON" if self.session.audio_running else "OFF"
                 now = self.chuck.now()
                 shred_count = len(self.session.shreds)
-                return f"Audio: {audio_status} | Now: {now:.2f} | Shreds: {shred_count}"
-            except (RuntimeError, AttributeError):
+                parts = [
+                    f"Audio: {audio_status}",
+                    f"Now: {now:.2f}",
+                    f"Shreds: {shred_count}",
+                ]
+                if self.app_state.otf_enabled:
+                    parts.append(f"OTF: {self.app_state.otf_port}")
+                parts.append("F1: help")
+                return " | ".join(parts)
+            except Exception:
                 return "Audio: -- | Now: -- | Shreds: --"
 
         # Custom style for syntax highlighting and prompt
@@ -325,16 +347,16 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
             {
                 "bottom-toolbar": "#ffffff bg:#333333",
                 "top-toolbar": "#00ffff bg:#000033",  # cyan on dark blue for topbar
-                "error-toolbar": "#ffffff bg:#cc0000",  # white on red for errors
                 "help-area": "#aaaaaa bg:#222222",  # gray on dark gray for help
-                "log-area": "#cccccc bg:#111111",  # lighter gray for log
+                "repl-buffer": "#cccccc bg:#111111",  # main REPL buffer
                 "shreds-area": "#00ffff bg:#001133",  # cyan on dark blue for shreds table
+                "waveform-area": "#00ff00 bg:#001100",  # green on dark green for meters
                 "prompt-bracket": "#ff8800",  # orange for brackets
                 "prompt-chuck": "#00ff00",  # green for =>
             }
         )
 
-        # Key bindings for enhanced history search and multiline
+        # Key bindings
         kb = KeyBindings()
 
         # Topbar visibility condition
@@ -342,108 +364,107 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
         def topbar_visible() -> bool:
             return self.show_sidebar
 
-        @kb.add("c-s")
-        def _(event: KeyPressEvent) -> None:
-            """Forward history search with Ctrl+S"""
-            event.current_buffer.history_forward()
-
         @kb.add("f2")
         def _(event: KeyPressEvent) -> None:
             """Toggle shreds table window with F2"""
             self.show_shreds_window = not self.show_shreds_window
-            # Update shreds table content when opening
             if self.show_shreds_window:
                 self.shreds_area.text = self.get_shreds_table()
-            event.app.invalidate()  # Force redraw
+            event.app.invalidate()
 
         @kb.add("f1")
         def _(event: KeyPressEvent) -> None:
             """Toggle help window with F1"""
             self.show_help_window = not self.show_help_window
-            event.app.invalidate()  # Force redraw
-
-        @kb.add("f3")
-        def _(event: KeyPressEvent) -> None:
-            """Toggle log window with F3"""
-            self.show_log_window = not self.show_log_window
-            event.app.invalidate()  # Force redraw
+            event.app.invalidate()
 
         @kb.add("c-q")
         def _(event: KeyPressEvent) -> None:
             """Exit with Ctrl-Q"""
             event.app.exit()
 
+        # Guard: prevent cursor from moving into read-only transcript region
+        @kb.add("left")
+        @kb.add("backspace")
+        def _(event: KeyPressEvent) -> None:
+            """Prevent editing before input_start."""
+            buf = event.current_buffer
+            if buf.cursor_position <= self.input_start:
+                return  # Block
+            # Otherwise, do the default action
+            if event.data == "\x7f":  # backspace
+                buf.delete_before_cursor()
+            else:
+                buf.cursor_left()
+
+        @kb.add("home")
+        @kb.add("c-a")
+        def _(event: KeyPressEvent) -> None:
+            """Home goes to input_start, not beginning of buffer."""
+            event.current_buffer.cursor_position = self.input_start
+
+        @kb.add("c-u")
+        def _(event: KeyPressEvent) -> None:
+            """Clear current input line."""
+            buf = event.current_buffer
+            buf.text = buf.text[: self.input_start]
+            buf.cursor_position = self.input_start
+
+        @kb.add("up")
+        def _(event: KeyPressEvent) -> None:
+            """Navigate history (previous)."""
+            self._history_navigate(-1)
+
+        @kb.add("down")
+        def _(event: KeyPressEvent) -> None:
+            """Navigate history (next)."""
+            self._history_navigate(1)
+
+        @kb.add("enter")
+        def _(event: KeyPressEvent) -> None:
+            """Submit current input on Enter."""
+            buf = event.current_buffer
+            user_text = buf.text[self.input_start :]
+
+            # Smart multiline: if ChucK code markers present, use Esc+Enter
+            if self.smart_enter and self._should_continue_multiline(user_text):
+                buf.insert_text("\n")
+                return
+
+            self._submit_input(user_text)
+
+        @kb.add("escape", "enter")
+        def _(event: KeyPressEvent) -> None:
+            """Force-submit with Esc+Enter (bypass multiline detection)."""
+            buf = event.current_buffer
+            user_text = buf.text[self.input_start :]
+            self._submit_input(user_text)
+
         # Ensure numchuck directories exist
         ensure_numchuck_directories()
 
-        # Prompt continuation for multiline input
-        def get_continuation(width: int, line_number: int, is_soft_wrap: bool) -> str:
-            return "... " if line_number > 0 else ""
+        # History state
+        self.history = FileHistory(str(get_history_file()))
+        self._history_strings: list[str] = []
+        self._history_index = 0
+        self._history_tmp = ""  # Stash current input when browsing history
 
-        # Smart multiline filter - determines if we should stay in multiline mode
-        from prompt_toolkit.filters import Condition
-        from prompt_toolkit.application import get_app
-
-        @Condition
-        def should_continue_multiline() -> bool:
-            if not self.smart_enter:
-                return True  # Always multiline, require Esc+Enter/Ctrl+Enter
-
-            # Get current buffer text
-            app = get_app()
-            text = app.current_buffer.text
-
-            # If there's already a newline, we're in multiline mode
-            if "\n" in text:
-                return True
-
-            # Single line - check if it's a REPL command
-            text_stripped = text.strip()
-            if not text_stripped:
-                return False
-
-            # Known single-line commands should submit on Enter
-            single_line_cmds = [
-                "quit",
-                "exit",
-                "q",
-                "help",
-                "clear",
-                "reset",
-                "cls",
-                "watch",
-                "?",
-                "?g",
-                "?a",
-                ".",
-                ">",
-                "||",
-                "X",
-            ]
-            if text_stripped in single_line_cmds:
-                return False  # Don't continue, accept on Enter
-
-            # Patterns that start REPL commands
-            if text_stripped.startswith(
-                ("+", "-", "~", "?", ":", "!", "$", "@", "edit")
-            ):
-                return False  # REPL command, accept on Enter
-
-            # If it contains ChucK code markers, stay multiline
-            if any(marker in text_stripped for marker in ["=>", ";", "{"]):
-                return True  # Likely ChucK code, require Esc+Enter
-
-            # Default: single-line input without ChucK markers, accept on Enter
-            return False
-
-        # Create input buffer
-        self.input_buffer = Buffer(
-            history=FileHistory(str(get_history_file())),
-            auto_suggest=AutoSuggestFromHistory(),
+        # Create single REPL buffer with initial prompt
+        self.buffer = Buffer(
+            multiline=True,
             completer=self.completer,
             complete_while_typing=False,
-            multiline=should_continue_multiline,
-            on_text_insert=lambda _: None,  # Could be used for live updates
+        )
+        self.buffer.text = self.prompt_prefix
+        self.buffer.cursor_position = self.input_start
+
+        # Main REPL window -- single buffer, fills available space
+        repl_window = Window(
+            content=BufferControl(buffer=self.buffer),
+            wrap_lines=True,
+            height=D(weight=1),
+            style="class:repl-buffer",
+            right_margins=[ScrollbarMargin(display_arrows=True)],
         )
 
         # Create topbar window
@@ -454,42 +475,6 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
                 style="class:top-toolbar",
             ),
             filter=topbar_visible,
-        )
-
-        # Create main input window with prompt
-        def get_prompt_text() -> AnyFormattedText:
-            prompt_html = HTML(
-                "<prompt-bracket>[</prompt-bracket><prompt-chuck>=></prompt-chuck><prompt-bracket>]</prompt-bracket> "
-            )
-            return prompt_html
-
-        input_window = Window(
-            content=BufferControl(
-                buffer=self.input_buffer,
-                lexer=PygmentsLexer(lexer_class),
-                include_default_input_processors=True,
-            ),
-            get_line_prefix=lambda line_number, wrap_count: get_continuation(
-                0, line_number, False
-            )
-            if line_number > 0
-            else get_prompt_text(),
-            wrap_lines=True,
-            right_margins=[ScrollbarMargin(display_arrows=True)],
-        )
-
-        # Create error bar window (conditional)
-        @Condition
-        def error_visible() -> bool:
-            return bool(self.error_message)
-
-        error_window = ConditionalContainer(
-            Window(
-                height=D.exact(1),
-                content=FormattedTextControl(text=get_error_text),
-                style="class:error-toolbar",
-            ),
-            filter=error_visible,
         )
 
         # Create help window (conditional)
@@ -506,137 +491,301 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
 
         shreds_window = ConditionalContainer(self.shreds_area, filter=shreds_visible)
 
-        # Create log window (conditional)
+        # Meter display -- L and R bars in separate 1-line windows
+        def get_meter_left() -> str:
+            m = self._current_meters
+            return f"L {format_waveform_bar(m.get('peak_left', 0.0), width=40)}"
+
+        def get_meter_right() -> str:
+            m = self._current_meters
+            return f"R {format_waveform_bar(m.get('peak_right', 0.0), width=40)}"
+
         @Condition
-        def log_visible() -> bool:
-            return self.show_log_window
+        def waveform_visible() -> bool:
+            return self.session.show_waveform
 
-        log_window = ConditionalContainer(self.log_area, filter=log_visible)
+        meter_window = ConditionalContainer(
+            HSplit(
+                [
+                    Window(
+                        content=FormattedTextControl(text=get_meter_left),
+                        height=D.exact(1),
+                        style="class:waveform-area",
+                    ),
+                    Window(
+                        content=FormattedTextControl(text=get_meter_right),
+                        height=D.exact(1),
+                        style="class:waveform-area",
+                    ),
+                ]
+            ),
+            filter=waveform_visible,
+        )
 
-        # Create layout with top toolbar (shreds) and bottom toolbar (status)
+        # Layout: topbar, repl buffer (fills space), toggles, meters, status bar
         root_container = HSplit(
             [
-                topbar_window,  # Top: shows active shreds (IDs only)
-                Window(height=D.exact(1)),  # Gap between topbar and input
-                input_window,  # Middle: REPL input
-                error_window,  # Error bar (only shown when there's an error)
-                help_window,  # Help window (toggle with F1)
-                shreds_window,  # Shreds table window (toggle with F2)
-                log_window,  # Log window (toggle with F3)
+                topbar_window,
+                repl_window,
+                help_window,
+                shreds_window,
+                meter_window,
                 Window(
                     height=D.exact(1),
                     content=FormattedTextControl(text=get_bottom_toolbar),
                     style="class:bottom-toolbar",
-                ),  # Bottom: VM status
+                ),
             ]
         )
 
-        # Create application
+        # Create application.
+        # refresh_interval drives meter redraws from the event loop thread
+        # (no background thread invalidation needed).
         self.app: Any = Application(
             layout=Layout(root_container),
             key_bindings=kb,
             style=repl_style,
             full_screen=True,
-            mouse_support=True,  # Enable mouse for scrolling
+            mouse_support=True,
+            refresh_interval=0.1,
         )
 
-        self.prompt_html = HTML  # Store HTML class for later use
+    def _should_continue_multiline(self, text: str) -> bool:
+        """Check if Enter should insert a newline instead of submitting."""
+        if "\n" in text:
+            return True
+        stripped = text.strip()
+        if not stripped:
+            return False
+        single_line_cmds = [
+            "quit",
+            "exit",
+            "q",
+            "help",
+            "clear",
+            "reset",
+            "cls",
+            "watch",
+            "?",
+            "?g",
+            "?a",
+            ".",
+            ">",
+            "||",
+            "X",
+            "shreds",
+            "globals",
+            "audio",
+            "start",
+            "stop",
+            "shutdown",
+        ]
+        if stripped in single_line_cmds:
+            return False
+        if stripped.startswith(
+            (
+                "+",
+                "-",
+                "~",
+                "?",
+                ":",
+                "!",
+                "$",
+                "@",
+                "edit",
+                "shred ",
+                "compile ",
+                "exec ",
+                "shell ",
+                "snippet ",
+                "get ",
+                "set ",
+                "signal ",
+                "broadcast ",
+            )
+        ):
+            return False
+        if any(marker in stripped for marker in ["=>", ";", "{"]):
+            return True
+        return False
+
+    def _history_navigate(self, direction: int) -> None:
+        """Navigate command history. direction: -1=older, +1=newer."""
+        if not self._history_strings:
+            return
+        if self._history_index == len(self._history_strings):
+            self._history_tmp = self.buffer.text[self.input_start :]
+        new_index = self._history_index + direction
+        if new_index < 0 or new_index > len(self._history_strings):
+            return
+        self._history_index = new_index
+        if new_index == len(self._history_strings):
+            replacement = self._history_tmp
+        else:
+            replacement = self._history_strings[new_index]
+        self.buffer.text = self.buffer.text[: self.input_start] + replacement
+        self.buffer.cursor_position = len(self.buffer.text)
+
+    def _trim_transcript(self) -> None:
+        """Trim buffer to max_transcript_lines."""
+        lines = self.buffer.text.split("\n")
+        if len(lines) > self.max_transcript_lines:
+            trimmed = lines[-self.max_transcript_lines :]
+            self.buffer.text = "\n".join(trimmed)
+            self.input_start = len(self.buffer.text) - len(
+                self.buffer.text.split("\n")[-1]
+            )
+            # Recalculate: input_start is after the last prompt prefix
+            last_line = self.buffer.text.split("\n")[-1]
+            self.input_start = (
+                len(self.buffer.text) - len(last_line) + len(self.prompt_prefix)
+            )
+
+    def _append_line(self, text: str) -> None:
+        """Append a line to the buffer before the current prompt line."""
+        # Insert text before the current prompt line
+        before_prompt = self.buffer.text[: self.input_start - len(self.prompt_prefix)]
+        if before_prompt and not before_prompt.endswith("\n"):
+            before_prompt += "\n"
+        before_prompt += text + "\n"
+        current_input = self.buffer.text[self.input_start :]
+        self.buffer.text = before_prompt + self.prompt_prefix + current_input
+        self.input_start = len(before_prompt) + len(self.prompt_prefix)
+        self.buffer.cursor_position = len(self.buffer.text)
+        self._trim_transcript()
+        self.app.invalidate()
 
     def add_to_log(self, msg: str) -> None:
-        """Capture ChucK VM messages to log window.
+        """Capture ChucK VM messages inline in transcript.
 
         Args:
-            msg: Message to add to log
+            msg: Message to add to transcript
         """
         msg = msg.rstrip("\n")
         if msg:
-            self.log_lines.append(msg)
-            # Keep only recent messages
-            if len(self.log_lines) > self.max_log_lines:
-                self.log_lines.pop(0)
-            # Update the log area
-            self.log_area.text = "\n".join(self.log_lines)
-            # Scroll to bottom
-            self.log_area.buffer.cursor_position = len(self.log_area.text)
-            self.app.invalidate()
+            self._append_line(f"  {msg}")
+
+    def _echo_error(self, msg: str) -> None:
+        """Append an error inline in the transcript."""
+        self._append_line(f"  [!] {msg}")
+
+    def _meter_update_loop(self) -> None:
+        """Poll audio meters (daemon thread).
+
+        Only updates _current_meters data. Redraws are driven by
+        Application(refresh_interval=0.1) on the event loop thread.
+        """
+        from .._numchuck import get_audio_meters, is_audio_running
+
+        _zero_meters = {
+            "rms_left": 0.0,
+            "rms_right": 0.0,
+            "peak_left": 0.0,
+            "peak_right": 0.0,
+        }
+
+        while not self._meter_stop.is_set():
+            try:
+                if self.session.show_waveform and is_audio_running():
+                    meters = get_audio_meters()
+                    self._current_meters = {
+                        "rms_left": float(meters["rms_left"]),
+                        "rms_right": float(meters["rms_right"]),
+                        "peak_left": float(meters["peak_left"]),
+                        "peak_right": float(meters["peak_right"]),
+                    }
+                else:
+                    self._current_meters = _zero_meters.copy()
+            except Exception:
+                pass
+            self._meter_stop.wait(0.1)
 
     def setup(self) -> None:
-        """Initialize ChucK with sensible defaults."""
-        from .._numchuck import ChucK as ChucKClass
+        """Initialize ChucK with sensible defaults.
 
-        # Use ChucK's stdout callback to capture VM messages (must be set before init)
-        ChucKClass.set_stdout_callback(self.add_to_log)
-        ChucKClass.set_stderr_callback(self.add_to_log)
-
-        # Initialize ChucK through app_state
+        Uses only instance-level callbacks (chout/cherr), not static
+        stdout/stderr callbacks. Static callbacks cause segfaults on
+        cleanup because they outlive the Python objects they reference.
+        """
         self.app_state.setup()
 
-        # Set up output capture with our log function
-        self.app_state.set_log_callback(lambda msg: self.add_to_log(f"[out] {msg}"))
+        # Use instance-level output capture (cleaned up by chuck.shutdown())
+        self.app_state.set_log_callback(self.add_to_log)
         self.app_state.setup_output_capture()
 
-    def process_input(self, buff: Buffer) -> bool:
-        """Process input when user presses Enter.
+        # Start meter polling thread
+        self._meter_stop.clear()
+        self._meter_thread = threading.Thread(
+            target=self._meter_update_loop, daemon=True, name="numchuck-meters"
+        )
+        self._meter_thread.start()
 
-        Args:
-            buff: Input buffer containing user text
+    def _submit_input(self, user_text: str) -> None:
+        """Process submitted input and prepare a new prompt line."""
+        text = user_text.strip()
 
-        Returns:
-            True to clear the buffer after processing
-        """
-        text = buff.text.strip()
-
-        # Clear previous error
-        self.error_message = ""
-
+        # Freeze the current input into transcript: remove prompt, re-add as echo
+        # The buffer already shows "[=>] <input>" on the current line(s).
+        # Just move to a new prompt.
         if not text:
-            return True
+            # Empty enter: just add a new prompt line
+            self.buffer.text = self.buffer.text + "\n" + self.prompt_prefix
+            self.input_start = len(self.buffer.text)
+            self.buffer.cursor_position = self.input_start
+            self._trim_transcript()
+            self.app.invalidate()
+            return
+
+        # Add to history
+        self._history_strings.append(text)
+        self._history_index = len(self._history_strings)
+        self._history_tmp = ""
+        # Persist to file history
+        self.history.append_string(text)
+
+        # Freeze current input and immediately set up new prompt.
+        # This ensures _append_line / _echo_error can insert output
+        # between the frozen input and the new prompt.
+        self.buffer.text = self.buffer.text + "\n" + self.prompt_prefix
+        self.input_start = len(self.buffer.text)
+        self.buffer.cursor_position = self.input_start
 
         if text in ["quit", "exit", "q"]:
             self.app.exit()
-            return True
+            return
 
         if text == "help":
             self.show_help_window = not self.show_help_window
+
+        elif text == "cls":
+            # Clear screen: reset buffer to just a prompt
+            self.buffer.text = self.prompt_prefix
+            self.input_start = len(self.prompt_prefix)
+            self.buffer.cursor_position = self.input_start
             self.app.invalidate()
-            return True
-
-        # Parse and execute
-        cmd = self.parser.parse(text)
-        if cmd:
-            # Only print newline for commands that produce output
-            # Silent commands: audio start/stop, shred add/remove
-            silent_cmds = [
-                "start_audio",
-                "stop_audio",
-                "shutdown_audio",
-                "spork_file",
-                "spork_code",
-                "remove_shred",
-                "remove_all",
-                "edit_shred",
-            ]
-            if cmd.type not in silent_cmds:
-                print()  # newline for output
-            # Execute command and get error if any
-            error = self.executor.execute(cmd)
-            if error:
-                self.error_message = error
+            return
         else:
-            # If not a recognized command, treat as ChucK code
-            # Check if it looks like ChucK code (contains =>, ;, or multiline)
-            if "\n" in text or "=>" in text or ";" in text or "{" in text:
-                # Use ShredService for code compilation
-                result = self.app_state.shred_service.spork_code(text, name="repl")
-                if not result.success:
-                    self.error_message = result.error or "Failed to compile code"
-            else:
-                # Not a recognized command and doesn't look like ChucK code
-                self.error_message = f"Unknown command: {text}"
+            # Parse and execute
+            try:
+                cmd = self.parser.parse(text)
+                if cmd:
+                    error = self.executor.execute(cmd)
+                    if error:
+                        self._echo_error(error)
+                else:
+                    if "\n" in text or "=>" in text or ";" in text or "{" in text:
+                        result = self.app_state.shred_service.spork_code(
+                            text, name="repl"
+                        )
+                        if not result.success:
+                            self._echo_error(result.error or "Failed to compile code")
+                    else:
+                        self._echo_error(f"Unknown command: {text}")
+            except Exception as e:
+                self._echo_error(f"Error: {e}")
 
-        # Force redraw to update topbar/toolbar/error
+        self._trim_transcript()
         self.app.invalidate()
-        return True
 
     def run(self, start_audio: bool = False, files: list[str] | None = None) -> None:
         """Main REPL loop.
@@ -671,8 +820,9 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
             sys.stdout.write("\033[?1006l")  # Disable SGR mouse mode
             sys.stdout.flush()
 
-            # Set accept handler for buffer
-            self.input_buffer.accept_handler = self.process_input
+            # Load command history from file
+            self._history_strings = list(self.history.load_history_strings())
+            self._history_index = len(self._history_strings)
 
             # Run the application
             self.app.run()
@@ -686,15 +836,37 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
 
         print("\nShutting down...")
 
-        # Clear convenience references (before app_state.cleanup closes ChucK)
-        self.chuck = None  # type: ignore[assignment]
-        self.session = None  # type: ignore[assignment]
+        # Stop meter polling thread
+        self._meter_stop.set()
+        if self._meter_thread is not None:
+            self._meter_thread.join(timeout=1.0)
+            self._meter_thread = None
 
-        # Break completer references (it holds chuck and session)
+        # Neutralize instance-level callbacks BEFORE anything else.
+        # These closures reference self -> add_to_log -> buffer, and if
+        # ChucK fires them during shutdown we get a double-free.
+        if hasattr(self, "app_state") and self.app_state is not None:
+            self.app_state._log_callback = None
+
+        def _noop(msg: str) -> None:
+            pass
+
+        try:
+            if hasattr(self, "chuck") and self.chuck is not None:
+                self.chuck.set_chout_callback(_noop)
+                self.chuck.set_cherr_callback(_noop)
+        except (RuntimeError, AttributeError):
+            pass
+
+        # Break completer -> chuck/session refs (Buffer holds completer)
         if hasattr(self, "completer") and self.completer is not None:
             self.completer.chuck = None  # type: ignore[assignment]
             self.completer.session = None  # type: ignore[assignment]
             self.completer = None  # type: ignore[assignment]
+
+        # Clear convenience references
+        self.chuck = None  # type: ignore[assignment]
+        self.session = None  # type: ignore[assignment]
 
         # Break executor references
         if hasattr(self, "executor") and self.executor is not None:
@@ -702,13 +874,13 @@ OTHER COMMANDS                          KEYBOARD SHORTCUTS
             self.executor.session = None  # type: ignore[assignment]
             self.executor = None  # type: ignore[assignment]
 
-        # Now cleanup app_state (this closes ChucK instance)
+        # Force GC to release cycles BEFORE shutting down C++ objects
+        gc.collect()
+        gc.collect()
+
+        # Now cleanup app_state (calls chuck.shutdown() and destroys C++ object)
         if hasattr(self, "app_state") and self.app_state is not None:
             self.app_state.cleanup()
             self.app_state = None  # type: ignore[assignment]
 
-        # Force garbage collection multiple times to break all cycles
-        # and release C++ objects before interpreter shutdown
-        gc.collect()
-        gc.collect()
         gc.collect()

@@ -25,6 +25,23 @@ class CommandParser:
             (r"^time$", self._current_time),
             (r"^exit$", self._exit),
             (r"^quit$", self._exit),
+            # Word aliases for symbol commands
+            (r"^shreds$", self._list_shreds),
+            (r"^shred\s+(\d+)$", self._shred_info),
+            (r"^globals$", self._list_globals),
+            (r"^audio$", self._audio_info),
+            (r"^start$", self._start_audio),
+            (r"^stop$", self._stop_audio),
+            (r"^shutdown$", self._shutdown_audio),
+            (r"^compile\s+(.+\.ck)$", self._compile_file),
+            (r'^exec\s+"([^"]+)"$', self._exec_code),
+            (r"^exec\s+'([^']+)'$", self._exec_code),
+            (r"^shell\s+(.+)$", self._shell),
+            (r"^snippet\s+(\w+)$", self._load_snippet),
+            (r"^get\s+(\w+)$", self._get_global),
+            (r"^set\s+(\w+)\s+(.+)$", self._set_global_word),
+            (r"^signal\s+(\w+)$", self._signal_event),
+            (r"^broadcast\s+(\w+)$", self._broadcast_event),
             # Shred management (ChucK shortcut symbols: + - = ^)
             (r"^\+\s+(.+\.ck)$", self._spork_file),
             (r'^\+\s+"([^"]+)"$', self._spork_code),
@@ -76,15 +93,15 @@ class CommandParser:
             (r"^record\s+save\s+(\w+)$", self._record_save),
             (r"^record\s+discard$", self._record_discard),
             (r"^record\s+status$", self._record_status),
-            # Playback specific commands must come before general pattern
-            (r"^playback\s+pause$", self._playback_pause),
-            (r"^playback\s+resume$", self._playback_resume),
-            (r"^playback\s+stop$", self._playback_stop),
-            (r"^playback\s+(\w+)(?:\s+(\d*\.?\d+))?$", self._playback),
+            # Play specific commands must come before general pattern
+            (r"^play\s+pause$", self._play_pause),
+            (r"^play\s+resume$", self._play_resume),
+            (r"^play\s+stop$", self._play_stop),
+            (r"^play\s+(\w+)(?:\s+(\d*\.?\d+))?$", self._play),
             (r"^recordings$", self._list_recordings),
             # MIDI commands
             (
-                r"^midi\s+learn\s+(\w+)(?:\s+(\d*\.?\d+)\s+(\d*\.?\d+))?$",
+                r"^midi\s+learn\s+(\w+)\s+(\d+)(?:\s+(\d+))?(?:\s+(\d*\.?\d+)\s+(\d*\.?\d+))?$",
                 self._midi_learn,
             ),
             (r"^midi\s+list$", self._midi_list),
@@ -159,6 +176,12 @@ class CommandParser:
         value_str = m.group(2)
         return Command(
             "set_global", {"name": name, "value": self._parse_value(value_str)}
+        )
+
+    def _set_global_word(self, m: re.Match[str]) -> Command:
+        return Command(
+            "set_global",
+            {"name": m.group(1), "value": self._parse_value(m.group(2))},
         )
 
     def _get_global(self, m: re.Match[str]) -> Command:
@@ -243,19 +266,19 @@ class CommandParser:
     def _record_status(self, m: re.Match[str]) -> Command:
         return Command("record_status", {})
 
-    def _playback(self, m: re.Match[str]) -> Command:
+    def _play(self, m: re.Match[str]) -> Command:
         name = m.group(1)
         speed = float(m.group(2)) if m.group(2) else 1.0
-        return Command("playback", {"name": name, "speed": speed})
+        return Command("play", {"name": name, "speed": speed})
 
-    def _playback_pause(self, m: re.Match[str]) -> Command:
-        return Command("playback_pause", {})
+    def _play_pause(self, m: re.Match[str]) -> Command:
+        return Command("play_pause", {})
 
-    def _playback_resume(self, m: re.Match[str]) -> Command:
-        return Command("playback_resume", {})
+    def _play_resume(self, m: re.Match[str]) -> Command:
+        return Command("play_resume", {})
 
-    def _playback_stop(self, m: re.Match[str]) -> Command:
-        return Command("playback_stop", {})
+    def _play_stop(self, m: re.Match[str]) -> Command:
+        return Command("play_stop", {})
 
     def _list_recordings(self, m: re.Match[str]) -> Command:
         return Command("list_recordings", {})
@@ -265,9 +288,20 @@ class CommandParser:
 
     def _midi_learn(self, m: re.Match[str]) -> Command:
         name = m.group(1)
-        min_val = float(m.group(2)) if m.group(2) else 0.0
-        max_val = float(m.group(3)) if m.group(3) else 1.0
-        return Command("midi_learn", {"name": name, "min": min_val, "max": max_val})
+        cc = int(m.group(2))
+        channel = int(m.group(3)) if m.group(3) else 0
+        min_val = float(m.group(4)) if m.group(4) else 0.0
+        max_val = float(m.group(5)) if m.group(5) else 1.0
+        return Command(
+            "midi_learn",
+            {
+                "name": name,
+                "cc": cc,
+                "channel": channel,
+                "min": min_val,
+                "max": max_val,
+            },
+        )
 
     def _midi_list(self, m: re.Match[str]) -> Command:
         return Command("midi_list", {})

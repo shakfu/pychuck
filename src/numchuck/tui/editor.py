@@ -114,15 +114,26 @@ class ChuckEditor:
     """
 
     def __init__(
-        self, project_name: str | None = None, start_audio: bool = False
+        self,
+        project_name: str | None = None,
+        start_audio: bool = False,
+        otf_enable: bool = False,
+        otf_port: int = 8888,
     ) -> None:
         """Initialize the editor.
 
         Args:
             project_name: Optional project name for versioning
             start_audio: Whether to start audio on launch
+            otf_enable: If True, enable on-the-fly programming listener
+            otf_port: OTF listener port (default: 8888)
         """
-        self.app_state = ChuckApplication(project_name=project_name, auto_init=True)
+        self.app_state = ChuckApplication(
+            project_name=project_name,
+            auto_init=True,
+            otf_enable=otf_enable,
+            otf_port=otf_port,
+        )
         self.tabs: list[EditorTab] = []
         self.current_tab_index: int = 0  # Safe: prompt_toolkit is single-threaded
         self.start_audio_flag = start_audio
@@ -518,6 +529,9 @@ Versioning: file.ck -> file-1.ck (spork) -> file-1-1.ck (replace)
         Returns:
             Status text string
         """
+        # Sync session shreds with VM (discovers OTF-added/removed shreds)
+        self.app_state.sync_shreds()
+
         # Shred count
         shred_count = len(self.app_state.session.shreds)
         audio_status = "[ON]" if self.app_state.audio_running else "[OFF]"
@@ -529,7 +543,10 @@ Versioning: file.ck -> file-1.ck (spork) -> file-1-1.ck (replace)
         else:
             file_info = "No tabs"
 
-        return f" {audio_status} {shred_count} shreds | {file_info} | {self.status_message} | F1:Help "
+        otf_info = (
+            f" | OTF:{self.app_state.otf_port}" if self.app_state.otf_enabled else ""
+        )
+        return f" {audio_status} {shred_count} shreds | {file_info}{otf_info} | {self.status_message} | F1:Help "
 
     def cleanup(self) -> None:
         """Cleanup on exit."""
@@ -588,6 +605,8 @@ def main(
     files: list[str] | None = None,
     project_name: str | None = None,
     start_audio: bool = False,
+    otf_enable: bool = False,
+    otf_port: int = 8888,
 ) -> None:
     """Main entry point for editor.
 
@@ -595,8 +614,15 @@ def main(
         files: Optional list of files to open
         project_name: Optional project name for versioning
         start_audio: Whether to start audio on launch
+        otf_enable: If True, enable on-the-fly programming listener
+        otf_port: OTF listener port (default: 8888)
     """
-    editor = ChuckEditor(project_name=project_name, start_audio=start_audio)
+    editor = ChuckEditor(
+        project_name=project_name,
+        start_audio=start_audio,
+        otf_enable=otf_enable,
+        otf_port=otf_port,
+    )
     editor.run(files=files)
 
 

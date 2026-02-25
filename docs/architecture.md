@@ -289,6 +289,53 @@ class AudioContext {
 - Ensures cleanup on all paths (success/failure/exception)
 - Prevents resource leaks
 
+#### Two-Tier Output Callback Architecture
+
+ChucK has two separate output callback systems that serve different purposes.
+Both must be wired up in the TUI to prevent raw stdout writes from corrupting
+prompt_toolkit's alternate screen buffer.
+
+**Instance-level callbacks (chout/cherr):**
+
+```cpp
+// Per-instance -- captures ChucK code output (chout << "hello")
+chuck.set_chout_callback(callback)
+chuck.set_cherr_callback(callback)
+```
+
+- Set per ChucK instance via `ChucK::setChoutCallback()` / `ChucK::setCherrCallback()`
+- Captures output from ChucK code: `chout << "hello";`, `cherr << "error";`
+- Uses thread-local `g_current_chuck` + instance-pointer-keyed map to dispatch
+  to the correct Python callback (see `ChuckContextGuard` RAII helper)
+
+**Global/static callbacks (stdout/stderr):**
+
+```cpp
+// Global -- captures VM system messages ("removing shred", compile errors)
+ChucK.set_stdout_callback(callback)   # static method
+ChucK.set_stderr_callback(callback)   # static method
+```
+
+- Set globally via `ChucK::setStdoutCallback()` / `ChucK::setStderrCallback()`
+- Captures VM system messages routed through `CK_FPRINTF_STDOUT` / `CK_FPRINTF_STDERR`
+  macros (e.g. `[chuck]: (VM) removing shred: 1`, compilation errors, `EM_log` output)
+- Affects all ChucK instances
+
+**Why both are required in the TUI:**
+
+Without the global callbacks, VM messages like `[chuck]: (VM) removing shred: 1`
+write directly to stdout, which corrupts the terminal cursor position in
+prompt_toolkit's full-screen mode and produces ghost lines. The fix
+(`common.py:setup_output_capture()`) sets both tiers to route all output through
+the TUI's log system.
+
+| Callback | Scope | Source | C++ API |
+|---|---|---|---|
+| `set_chout_callback` | Per-instance | `chout <<` in ChucK code | `ChucK::setChoutCallback()` |
+| `set_cherr_callback` | Per-instance | `cherr <<` in ChucK code | `ChucK::setCherrCallback()` |
+| `set_stdout_callback` | Global | `CK_FPRINTF_STDOUT` macros | `ChucK::setStdoutCallback()` (static) |
+| `set_stderr_callback` | Global | `CK_FPRINTF_STDERR`, `EM_log` | `ChucK::setStderrCallback()` (static) |
+
 #### Input Validation
 
 ```cpp

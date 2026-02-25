@@ -3,11 +3,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from ..paths import get_projects_dir
+from ..recorder import SessionRecorder, SessionPlayer
+from ..midi import MIDIMappings
 from .project import Project
 from .logging import get_logger, TUILogger
 
 if TYPE_CHECKING:
     from .._numchuck import ChucK
+    from ..osc import OSCServer, OSCController
     from ..watcher import FileWatcher
 
 
@@ -39,6 +42,21 @@ class ChuckSession:
         self.project: Project | None = None
         self._logger = logger or get_logger()
         self._file_watcher: FileWatcher | None = None
+
+        # Recording/playback state
+        self.recorder: SessionRecorder = SessionRecorder()
+        self.player: SessionPlayer = SessionPlayer()
+
+        # MIDI state
+        self.midi_mappings: MIDIMappings = MIDIMappings()
+        self.midi_listener_shred_id: int | None = None
+
+        # OSC state
+        self.osc_server: OSCServer | None = None
+        self.osc_controller: OSCController | None = None
+
+        # Waveform display state
+        self.show_waveform: bool = False
 
         # Initialize project if name provided
         if project_name:
@@ -104,6 +122,35 @@ class ChuckSession:
     def clear_shreds(self) -> None:
         """Clear all tracked shreds."""
         self.shreds.clear()
+
+    def sync_shreds(self) -> None:
+        """Synchronize tracked shreds with the VM's actual shred list.
+
+        Discovers shreds added externally (e.g. via OTF ``chuck --add``)
+        and removes stale entries for shreds that have finished or been
+        removed outside the session.
+        """
+        if self.chuck is None:
+            return
+        try:
+            vm_ids = set(self.chuck.get_all_shred_ids())
+        except (RuntimeError, AttributeError):
+            return
+
+        session_ids = set(self.shreds.keys())
+
+        # New in VM (OTF-added or otherwise external)
+        for sid in vm_ids - session_ids:
+            try:
+                info = self.chuck.get_shred_info(sid)
+                name = info.get("name", f"shred-{sid}")
+            except (RuntimeError, KeyError):
+                name = f"shred-{sid}"
+            self.add_shred(sid, name, shred_type="otf")
+
+        # Gone from VM (finished or OTF-removed)
+        for sid in session_ids - vm_ids:
+            self.remove_shred(sid)
 
     def get_shred_name(self, shred_id: int) -> str:
         """Get display name for a shred."""

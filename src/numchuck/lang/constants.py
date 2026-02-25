@@ -442,6 +442,22 @@ REPL_COMMANDS = {
     "help",
     "quit",
     "exit",
+    # Word aliases for symbol commands
+    "shreds",
+    "shred",
+    "globals",
+    "audio",
+    "start",
+    "stop",
+    "shutdown",
+    "compile",
+    "exec",
+    "shell",
+    "snippet",
+    "get",
+    "set",
+    "signal",
+    "broadcast",
 }
 
 # UGen parameters by category

@@ -265,6 +265,106 @@ class TestGetShredName:
         assert name == "shred-999"
 
 
+class TestSyncShreds:
+    """Test sync_shreds method."""
+
+    def test_discovers_otf_added_shreds(self):
+        """Test that shreds present in VM but not session are added."""
+        mock_chuck = MagicMock()
+        mock_chuck.now.return_value = 44100.0
+        mock_chuck.get_all_shred_ids.return_value = [1, 2, 3]
+        mock_chuck.get_shred_info.side_effect = lambda sid: {"name": f"otf-{sid}.ck"}
+
+        session = ChuckSession(mock_chuck)
+        # Session only knows about shred 1
+        session.add_shred(1, "local.ck")
+
+        session.sync_shreds()
+
+        # Shreds 2 and 3 should now be tracked
+        assert 1 in session.shreds
+        assert 2 in session.shreds
+        assert 3 in session.shreds
+        assert session.shreds[2]["name"] == "otf-2.ck"
+        assert session.shreds[2]["type"] == "otf"
+        assert session.shreds[3]["name"] == "otf-3.ck"
+
+    def test_removes_stale_shreds(self):
+        """Test that shreds in session but gone from VM are removed."""
+        mock_chuck = MagicMock()
+        mock_chuck.now.return_value = 44100.0
+        mock_chuck.get_all_shred_ids.return_value = [1]
+
+        session = ChuckSession(mock_chuck)
+        session.add_shred(1, "alive.ck")
+        session.add_shred(2, "finished.ck")
+        session.add_shred(3, "removed.ck")
+
+        session.sync_shreds()
+
+        assert 1 in session.shreds
+        assert 2 not in session.shreds
+        assert 3 not in session.shreds
+
+    def test_noop_when_in_sync(self):
+        """Test no changes when session matches VM."""
+        mock_chuck = MagicMock()
+        mock_chuck.now.return_value = 44100.0
+        mock_chuck.get_all_shred_ids.return_value = [1, 2]
+
+        session = ChuckSession(mock_chuck)
+        session.add_shred(1, "a.ck")
+        session.add_shred(2, "b.ck")
+
+        session.sync_shreds()
+
+        assert len(session.shreds) == 2
+        # Names should be unchanged (not overwritten)
+        assert session.shreds[1]["name"] == "a.ck"
+        assert session.shreds[2]["name"] == "b.ck"
+
+    def test_graceful_on_vm_query_failure(self):
+        """Test sync_shreds does not raise when VM query fails."""
+        mock_chuck = MagicMock()
+        mock_chuck.get_all_shred_ids.side_effect = RuntimeError("VM dead")
+
+        session = ChuckSession(mock_chuck)
+        session.add_shred(1, "existing.ck")
+
+        # Should not raise
+        session.sync_shreds()
+
+        # Existing shreds should be untouched
+        assert 1 in session.shreds
+
+    def test_graceful_on_shred_info_failure(self):
+        """Test sync_shreds handles get_shred_info failure gracefully."""
+        mock_chuck = MagicMock()
+        mock_chuck.now.return_value = 44100.0
+        mock_chuck.get_all_shred_ids.return_value = [1, 2]
+        mock_chuck.get_shred_info.side_effect = RuntimeError("shred gone")
+
+        session = ChuckSession(mock_chuck)
+
+        session.sync_shreds()
+
+        # Should still add shreds with fallback names
+        assert 1 in session.shreds
+        assert 2 in session.shreds
+        assert session.shreds[1]["name"] == "shred-1"
+        assert session.shreds[2]["name"] == "shred-2"
+
+    def test_noop_when_chuck_is_none(self):
+        """Test sync_shreds does nothing when chuck is None."""
+        session = ChuckSession(None)
+        session.shreds[1] = {"id": 1, "name": "ghost.ck", "time": 0, "type": "code", "source": "ghost.ck"}
+
+        session.sync_shreds()
+
+        # Shreds unchanged -- no crash
+        assert 1 in session.shreds
+
+
 class TestBackwardCompatibility:
     """Test backward compatibility alias."""
 

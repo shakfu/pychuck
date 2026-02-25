@@ -25,6 +25,8 @@ from .._numchuck import (
     PARAM_INPUT_CHANNELS,
     PARAM_CHUGIN_ENABLE,
     PARAM_IMPORT_PATH_SYSTEM,
+    PARAM_OTF_ENABLE,
+    PARAM_OTF_PORT,
 )
 from ..services.audio import AudioService
 from .session import ChuckSession
@@ -258,6 +260,8 @@ class ChuckApplication:
         input_channels: int = 0,
         auto_init: bool = False,
         logger: TUILogger | None = None,
+        otf_enable: bool = False,
+        otf_port: int = 8888,
     ) -> None:
         """Initialize the application.
 
@@ -268,11 +272,15 @@ class ChuckApplication:
             input_channels: Number of input audio channels
             auto_init: If True, initialize ChucK immediately
             logger: Optional logger instance (uses global logger if None)
+            otf_enable: If True, enable on-the-fly programming listener
+            otf_port: OTF listener port (default: 8888)
         """
         self.__chuck: ChucK | None = ChucK()
         self._sample_rate = sample_rate
         self._output_channels = output_channels
         self._input_channels = input_channels
+        self._otf_enable = otf_enable
+        self._otf_port = otf_port
 
         # Logger for consistent error reporting
         self._logger = logger or get_logger()
@@ -388,6 +396,10 @@ class ChuckApplication:
         if chugin_dirs:
             self.chuck.set_param_string_list(PARAM_IMPORT_PATH_SYSTEM, chugin_dirs)
 
+        # Configure OTF (on-the-fly) programming listener
+        self.chuck.set_param(PARAM_OTF_ENABLE, int(self._otf_enable))
+        self.chuck.set_param(PARAM_OTF_PORT, self._otf_port)
+
         self.chuck.init()
 
     def set_log_callback(self, callback: Callable[[str], None]) -> None:
@@ -401,7 +413,9 @@ class ChuckApplication:
     def setup_output_capture(self) -> None:
         """Set up ChucK output capture to log messages.
 
-        Captures both chout and cherr output.
+        Captures both chout and cherr output, plus global VM stdout/stderr
+        messages (e.g. "removing shred") that would otherwise bypass the TUI
+        and write directly to the terminal.
         """
 
         def log_callback(msg: str) -> None:
@@ -411,6 +425,30 @@ class ChuckApplication:
 
         self.chuck.set_chout_callback(log_callback)
         self.chuck.set_cherr_callback(log_callback)
+
+        # Also capture global VM stdout/stderr (static callbacks).
+        # Without this, messages like "[chuck]: (VM) removing shred: ..."
+        # go directly to stdout, corrupting prompt_toolkit's screen.
+        ChucK.set_stdout_callback(log_callback)
+        ChucK.set_stderr_callback(log_callback)
+
+    def sync_shreds(self) -> None:
+        """Sync session shreds with the VM when OTF is enabled.
+
+        No-op when OTF is disabled to avoid unnecessary VM queries.
+        """
+        if self._otf_enable:
+            self.session.sync_shreds()
+
+    @property
+    def otf_enabled(self) -> bool:
+        """Check if OTF programming listener is enabled."""
+        return self._otf_enable
+
+    @property
+    def otf_port(self) -> int:
+        """Get the configured OTF port."""
+        return self._otf_port
 
     @property
     def audio_running(self) -> bool:
@@ -577,6 +615,15 @@ class ChuckApplication:
         try:
             if self.__chuck is not None:
                 self.__chuck.shutdown()
+        except (RuntimeError, AttributeError):
+            pass
+
+        # Clear static stdout/stderr callbacks that capture `self` via closure.
+        # These are class-level callbacks that outlive the instance and prevent
+        # garbage collection of the ChucK C++ object (nanobind ref leak).
+        try:
+            ChucK.set_stdout_callback(None)
+            ChucK.set_stderr_callback(None)
         except (RuntimeError, AttributeError):
             pass
 

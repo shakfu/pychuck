@@ -29,6 +29,8 @@ def execute_files(
     channels: int = DEFAULT_OUTPUT_CHANNELS,
     silent: bool = False,
     duration: Optional[float] = None,
+    otf_enable: bool = False,
+    otf_port: int = 8888,
 ) -> None:
     """
     Execute ChucK files from command line.
@@ -39,6 +41,8 @@ def execute_files(
         channels: Number of audio channels (default: 2)
         silent: If True, run without audio output
         duration: If specified, run for this many seconds then exit
+        otf_enable: If True, enable on-the-fly programming listener
+        otf_port: OTF listener port (default: 8888)
 
     Raises:
         ExecutionError: If compilation or execution fails
@@ -64,6 +68,8 @@ def execute_files(
             sample_rate=srate,
             output_channels=channels,
             input_channels=0,
+            otf_enable=otf_enable,
+            otf_port=otf_port,
         )
     except Exception as e:
         print(f"Error: Failed to create ChucK VM: {e}", file=sys.stderr)

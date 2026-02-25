@@ -18,7 +18,7 @@ The numchuck library provides interactive control over ChucK, enabling live codi
 
 - **Live Coding** — Hot-swap code, replace active shreds, and inspect VM state in real time.
 
-- **Plugin Support** — 37 ChucK *chugins* bundled in the wheel for additional instruments and effects (see [Bundled Chugins](#bundled-chugins)). Works out of the box with `pip install`.
+- **Plugin Support** — 40 ChucK *chugins* bundled in the wheel for additional instruments and effects (see [Bundled Chugins](#bundled-chugins)). Works out of the box with `pip install`.
 
 - **Dynamic Interaction** - Bidirectional communication between ChucK and Python through global variables, event triggers, and callbacks.
 
@@ -82,6 +82,9 @@ numchuck edit --project mymusic
 
 # Start with audio enabled
 numchuck edit --start-audio --project mymusic
+
+# Enable on-the-fly programming
+numchuck edit --otf
 ```
 
 **Editor Features:**
@@ -118,6 +121,12 @@ numchuck repl --no-smart-enter
 
 # Hide sidebar (can toggle with F2)
 numchuck repl --no-sidebar
+
+# Enable on-the-fly programming (listen for chuck --add/--remove)
+numchuck repl --otf
+
+# OTF on custom port
+numchuck repl --otf --otf-port 9999
 ```
 
 **REPL Commands:**
@@ -132,9 +141,75 @@ numchuck repl --no-sidebar
 - `exit` or `quit` - Exit the REPL
 - `@<name>` - Load a snippet (e.g., `@sine`, `@drum`)
 - `watch <file>` - Auto-reload file on changes
-- `record start/stop/save <name>` - Record session
-- `playback <name>` - Replay recorded session
+- `record start [name]` - Start recording session
+- `record stop` - Stop recording and save
+- `play <name> [speed]` - Replay recorded session
+- `midi learn <var> <cc> [channel] [min max]` - Map MIDI CC to global variable
+- `osc start [port]` - Start OSC server
+- `wave` - Toggle waveform display
 - Type `help` or press F1 for full command reference
+
+##### Recording
+
+Record and replay REPL sessions. Recordings are saved as JSON to `~/.numchuck/recordings/`.
+
+| Command | Description |
+|---------|-------------|
+| `record start [name]` | Start recording. Default name is `session`. |
+| `record stop` | Stop recording and auto-save to disk. |
+| `record save <name>` | Stop recording and save under a specific name. |
+| `record discard` | Discard the current recording without saving. |
+| `record status` | Show whether recording is active, elapsed time, and action count. |
+
+All commands except recording meta-commands (`record *`, `exit`) are captured with timestamps during recording.
+
+##### Playback
+
+| Command | Description |
+|---------|-------------|
+| `play <name> [speed]` | Load a recording and start playback. Speed defaults to `1.0` (real-time); use `2.0` for double speed. |
+| `play pause` | Pause playback. |
+| `play resume` | Resume paused playback. |
+| `play stop` | Stop playback. |
+| `recordings` | List all saved recordings. |
+
+##### MIDI
+
+Map MIDI CC messages to ChucK global variables. Uses ChucK's native `MidiIn` -- a ChucK shred is sporked to listen for MIDI and update globals in real time.
+
+Typical workflow: run `midi monitor` to see CC values from your controller, then `midi learn freq 74` to map CC 74 to the `freq` global.
+
+| Command | Description |
+|---------|-------------|
+| `midi learn <var> <cc> [channel] [min max]` | Create a mapping from MIDI CC to a global variable. Channel defaults to `0`, range defaults to `[0.0, 1.0]`. |
+| `midi list` | Show all MIDI mappings (channel, CC, global name, range). |
+| `midi remove <var>` | Remove the mapping for a global variable. If the listener is running, it is automatically re-sporked. |
+| `midi start` | Spork the MIDI listener shred with all current mappings. |
+| `midi stop` | Remove the MIDI listener shred. |
+| `midi status` | Show mapping count and whether the listener is running. |
+| `midi monitor` | Spork a monitor shred that prints all incoming MIDI CC messages (channel, CC number, value). |
+
+##### OSC
+
+Start an OSC server for remote control. External applications can send OSC messages to control ChucK globals, spork code, remove shreds, signal events, and more.
+
+| Command | Description |
+|---------|-------------|
+| `osc start [port]` | Start OSC server. Port defaults to `9000`. |
+| `osc stop` | Stop OSC server. |
+| `osc status` | Show server state, port, and handler count. |
+
+Standard OSC addresses: `/numchuck/set/<var>`, `/numchuck/get/<var>`, `/numchuck/event/<name>`, `/numchuck/broadcast/<name>`, `/numchuck/spork`, `/numchuck/remove`, `/numchuck/clear`.
+
+##### Waveform Display
+
+| Command | Description |
+|---------|-------------|
+| `wave` | Toggle waveform display on/off. |
+| `wave on` | Enable waveform display. |
+| `wave off` | Disable waveform display. |
+
+Toggles real-time stereo L/R peak meters below the shreds panel. A background thread polls `get_audio_meters()` at 100ms intervals; meters animate while audio is running and disappear when toggled off.
 
 #### 3. Command-Line Execution
 
@@ -1202,7 +1277,7 @@ numchuck.shutdown_audio()
 
 ### Using Chugins (Plugins)
 
-37 chugins are bundled with numchuck and automatically discovered -- no manual path setup needed. Run `numchuck info` to see what's available on your system.
+40 chugins are bundled with numchuck and automatically discovered -- no manual path setup needed. Run `numchuck info` to see what's available on your system.
 
 #### Bundled Chugins
 
@@ -1216,7 +1291,8 @@ numchuck.shutdown_audio()
 | **Analysis** | PitchTrack, Sigmund |
 | **Utility** | ConvRev, Ladspa, Line, Patch, Perlin, Random, Range, RegEx, XML |
 | **Networking** | AbletonLink |
-| **macOS only** | AudioUnit |
+| **Plugin Hosting** | CLAP, AudioUnit, VST3 |
+| **Pure-data** | PdPatch |
 
 ```python
 from numchuck import Chuck

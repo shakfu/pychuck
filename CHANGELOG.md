@@ -15,7 +15,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ## [Unreleased]
 
+## [0.1.11]
+
 ### Added
+
+- **OTF shred tracking** (`session.py`, `common.py`, `repl.py`, `editor.py`): Shreds added or removed via on-the-fly programming (`chuck --add`, `chuck --remove`) are now automatically tracked in the REPL and editor. A new `sync_shreds()` method on `ChuckSession` diffs `session.shreds` against `chuck.get_all_shred_ids()` and reconciles: externally-added shreds appear in the topbar, `?`/shreds table, and status bar count; finished or externally-removed shreds are pruned. Sync runs on each render tick (via the bottom toolbar callback in the REPL, status bar callback in the editor), guarded by `_otf_enable` so there is zero cost when OTF is off. OTF-discovered shreds are tagged with `shred_type="otf"`.
+
+- **OTF CLI flags** (`cli/main.py`, `tui/tui.py`, `tui/repl.py`, `tui/editor.py`, `tui/common.py`): Added `--otf` and `--otf-port` flags to the `repl` and `edit` subcommands. `--otf` enables the ChucK OTF listener (default port 8888), allowing external `chuck` commands to add/remove shreds. The OTF port is shown in the REPL status bar when enabled.
+
+- **REPL real-time stereo level meters** (`repl.py`, `waveform.py`): The `wave` command now displays live L/R peak meters below the shreds panel. Uses a background daemon thread polling `get_audio_meters()` at 100ms intervals with `Application(refresh_interval=0.1)` for redraws. Meters appear/disappear via `ConditionalContainer` tied to `session.show_waveform`. Styled green-on-dark-green (`class:waveform-area`).
+
+- **REPL word aliases for symbol commands** (`parser.py`, `lang/constants.py`): Every terse symbol command now has a readable word equivalent. New aliases: `shreds` (`?`), `shred <id>` (`? <id>`), `globals` (`?g`), `audio` (`?a`), `start` (`>`), `stop` (`||`), `shutdown` (`X`), `compile <file>` (`: <file>`), `exec "code"` (`! "code"`), `shell <cmd>` (`$ <cmd>`), `snippet <name>` (`@<name>`), `get <var>` (`<var>?`), `set <var> <val>` (`<var>::<val>`), `signal <ev>` (`<ev>!`), `broadcast <ev>` (`<ev>!!`). All word aliases are tab-completable.
+
+- **REPL command cheatsheet** (`docs/repl-commands.md`): Standalone reference documenting every REPL command organized by category, showing both symbol and word forms.
 
 - **Wheel RECORD Validation** (`scripts/check_wheel_record.py`, `scripts/repair_wheel.py`):
   - New standalone script validates wheel RECORD files against actual ZIP contents -- checks for smuggled files, dangling entries, hash mismatches, and size mismatches
@@ -31,6 +43,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - Can be individually disabled with `-DCM_CLAP=OFF`, `-DCM_PDPATCH=OFF`, or `-DCM_VST3=OFF`
   - macOS and Linux only -- all three depend on POSIX APIs (`dlfcn.h`, `dirent.h`, pthreads) not available on Windows
   - Fixed VST3 SDK option names (`SMTG_ENABLE_VST3_PLUGIN_EXAMPLES`/`SMTG_ENABLE_VST3_HOSTING_EXAMPLES`) to correctly disable SDK samples that require `gtk+-3.0` on Linux
+  - The numchuck package now includes:
+    - AbletonLink.chug
+    - ABSaturator.chug
+    - AmbPan.chug
+    - AudioUnit.chug
+    - Binaural.chug
+    - Bitcrusher.chug
+    - CLAP.chug
+    - ConvRev.chug
+    - Elliptic.chug
+    - ExpDelay.chug
+    - ExpEnv.chug
+    - FIR.chug
+    - FoldbackSaturator.chug
+    - GVerb.chug
+    - KasFilter.chug
+    - Ladspa.chug
+    - Line.chug
+    - MagicSine.chug
+    - Mesh2D.chug
+    - MIAP.chug
+    - Multicomb.chug
+    - NHHall.chug
+    - Overdrive.chug
+    - PanN.chug
+    - Patch.chug
+    - PdPatch.chug
+    - Perlin.chug
+    - PitchTrack.chug
+    - PowerADSR.chug
+    - Random.chug
+    - Range.chug
+    - RegEx.chug
+    - Sigmund.chug
+    - Spectacle.chug
+    - VST3.chug
+    - Wavetable.chug
+    - WinFuncEnv.chug
+    - WPDiodeLadder.chug
+    - WPKorg35.chug
+    - XML.chug
 
 ### Fixed
 
@@ -39,6 +92,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 - **FetchContent install leaking into wheels** (`thirdparty/chugins/{CLAP,PdPatch}/CMakeLists.txt`):
   - Added `EXCLUDE_FROM_ALL` to `FetchContent_Declare` for CLAP and PdPatch to prevent their SDK `install()` rules from polluting the wheel with headers, pkgconfig, and cmake config files (reduced wheel from 186 to 100 files)
+
+- **REPL ghost line on shred removal** (`common.py`): Fixed terminal rendering corruption (ghost line at bottom of screen) when removing shreds while level meters were visible. Root cause: ChucK's VM writes `[chuck]: (VM) removing shred: ...` directly to stdout via `CK_FPRINTF_STDOUT`, bypassing prompt_toolkit's full-screen renderer. Fix: `setup_output_capture()` now also sets the global/static `ChucK.set_stdout_callback()` and `ChucK.set_stderr_callback()` to route all VM system messages through the TUI log system. See `docs/architecture.md` for the two-tier callback architecture.
+
+- **REPL exception handling** (`repl.py`): `_submit_input` (TUI) and `process_line` (stdin) now catch exceptions from `executor.execute()` and `spork_code()`, displaying graceful error messages instead of crashing with tracebacks.
+
+- **REPL shutdown crash** (`repl.py`): Fixed malloc double-free / segfault on exit. Removed static `set_stdout_callback`/`set_stderr_callback` (which outlived the Python objects they referenced) in favor of instance-level callbacks cleaned up by `chuck.shutdown()`. Reordered cleanup to break all reference cycles before destroying C++ objects.
+
+- **nanobind ref leak on shutdown** (`common.py`): Fixed "leaked 1 instances" / "leaked 1 types" nanobind warnings on exit. Root cause: `setup_output_capture()` registers a `log_callback` closure (capturing `self`) as static class-level callbacks via `ChucK.set_stdout_callback()` / `ChucK.set_stderr_callback()`. These outlived the instance and pinned the entire `ChuckApplication -> ChucK` object graph, preventing C++ destructor from running. Fix: `cleanup()` now clears static callbacks to `None` before breaking instance references.
+
+- **Shell command execution** (`commands.py`): `$ <cmd>` now captures stdout/stderr (routed through `_log()`), enforces a 30-second timeout, reports nonzero exit codes, and catches `TimeoutExpired`/`OSError` instead of running unsanitized with no output capture or error handling.
+
+### Changed
+
+- **REPL help panel** (`repl.py`): F1 help text now shows `word / symbol` forms side by side for all commands that have both.
+
+- **REPL inline transcript** (`repl.py`): Replaced split input/output layout with a single-buffer Python/Jupyter-style transcript. Input and output are interleaved in one scrollable area -- commands echo as `[=>] ...`, output is indented, errors show inline with `[!]` prefix. Removed separate log window (F3 toggle), error bar, and transcript TextArea. Input prompt sits at the bottom of the transcript buffer.
 
 ## [0.1.10]
 
@@ -248,7 +317,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - `SessionPlayer` - Playback recorded sessions with speed control
   - `RecordedAction`, `RecordedSession` dataclasses
   - JSON-based session storage in `~/.numchuck/recordings/`
-  - REPL commands: `record start`, `record stop`, `record save <name>`, `playback <name>`
+  - REPL commands: `record start`, `record stop`, `record save <name>`, `play <name>`
 
 - **MIDI Learn Support** (`src/numchuck/midi.py`):
   - `MIDIMapping` - Map MIDI CC to ChucK global variables with min/max scaling
@@ -256,7 +325,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
   - `MIDILearnState` - State machine for MIDI learn mode
   - `generate_midi_listener_code()` - Generate ChucK code for MIDI control
   - `generate_midi_monitor_code()` - Generate MIDI monitor code
-  - REPL commands: `midi learn <var>`, `midi list`, `midi start`, `midi stop`
+  - REPL commands: `midi learn <var> <cc> [channel] [min max]`, `midi list`, `midi start`, `midi stop`
 
 - **OSC Integration** (`src/numchuck/osc.py`):
   - `OSCServer` - UDP server for receiving OSC messages

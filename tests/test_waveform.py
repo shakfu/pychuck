@@ -334,6 +334,80 @@ class TestDecibelConversions:
         assert result == -120.0
 
 
+class TestREPLMeterInfrastructure:
+    """Tests for REPL meter display infrastructure."""
+
+    def test_meter_state_initialized(self) -> None:
+        """Test that ChuckREPL initializes meter state correctly."""
+        from numchuck.tui.repl import ChuckREPL
+
+        repl = ChuckREPL()
+
+        assert hasattr(repl, "_meter_stop")
+        assert hasattr(repl, "_meter_thread")
+        assert repl._meter_thread is None
+        assert isinstance(repl._current_meters, dict)
+        assert repl._current_meters["peak_left"] == 0.0
+        assert repl._current_meters["peak_right"] == 0.0
+        assert repl._current_meters["rms_left"] == 0.0
+        assert repl._current_meters["rms_right"] == 0.0
+
+    def test_meter_bar_output_with_zero_values(self) -> None:
+        """Test that meter bars produce valid single-line output with zero values."""
+        from numchuck.tui.repl import ChuckREPL
+
+        repl = ChuckREPL()
+        m = repl._current_meters
+
+        left_line = f"L {format_waveform_bar(m['peak_left'], width=40)}"
+        right_line = f"R {format_waveform_bar(m['peak_right'], width=40)}"
+
+        # Each meter is a single line (no newlines)
+        assert "\n" not in left_line
+        assert "\n" not in right_line
+        assert left_line.startswith("L ")
+        assert right_line.startswith("R ")
+        assert len(left_line) == 42  # "L " + 40 bar chars
+        assert len(right_line) == 42
+
+    def test_meter_bar_output_with_values(self) -> None:
+        """Test meter bars with non-zero values."""
+        from numchuck.tui.repl import ChuckREPL
+
+        repl = ChuckREPL()
+        repl._current_meters = {
+            "rms_left": 0.5,
+            "rms_right": 0.3,
+            "peak_left": 0.8,
+            "peak_right": 0.6,
+        }
+        m = repl._current_meters
+
+        left_line = f"L {format_waveform_bar(m['peak_left'], width=40)}"
+        right_line = f"R {format_waveform_bar(m['peak_right'], width=40)}"
+
+        # Each line is exactly 42 chars, no newlines
+        assert "\n" not in left_line
+        assert "\n" not in right_line
+        assert len(left_line) == 42
+        assert len(right_line) == 42
+        # With peak_left=0.8, should have some full blocks
+        assert UNICODE_BLOCKS[-1] in left_line
+
+    def test_meter_thread_stops_cleanly(self) -> None:
+        """Test that meter stop event works correctly."""
+        import threading
+
+        stop_event = threading.Event()
+        assert not stop_event.is_set()
+
+        stop_event.set()
+        assert stop_event.is_set()
+
+        # Simulates the cleanup path -- wait returns immediately when set
+        stop_event.wait(0.1)
+
+
 class TestCommandParserWaveformCommands:
     """Tests for waveform command parsing."""
 

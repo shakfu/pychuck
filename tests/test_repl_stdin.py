@@ -100,6 +100,26 @@ class TestChuckREPLStdinProcessLine:
         # Error message contains "Failed" or "error" (case-insensitive)
         assert "fail" in result.lower() or "error" in result.lower()
 
+    def test_executor_exception_caught(self, repl):
+        """Test that exceptions from executor are caught gracefully."""
+        repl.executor.execute = MagicMock(
+            side_effect=RuntimeError("service unavailable")
+        )
+        result = repl.process_line("status")
+        assert result is not None
+        assert "Error" in result
+        assert "service unavailable" in result
+
+    def test_spork_code_exception_caught(self, repl):
+        """Test that exceptions from spork_code are caught gracefully."""
+        repl.app_state.shred_service.spork_code = MagicMock(
+            side_effect=AttributeError("chuck is None")
+        )
+        result = repl.process_line("SinOsc s => dac;")
+        assert result is not None
+        assert "Error" in result
+        assert "chuck is None" in result
+
 
 class TestChuckREPLStdinRun:
     """Tests for run method."""
@@ -216,12 +236,12 @@ class TestChuckREPLInit:
             assert repl.parser is not None
             assert repl.executor is not None
             assert repl.completer is not None
-            assert repl.error_message == ""
             assert repl.show_help_window is False
             assert repl.show_shreds_window is False
-            assert repl.show_log_window is False
-            assert repl.log_lines == []
-            assert repl.max_log_lines == 100
+            assert repl.max_transcript_lines == 500
+            # Single buffer starts with prompt
+            assert repl.buffer.text == "[=>] "
+            assert repl.input_start == len("[=>] ")
         finally:
             repl.cleanup()
 
@@ -254,11 +274,9 @@ class TestChuckREPLInit:
         repl = ChuckREPL()
         try:
             assert hasattr(repl, "app")
-            assert hasattr(repl, "input_buffer")
+            assert hasattr(repl, "buffer")
             assert hasattr(repl, "help_area")
-            assert hasattr(repl, "log_area")
             assert hasattr(repl, "shreds_area")
-            assert hasattr(repl, "prompt_html")
         finally:
             repl.cleanup()
 
@@ -271,7 +289,6 @@ class TestChuckREPLAddToLog:
     def repl(self):
         """Create a REPL instance."""
         repl = ChuckREPL()
-        # Mock app.invalidate to avoid UI updates
         repl.app.invalidate = MagicMock()
         yield repl
         repl.cleanup()
@@ -279,58 +296,55 @@ class TestChuckREPLAddToLog:
     def test_add_single_message(self, repl):
         """Test adding a single log message."""
         repl.add_to_log("Test message")
-        assert "Test message" in repl.log_lines
-        assert len(repl.log_lines) == 1
+        assert "  Test message" in repl.buffer.text
 
     def test_add_multiple_messages(self, repl):
         """Test adding multiple log messages."""
         repl.add_to_log("Message 1")
         repl.add_to_log("Message 2")
         repl.add_to_log("Message 3")
-        assert len(repl.log_lines) == 3
-        assert repl.log_lines == ["Message 1", "Message 2", "Message 3"]
+        assert "  Message 1" in repl.buffer.text
+        assert "  Message 2" in repl.buffer.text
+        assert "  Message 3" in repl.buffer.text
 
     def test_strips_trailing_newline(self, repl):
         """Test that trailing newlines are stripped."""
         repl.add_to_log("Message with newline\n")
-        assert repl.log_lines[0] == "Message with newline"
+        assert "  Message with newline" in repl.buffer.text
 
     def test_empty_message_ignored(self, repl):
         """Test that empty messages are ignored."""
+        initial = repl.buffer.text
         repl.add_to_log("")
-        assert len(repl.log_lines) == 0
+        assert repl.buffer.text == initial
 
     def test_whitespace_only_ignored(self, repl):
         """Test that whitespace-only messages after strip are ignored."""
+        initial = repl.buffer.text
         repl.add_to_log("\n")
-        assert len(repl.log_lines) == 0
+        assert repl.buffer.text == initial
 
-    def test_max_log_lines_limit(self, repl):
-        """Test that log is trimmed at max_log_lines."""
-        repl.max_log_lines = 5
-        for i in range(10):
-            repl.add_to_log(f"Message {i}")
-        assert len(repl.log_lines) == 5
-        # Should have the last 5 messages
-        assert repl.log_lines[0] == "Message 5"
-        assert repl.log_lines[-1] == "Message 9"
-
-    def test_updates_log_area_text(self, repl):
-        """Test that log_area text is updated."""
+    def test_updates_buffer_text(self, repl):
+        """Test that buffer text is updated with log messages."""
         repl.add_to_log("Line 1")
         repl.add_to_log("Line 2")
-        assert "Line 1" in repl.log_area.text
-        assert "Line 2" in repl.log_area.text
+        assert "Line 1" in repl.buffer.text
+        assert "Line 2" in repl.buffer.text
 
     def test_invalidates_app(self, repl):
         """Test that app.invalidate is called."""
         repl.add_to_log("Test")
         assert repl.app.invalidate.call_count >= 1
 
+    def test_prompt_remains_at_end(self, repl):
+        """Test that prompt is still at end after add_to_log."""
+        repl.add_to_log("Some output")
+        assert repl.buffer.text.endswith("[=>] ")
+
 
 @pytest.mark.tui
-class TestChuckREPLProcessInput:
-    """Tests for process_input method."""
+class TestChuckREPLSubmitInput:
+    """Tests for _submit_input method."""
 
     @pytest.fixture
     def repl(self):
@@ -341,106 +355,91 @@ class TestChuckREPLProcessInput:
         segfaults at interpreter shutdown.
         """
         repl = ChuckREPL()
-        # Initialize ChucK without setting static callbacks
         repl.app_state.setup()
-        # Mock app methods
         repl.app.invalidate = MagicMock()
         repl.app.exit = MagicMock()
         yield repl
         repl.cleanup()
 
-    def _create_buffer(self, text):
-        """Create a mock buffer with given text."""
-        buffer = MagicMock()
-        buffer.text = text
-        return buffer
+    def _simulate_input(self, repl, text):
+        """Simulate user typing text and submitting."""
+        repl.buffer.text = repl.buffer.text[:repl.input_start] + text
+        repl.buffer.cursor_position = len(repl.buffer.text)
+        repl._submit_input(text)
 
-    def test_empty_input_returns_true(self, repl):
-        """Test empty input returns True."""
-        buffer = self._create_buffer("")
-        result = repl.process_input(buffer)
-        assert result is True
+    def test_empty_input(self, repl):
+        """Test empty input adds new prompt."""
+        self._simulate_input(repl, "")
+        assert repl.buffer.text.endswith("[=>] ")
 
-    def test_whitespace_input_returns_true(self, repl):
-        """Test whitespace-only input returns True."""
-        buffer = self._create_buffer("   ")
-        result = repl.process_input(buffer)
-        assert result is True
+    def test_whitespace_input(self, repl):
+        """Test whitespace-only input adds new prompt."""
+        self._simulate_input(repl, "   ")
+        assert repl.buffer.text.endswith("[=>] ")
 
     def test_quit_command_exits(self, repl):
         """Test quit command calls app.exit."""
-        buffer = self._create_buffer("quit")
-        result = repl.process_input(buffer)
-        assert result is True
+        self._simulate_input(repl, "quit")
         repl.app.exit.assert_called_once()
 
     def test_exit_command_exits(self, repl):
         """Test exit command calls app.exit."""
-        buffer = self._create_buffer("exit")
-        result = repl.process_input(buffer)
-        assert result is True
+        self._simulate_input(repl, "exit")
         repl.app.exit.assert_called_once()
 
     def test_q_command_exits(self, repl):
         """Test 'q' command calls app.exit."""
-        buffer = self._create_buffer("q")
-        result = repl.process_input(buffer)
-        assert result is True
+        self._simulate_input(repl, "q")
         repl.app.exit.assert_called_once()
 
     def test_help_command_toggles_help(self, repl):
         """Test help command toggles help window."""
         assert repl.show_help_window is False
-        buffer = self._create_buffer("help")
-        repl.process_input(buffer)
+        self._simulate_input(repl, "help")
         assert repl.show_help_window is True
-        # Toggle again
-        repl.process_input(buffer)
+        self._simulate_input(repl, "help")
         assert repl.show_help_window is False
 
-    def test_clears_previous_error(self, repl):
-        """Test that previous error is cleared."""
-        repl.error_message = "Previous error"
-        buffer = self._create_buffer("?")
-        repl.process_input(buffer)
-        assert repl.error_message == ""
-
-    def test_unknown_command_sets_error(self, repl):
-        """Test unknown command sets error message."""
-        buffer = self._create_buffer("unknowncommand")
-        repl.process_input(buffer)
-        assert "Unknown command" in repl.error_message
+    def test_unknown_command_shows_error_in_buffer(self, repl):
+        """Test unknown command shows error inline in buffer."""
+        self._simulate_input(repl, "unknowncommand")
+        assert "[!] Unknown command" in repl.buffer.text
 
     def test_chuck_code_compilation(self, repl):
         """Test ChucK code is compiled."""
-        buffer = self._create_buffer("SinOsc s => dac;")
-        repl.process_input(buffer)
-        # Should have added a shred
+        self._simulate_input(repl, "SinOsc s => dac;")
         assert len(repl.session.shreds) == 1
 
-    def test_invalid_chuck_code_sets_error(self, repl):
-        """Test invalid ChucK code sets error message."""
-        buffer = self._create_buffer("SinOsc s => ;")  # Invalid
-        repl.process_input(buffer)
-        assert repl.error_message != ""
+    def test_invalid_chuck_code_shows_error_in_buffer(self, repl):
+        """Test invalid ChucK code shows error inline in buffer."""
+        self._simulate_input(repl, "SinOsc s => ;")
+        assert "[!]" in repl.buffer.text
 
     def test_list_shreds_command(self, repl):
         """Test list shreds command."""
-        buffer = self._create_buffer("?")
-        result = repl.process_input(buffer)
-        assert result is True
+        self._simulate_input(repl, "?")
+        assert repl.buffer.text.endswith("[=>] ")
 
     def test_current_time_command(self, repl):
         """Test current time command."""
-        buffer = self._create_buffer(".")
-        result = repl.process_input(buffer)
-        assert result is True
+        self._simulate_input(repl, ".")
+        assert repl.buffer.text.endswith("[=>] ")
 
     def test_invalidates_app_after_processing(self, repl):
         """Test that app.invalidate is called after processing."""
-        buffer = self._create_buffer("?")
-        repl.process_input(buffer)
+        self._simulate_input(repl, "?")
         assert repl.app.invalidate.call_count >= 1
+
+    def test_input_preserved_in_buffer(self, repl):
+        """Test that submitted input remains visible in buffer transcript."""
+        self._simulate_input(repl, "status")
+        assert "[=>] status" in repl.buffer.text
+
+    def test_new_prompt_after_command(self, repl):
+        """Test that a new prompt appears after command execution."""
+        self._simulate_input(repl, "?")
+        assert repl.buffer.text.endswith("[=>] ")
+        assert repl.buffer.cursor_position == len(repl.buffer.text)
 
 
 @pytest.mark.tui
@@ -557,11 +556,9 @@ class TestChuckREPLWindowToggles:
         repl.show_shreds_window = True
         assert repl.show_shreds_window is True
 
-    def test_log_window_toggle(self, repl):
-        """Test log window toggle state."""
-        assert repl.show_log_window is False
-        repl.show_log_window = True
-        assert repl.show_log_window is True
+    def test_buffer_starts_with_prompt(self, repl):
+        """Test buffer starts with just the prompt."""
+        assert repl.buffer.text == "[=>] "
 
 
 @pytest.mark.tui
@@ -583,34 +580,34 @@ class TestChuckREPLErrorHandling:
         yield repl
         repl.cleanup()
 
-    def _create_buffer(self, text):
-        """Create a mock buffer with given text."""
-        buffer = MagicMock()
-        buffer.text = text
-        return buffer
+    def _simulate_input(self, repl, text):
+        """Simulate user typing text and submitting."""
+        repl.buffer.text = repl.buffer.text[:repl.input_start] + text
+        repl.buffer.cursor_position = len(repl.buffer.text)
+        repl._submit_input(text)
 
-    def test_error_message_initially_empty(self, repl):
-        """Test error message is initially empty."""
-        assert repl.error_message == ""
+    def test_buffer_starts_with_prompt(self, repl):
+        """Test buffer starts with just the prompt."""
+        assert repl.buffer.text == "[=>] "
 
-    def test_error_set_on_unknown_command(self, repl):
-        """Test error is set on unknown command."""
-        buffer = self._create_buffer("xyz123")
-        repl.process_input(buffer)
-        assert "Unknown command" in repl.error_message
-        assert "xyz123" in repl.error_message
+    def test_error_inline_on_unknown_command(self, repl):
+        """Test error appears inline in buffer on unknown command."""
+        self._simulate_input(repl, "xyz123")
+        assert "[!] Unknown command" in repl.buffer.text
+        assert "xyz123" in repl.buffer.text
 
-    def test_error_cleared_on_next_input(self, repl):
-        """Test error is cleared on next input."""
-        repl.error_message = "Previous error"
-        buffer = self._create_buffer("?")
-        repl.process_input(buffer)
-        assert repl.error_message == ""
+    def test_error_inline_on_compilation_failure(self, repl):
+        """Test error appears inline in buffer on compilation failure."""
+        self._simulate_input(repl, "invalid => syntax => here;")
+        has_error = "[!]" in repl.buffer.text
+        assert has_error or len(repl.session.shreds) == 0
 
-    def test_error_on_compilation_failure(self, repl):
-        """Test error is set on ChucK compilation failure."""
-        buffer = self._create_buffer("invalid => syntax => here;")
-        repl.process_input(buffer)
-        # Error should be set (either from parser or spork_code)
-        # Note: The code might be parsed as ChucK code and fail to compile
-        assert repl.error_message != "" or len(repl.session.shreds) == 0
+    def test_input_visible_in_buffer(self, repl):
+        """Test that submitted input is visible in buffer."""
+        self._simulate_input(repl, "status")
+        assert "[=>] status" in repl.buffer.text
+
+    def test_new_prompt_after_error(self, repl):
+        """Test new prompt appears after error."""
+        self._simulate_input(repl, "xyz123")
+        assert repl.buffer.text.endswith("[=>] ")

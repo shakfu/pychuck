@@ -3,6 +3,7 @@ Tests for CLI argument parsing and commands.
 """
 import pytest
 import sys
+from unittest.mock import patch, MagicMock
 
 
 def test_cli_parser_creation():
@@ -175,3 +176,118 @@ def test_info_command_output(capsys):
     assert 'ChucK:' in captured.out
     assert 'ChucK int size:' in captured.out
     assert 'Active VMs:' in captured.out
+
+
+class TestOTFFlags:
+    """Tests for --otf and --otf-port flag parsing."""
+
+    def test_repl_otf_defaults(self):
+        """REPL OTF flags default to off and port 8888."""
+        from numchuck.cli.main import create_parser
+
+        parser = create_parser()
+        args = parser.parse_args(['repl'])
+        assert args.otf is False
+        assert args.otf_port == 8888
+
+    def test_repl_otf_enabled(self):
+        """REPL --otf flag enables OTF."""
+        from numchuck.cli.main import create_parser
+
+        parser = create_parser()
+        args = parser.parse_args(['repl', '--otf'])
+        assert args.otf is True
+        assert args.otf_port == 8888
+
+    def test_repl_otf_custom_port(self):
+        """REPL --otf-port sets custom port."""
+        from numchuck.cli.main import create_parser
+
+        parser = create_parser()
+        args = parser.parse_args(['repl', '--otf', '--otf-port', '9999'])
+        assert args.otf is True
+        assert args.otf_port == 9999
+
+    def test_edit_otf_defaults(self):
+        """Edit OTF flags default to off and port 8888."""
+        from numchuck.cli.main import create_parser
+
+        parser = create_parser()
+        args = parser.parse_args(['edit'])
+        assert args.otf is False
+        assert args.otf_port == 8888
+
+    def test_edit_otf_enabled(self):
+        """Edit --otf flag enables OTF."""
+        from numchuck.cli.main import create_parser
+
+        parser = create_parser()
+        args = parser.parse_args(['edit', '--otf', '--otf-port', '7777'])
+        assert args.otf is True
+        assert args.otf_port == 7777
+
+    def test_run_otf_defaults(self):
+        """Run OTF flags default to off and port 8888."""
+        from numchuck.cli.main import create_parser
+
+        parser = create_parser()
+        args = parser.parse_args(['run', 'file.ck'])
+        assert args.otf is False
+        assert args.otf_port == 8888
+
+    def test_run_otf_enabled(self):
+        """Run --otf flag enables OTF."""
+        from numchuck.cli.main import create_parser
+
+        parser = create_parser()
+        args = parser.parse_args(['run', 'file.ck', '--otf'])
+        assert args.otf is True
+
+    @patch("numchuck.cli.main.cmd_repl")
+    @patch("sys.stdin")
+    def test_bare_invocation_otf_defaults(self, mock_stdin, mock_cmd_repl):
+        """Bare 'numchuck' sets OTF defaults for REPL fallback."""
+        from numchuck.cli.main import main
+
+        mock_stdin.isatty.return_value = True
+
+        with patch("sys.argv", ["numchuck"]):
+            main()
+
+        mock_cmd_repl.assert_called_once()
+        args = mock_cmd_repl.call_args[0][0]
+        assert args.otf is False
+        assert args.otf_port == 8888
+
+
+class TestDefaultToRepl:
+    """Tests for bare 'numchuck' defaulting to REPL."""
+
+    @patch("numchuck.cli.main.cmd_repl")
+    @patch("sys.stdin")
+    def test_no_subcommand_tty_launches_repl(self, mock_stdin, mock_cmd_repl):
+        """Bare invocation on interactive terminal defaults to REPL."""
+        from numchuck.cli.main import main
+
+        mock_stdin.isatty.return_value = True
+
+        with patch("sys.argv", ["numchuck"]):
+            main()
+
+        mock_cmd_repl.assert_called_once()
+        args = mock_cmd_repl.call_args[0][0]
+        assert args.start_audio is False
+        assert args.files == []
+        assert args.stdin is False
+
+    @patch("sys.stdin")
+    def test_no_subcommand_piped_prints_help(self, mock_stdin):
+        """Bare invocation with piped stdin prints help and exits."""
+        from numchuck.cli.main import main
+
+        mock_stdin.isatty.return_value = False
+
+        with patch("sys.argv", ["numchuck"]):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+            assert exc_info.value.code == 1

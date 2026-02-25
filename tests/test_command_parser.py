@@ -332,6 +332,115 @@ class TestMiscCommands:
         assert cmd.type == "watch"
 
 
+class TestWordAliases:
+    """Tests for word aliases of symbol commands."""
+
+    def test_shreds_word(self, parser):
+        """Test 'shreds' as alias for '?'."""
+        cmd = parser.parse("shreds")
+        assert cmd.type == "list_shreds"
+
+    def test_shred_info_word(self, parser):
+        """Test 'shred <id>' as alias for '? <id>'."""
+        cmd = parser.parse("shred 3")
+        assert cmd.type == "shred_info"
+        assert cmd.args["id"] == 3
+
+    def test_globals_word(self, parser):
+        """Test 'globals' as alias for '?g'."""
+        cmd = parser.parse("globals")
+        assert cmd.type == "list_globals"
+
+    def test_audio_info_word(self, parser):
+        """Test 'audio' as alias for '?a'."""
+        cmd = parser.parse("audio")
+        assert cmd.type == "audio_info"
+
+    def test_start_audio_word(self, parser):
+        """Test 'start' as alias for '>'."""
+        cmd = parser.parse("start")
+        assert cmd.type == "start_audio"
+
+    def test_stop_audio_word(self, parser):
+        """Test 'stop' as alias for '||'."""
+        cmd = parser.parse("stop")
+        assert cmd.type == "stop_audio"
+
+    def test_shutdown_audio_word(self, parser):
+        """Test 'shutdown' as alias for 'X'."""
+        cmd = parser.parse("shutdown")
+        assert cmd.type == "shutdown_audio"
+
+    def test_compile_file_word(self, parser):
+        """Test 'compile file.ck' as alias for ': file.ck'."""
+        cmd = parser.parse("compile test.ck")
+        assert cmd.type == "compile_file"
+        assert cmd.args["path"] == "test.ck"
+
+    def test_exec_code_word_double_quotes(self, parser):
+        """Test 'exec "code"' as alias for '! "code"'."""
+        cmd = parser.parse('exec "<<< 1 >>>"')
+        assert cmd.type == "exec_code"
+        assert cmd.args["code"] == "<<< 1 >>>"
+
+    def test_exec_code_word_single_quotes(self, parser):
+        """Test "exec 'code'" with single quotes."""
+        cmd = parser.parse("exec 'SinOsc s => dac;'")
+        assert cmd.type == "exec_code"
+        assert cmd.args["code"] == "SinOsc s => dac;"
+
+    def test_shell_word(self, parser):
+        """Test 'shell cmd' as alias for '$ cmd'."""
+        cmd = parser.parse("shell ls -la")
+        assert cmd.type == "shell"
+        assert cmd.args["cmd"] == "ls -la"
+
+    def test_snippet_word(self, parser):
+        """Test 'snippet name' as alias for '@name'."""
+        cmd = parser.parse("snippet sine")
+        assert cmd.type == "load_snippet"
+        assert cmd.args["name"] == "sine"
+
+    def test_get_global_word(self, parser):
+        """Test 'get var' as alias for 'var?'."""
+        cmd = parser.parse("get myvar")
+        assert cmd.type == "get_global"
+        assert cmd.args["name"] == "myvar"
+
+    def test_set_global_word_int(self, parser):
+        """Test 'set var 42' as alias for 'var::42'."""
+        cmd = parser.parse("set freq 440")
+        assert cmd.type == "set_global"
+        assert cmd.args["name"] == "freq"
+        assert cmd.args["value"] == 440
+
+    def test_set_global_word_float(self, parser):
+        """Test 'set var 1.5' with float value."""
+        cmd = parser.parse("set gain 0.5")
+        assert cmd.type == "set_global"
+        assert cmd.args["name"] == "gain"
+        assert cmd.args["value"] == 0.5
+
+    def test_set_global_word_string(self, parser):
+        """Test 'set var "hello"' with string value."""
+        cmd = parser.parse('set msg "hello"')
+        assert cmd.type == "set_global"
+        assert cmd.args["name"] == "msg"
+        assert cmd.args["value"] == "hello"
+
+    def test_signal_event_word(self, parser):
+        """Test 'signal ev' as alias for 'ev!'."""
+        cmd = parser.parse("signal trigger")
+        assert cmd.type == "signal_event"
+        assert cmd.args["name"] == "trigger"
+
+    def test_broadcast_event_word(self, parser):
+        """Test 'broadcast ev' as alias for 'ev!!'."""
+        cmd = parser.parse("broadcast trigger")
+        assert cmd.type == "broadcast_event"
+        assert cmd.args["name"] == "trigger"
+
+
 class TestUnknownInput:
     """Tests for unknown/ChucK code input."""
 

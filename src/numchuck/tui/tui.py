@@ -19,6 +19,8 @@ def main(
     project_name: str | None = None,
     files: list[str] | None = None,
     force_stdin: bool = False,
+    otf_enable: bool = False,
+    otf_port: int = 8888,
 ) -> None:
     """
     Launch vanilla TUI REPL
@@ -43,13 +45,19 @@ def main(
             smart_enter=smart_enter,
             show_sidebar=show_sidebar,
             project_name=project_name,
+            otf_enable=otf_enable,
+            otf_port=otf_port,
         )
         repl.run(start_audio=start_audio, files=files or [])
     else:
         # Non-interactive mode - read from stdin
         from .repl import ChuckREPLStdin
 
-        stdin_repl = ChuckREPLStdin(project_name=project_name)
+        stdin_repl = ChuckREPLStdin(
+            project_name=project_name,
+            otf_enable=otf_enable,
+            otf_port=otf_port,
+        )
         exit_code = stdin_repl.run(start_audio=start_audio, files=files or [])
         sys.exit(exit_code)
 

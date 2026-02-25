@@ -6,10 +6,14 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
-from ..constants import POLL_INTERVAL
+from ..constants import POLL_INTERVAL, SHELL_COMMAND_TIMEOUT
 from .._numchuck import start_audio, stop_audio, shutdown_audio, audio_info
+from ..midi import MIDIMapping, generate_midi_listener_code, generate_midi_monitor_code
+from ..osc import OSCServer, OSCController
+from ..paths import get_recordings_dir
+from ..recorder import RecordedSession, list_recordings, get_recording_path
 from ..services import ShredService, GlobalsService, FileService
 from .logging import get_logger, TUILogger
 
@@ -36,6 +40,7 @@ class CommandExecutor:
         shred_service: ShredService | None = None,
         globals_service: GlobalsService | None = None,
         file_service: FileService | None = None,
+        log_callback: Callable[[str], None] | None = None,
     ) -> None:
         """Initialize CommandExecutor.
 
@@ -45,10 +50,12 @@ class CommandExecutor:
             shred_service: Optional ShredService (created if None)
             globals_service: Optional GlobalsService (created if None)
             file_service: Optional FileService (created if None)
+            log_callback: Optional callback for output (uses print if None)
         """
         self.session = session
         self._chuck = session.chuck
         self._logger = logger or get_logger()
+        self._log_callback = log_callback
 
         # Create ShredService if not provided
         self._shred_service: ShredService | None
@@ -99,6 +106,18 @@ class CommandExecutor:
             raise RuntimeError("FileService not available")
         return self._file_service
 
+    # Command types that should not be recorded (meta/recording commands)
+    _NO_RECORD_TYPES = frozenset(
+        {
+            "record_start",
+            "record_stop",
+            "record_save",
+            "record_discard",
+            "record_status",
+            "exit",
+        }
+    )
+
     def execute(self, cmd: Command) -> str | None:
         """Execute command and return error message if any.
 
@@ -108,6 +127,10 @@ class CommandExecutor:
         Returns:
             None on success, error message string on failure
         """
+        # Record action if recording is active
+        if self.session.recorder.is_recording and cmd.type not in self._NO_RECORD_TYPES:
+            self.session.recorder.record_command(cmd.type)
+
         handler = getattr(self, f"_cmd_{cmd.type}", None)
         if handler:
             result: str | None = handler(cmd.args)
@@ -240,9 +263,11 @@ class CommandExecutor:
         return None
 
     def _log(self, message: str) -> None:
-        """Log output message (goes to UI or stdout)."""
-        # For now, print to stdout; UI can capture via callbacks
-        print(message)
+        """Log output message (goes to UI callback or stdout)."""
+        if self._log_callback is not None:
+            self._log_callback(message)
+        else:
+            print(message)
 
     def _cmd_set_global(self, args: dict[str, Any]) -> str | None:
         """Set a global variable."""
@@ -389,9 +414,26 @@ class CommandExecutor:
                 self._logger.debug(f"Could not delete temp file: {temp_path}")
 
     def _cmd_shell(self, args: dict[str, Any]) -> str | None:
-        """Execute a shell command."""
-        subprocess.run(args["cmd"], shell=True)
-        return None
+        """Execute a shell command with output capture and timeout."""
+        try:
+            result = subprocess.run(
+                args["cmd"],
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=SHELL_COMMAND_TIMEOUT,
+            )
+            if result.stdout:
+                self._log(result.stdout.rstrip())
+            if result.stderr:
+                self._log(result.stderr.rstrip())
+            if result.returncode != 0:
+                return f"Command exited with code {result.returncode}"
+            return None
+        except subprocess.TimeoutExpired:
+            return f"Command timed out after {SHELL_COMMAND_TIMEOUT}s"
+        except OSError as e:
+            return f"Command failed: {e}"
 
     def _cmd_open_editor(self, args: dict[str, Any]) -> str | None:
         """Open external editor for code entry."""
@@ -496,6 +538,372 @@ class CommandExecutor:
             return None
         else:
             return f"Failed to spork snippet @{name}"
+
+    # -------------------------------------------------------------------------
+    # Waveform commands
+    # -------------------------------------------------------------------------
+
+    def _cmd_toggle_waveform(self, args: dict[str, Any]) -> str | None:
+        """Toggle waveform display."""
+        self.session.show_waveform = not self.session.show_waveform
+        state = "on" if self.session.show_waveform else "off"
+        self._log(f"waveform display {state}")
+        return None
+
+    def _cmd_waveform_on(self, args: dict[str, Any]) -> str | None:
+        """Enable waveform display."""
+        self.session.show_waveform = True
+        self._log("waveform display on")
+        return None
+
+    def _cmd_waveform_off(self, args: dict[str, Any]) -> str | None:
+        """Disable waveform display."""
+        self.session.show_waveform = False
+        self._log("waveform display off")
+        return None
+
+    # -------------------------------------------------------------------------
+    # Recording commands
+    # -------------------------------------------------------------------------
+
+    def _cmd_record_start(self, args: dict[str, Any]) -> str | None:
+        """Start recording a session."""
+        name = args.get("name") or "session"
+        try:
+            self.session.recorder.start(name)
+            self._log(f"recording started: {name}")
+            return None
+        except RuntimeError as e:
+            return str(e)
+
+    def _cmd_record_stop(self, args: dict[str, Any]) -> str | None:
+        """Stop recording and auto-save."""
+        try:
+            recorded = self.session.recorder.stop()
+            recordings_dir = get_recordings_dir()
+            path = get_recording_path(recordings_dir, recorded.name)
+            recorded.save(path)
+            self._log(
+                f"recording stopped: {recorded.name} "
+                f"({recorded.action_count} actions, saved to {path})"
+            )
+            return None
+        except RuntimeError as e:
+            return str(e)
+
+    def _cmd_record_save(self, args: dict[str, Any]) -> str | None:
+        """Save the current/last recording under a new name."""
+        name = args["name"]
+        if not self.session.recorder.is_recording:
+            return "Not currently recording"
+        try:
+            recorded = self.session.recorder.stop()
+            recorded.name = name
+            recordings_dir = get_recordings_dir()
+            path = get_recording_path(recordings_dir, name)
+            recorded.save(path)
+            self._log(f"recording saved as: {name} ({recorded.action_count} actions)")
+            return None
+        except RuntimeError as e:
+            return str(e)
+
+    def _cmd_record_discard(self, args: dict[str, Any]) -> str | None:
+        """Discard the current recording."""
+        if not self.session.recorder.is_recording:
+            return "Not currently recording"
+        self.session.recorder.discard()
+        self._log("recording discarded")
+        return None
+
+    def _cmd_record_status(self, args: dict[str, Any]) -> str | None:
+        """Show recording status."""
+        recorder = self.session.recorder
+        if recorder.is_recording:
+            self._log(f"recording: {recorder.session_name}")
+            self._log(f"  elapsed: {recorder.elapsed_time:.1f}s")
+            self._log(f"  actions: {recorder.action_count}")
+        else:
+            self._log("not recording")
+        return None
+
+    # -------------------------------------------------------------------------
+    # Playback commands
+    # -------------------------------------------------------------------------
+
+    def _cmd_play(self, args: dict[str, Any]) -> str | None:
+        """Start playback of a recorded session."""
+        name = args["name"]
+        speed = args.get("speed", 1.0)
+
+        recordings_dir = get_recordings_dir()
+        path = get_recording_path(recordings_dir, name)
+
+        if not path.exists():
+            return f"Recording not found: {name}"
+
+        try:
+            recorded = RecordedSession.load(path)
+        except Exception as e:
+            return f"Failed to load recording: {e}"
+
+        player = self.session.player
+
+        def on_action(action: Any) -> None:
+            if action.action_type == "command":
+                from .parser import CommandParser
+
+                parser = CommandParser()
+                cmd = parser.parse(action.content)
+                if cmd:
+                    self.execute(cmd)
+            elif action.action_type == "code":
+                self.shred_service.spork_code(action.content)
+
+        player.load(recorded)
+        player.set_action_callback(on_action)
+        player.start(speed)
+        self._log(
+            f"playback started: {name} "
+            f"({recorded.action_count} actions, speed={speed}x)"
+        )
+        return None
+
+    def _cmd_play_pause(self, args: dict[str, Any]) -> str | None:
+        """Pause playback."""
+        player = self.session.player
+        if not player.is_playing:
+            return "No playback in progress"
+        player.pause()
+        self._log("playback paused")
+        return None
+
+    def _cmd_play_resume(self, args: dict[str, Any]) -> str | None:
+        """Resume playback."""
+        player = self.session.player
+        if not player.is_playing:
+            return "No playback in progress"
+        if not player.is_paused:
+            return "Playback is not paused"
+        player.resume()
+        self._log("playback resumed")
+        return None
+
+    def _cmd_play_stop(self, args: dict[str, Any]) -> str | None:
+        """Stop playback."""
+        player = self.session.player
+        if not player.is_playing:
+            return "No playback in progress"
+        player.stop()
+        self._log("playback stopped")
+        return None
+
+    def _cmd_list_recordings(self, args: dict[str, Any]) -> str | None:
+        """List all saved recordings."""
+        recordings_dir = get_recordings_dir()
+        names = list_recordings(recordings_dir)
+        if not names:
+            self._log("no recordings found")
+            return None
+
+        self._log("recordings:")
+        for name in names:
+            self._log(f"  {name}")
+        return None
+
+    # -------------------------------------------------------------------------
+    # MIDI commands
+    # -------------------------------------------------------------------------
+
+    def _cmd_midi_learn(self, args: dict[str, Any]) -> str | None:
+        """Add a MIDI CC to global variable mapping."""
+        name = args["name"]
+        cc = args["cc"]
+        channel = args.get("channel", 0)
+        min_val = args.get("min", 0.0)
+        max_val = args.get("max", 1.0)
+
+        try:
+            mapping = MIDIMapping(
+                channel=channel,
+                cc_number=cc,
+                global_name=name,
+                min_value=min_val,
+                max_value=max_val,
+            )
+        except ValueError as e:
+            return str(e)
+
+        self.session.midi_mappings.add(mapping)
+        self._log(f"MIDI mapping: ch{channel} cc{cc} -> {name} [{min_val}, {max_val}]")
+
+        # If listener is running, respork with updated mappings
+        if self.session.midi_listener_shred_id is not None:
+            self._respork_midi_listener()
+
+        return None
+
+    def _cmd_midi_list(self, args: dict[str, Any]) -> str | None:
+        """List all MIDI mappings."""
+        mappings = self.session.midi_mappings
+        if len(mappings) == 0:
+            self._log("no MIDI mappings")
+            return None
+
+        self._log(f"{'Ch':<4} {'CC':<5} {'Global':<20} {'Range':<15}")
+        self._log("-" * 46)
+        for m in mappings:
+            self._log(
+                f"{m.channel:<4} {m.cc_number:<5} {m.global_name:<20} "
+                f"[{m.min_value}, {m.max_value}]"
+            )
+        return None
+
+    def _cmd_midi_remove(self, args: dict[str, Any]) -> str | None:
+        """Remove a MIDI mapping by global variable name."""
+        name = args["name"]
+        if self.session.midi_mappings.remove_by_global(name):
+            self._log(f"removed MIDI mapping for {name}")
+            # Respork listener if running
+            if self.session.midi_listener_shred_id is not None:
+                if len(self.session.midi_mappings) > 0:
+                    self._respork_midi_listener()
+                else:
+                    self._stop_midi_listener()
+            return None
+        return f"No MIDI mapping for '{name}'"
+
+    def _cmd_midi_start(self, args: dict[str, Any]) -> str | None:
+        """Start the MIDI listener shred."""
+        if len(self.session.midi_mappings) == 0:
+            return "No MIDI mappings defined (use 'midi learn' first)"
+
+        if self.session.midi_listener_shred_id is not None:
+            return "MIDI listener already running"
+
+        return self._spork_midi_listener()
+
+    def _cmd_midi_stop(self, args: dict[str, Any]) -> str | None:
+        """Stop the MIDI listener shred."""
+        if self.session.midi_listener_shred_id is None:
+            return "MIDI listener not running"
+        self._stop_midi_listener()
+        self._log("MIDI listener stopped")
+        return None
+
+    def _cmd_midi_status(self, args: dict[str, Any]) -> str | None:
+        """Show MIDI status."""
+        mappings = self.session.midi_mappings
+        listener = self.session.midi_listener_shred_id
+        self._log(f"MIDI mappings: {len(mappings)}")
+        if listener is not None:
+            self._log(f"MIDI listener: running (shred {listener})")
+        else:
+            self._log("MIDI listener: stopped")
+        return None
+
+    def _cmd_midi_monitor(self, args: dict[str, Any]) -> str | None:
+        """Start MIDI monitor shred."""
+        code = generate_midi_monitor_code()
+        result = self.shred_service.spork_code(code, name="midi-monitor")
+        if result.success:
+            self._log("MIDI monitor started (move a controller...)")
+            return None
+        return "Failed to start MIDI monitor"
+
+    def _spork_midi_listener(self) -> str | None:
+        """Spork the MIDI listener shred. Returns error or None."""
+        code = generate_midi_listener_code(self.session.midi_mappings)
+        if not code:
+            return "No MIDI mappings to generate listener for"
+        result = self.shred_service.spork_code(code, name="midi-listener")
+        if result.success:
+            self.session.midi_listener_shred_id = result.shred_id
+            self._log(f"MIDI listener started (shred {result.shred_id})")
+            return None
+        return "Failed to start MIDI listener"
+
+    def _stop_midi_listener(self) -> None:
+        """Stop the MIDI listener shred."""
+        sid = self.session.midi_listener_shred_id
+        if sid is not None:
+            self.shred_service.remove_shred(sid)
+            self.session.midi_listener_shred_id = None
+
+    def _respork_midi_listener(self) -> None:
+        """Remove and re-spork the MIDI listener with updated mappings."""
+        self._stop_midi_listener()
+        self._spork_midi_listener()
+
+    # -------------------------------------------------------------------------
+    # OSC commands
+    # -------------------------------------------------------------------------
+
+    def _cmd_osc_start(self, args: dict[str, Any]) -> str | None:
+        """Start the OSC server."""
+        port = args.get("port", 9000)
+
+        if self.session.osc_server is not None and self.session.osc_server.is_running:
+            return "OSC server already running"
+
+        server = OSCServer(port=port)
+
+        # Create controller with callbacks wired to executor methods.
+        # Lambdas discard return values to satisfy Callable[..., None] signatures.
+        def _set_global(name: str, val: float) -> None:
+            self.globals_service.set_global(name, val)
+
+        def _spork(code: str) -> None:
+            self.shred_service.spork_code(code)
+
+        def _remove(sid: int) -> None:
+            self.shred_service.remove_shred(sid)
+
+        def _clear() -> None:
+            self.shred_service.clear_vm()
+
+        def _signal(name: str) -> None:
+            self.globals_service.signal_event(name)
+
+        def _broadcast(name: str) -> None:
+            self.globals_service.broadcast_event(name)
+
+        controller = OSCController(
+            on_set_global=_set_global,
+            on_spork=_spork,
+            on_remove=_remove,
+            on_clear=_clear,
+            on_signal_event=_signal,
+            on_broadcast_event=_broadcast,
+        )
+        controller.register_with_server(server)
+
+        if server.start():
+            self.session.osc_server = server
+            self.session.osc_controller = controller
+            self._log(f"OSC server started on port {port}")
+            return None
+        return f"Failed to start OSC server on port {port}"
+
+    def _cmd_osc_stop(self, args: dict[str, Any]) -> str | None:
+        """Stop the OSC server."""
+        if self.session.osc_server is None or not self.session.osc_server.is_running:
+            return "OSC server not running"
+
+        self.session.osc_server.stop()
+        self.session.osc_server = None
+        self.session.osc_controller = None
+        self._log("OSC server stopped")
+        return None
+
+    def _cmd_osc_status(self, args: dict[str, Any]) -> str | None:
+        """Show OSC server status."""
+        server = self.session.osc_server
+        if server is not None and server.is_running:
+            self._log(f"OSC server: running on port {server.port}")
+            self._log(f"  handlers: {len(server.handlers)}")
+        else:
+            self._log("OSC server: stopped")
+        return None
 
     # -------------------------------------------------------------------------
     # File watching commands

@@ -522,59 +522,59 @@ class TestCommandParserRecordingCommands:
         assert cmd is not None
         assert cmd.type == "record_status"
 
-    def test_parse_playback(self) -> None:
-        """Test parsing 'playback name' command."""
+    def test_parse_play(self) -> None:
+        """Test parsing 'play name' command."""
         from numchuck.tui.parser import CommandParser
 
         parser = CommandParser()
-        cmd = parser.parse("playback mysession")
+        cmd = parser.parse("play mysession")
 
         assert cmd is not None
-        assert cmd.type == "playback"
+        assert cmd.type == "play"
         assert cmd.args["name"] == "mysession"
         assert cmd.args["speed"] == 1.0
 
-    def test_parse_playback_with_speed(self) -> None:
-        """Test parsing 'playback name speed' command."""
+    def test_parse_play_with_speed(self) -> None:
+        """Test parsing 'play name speed' command."""
         from numchuck.tui.parser import CommandParser
 
         parser = CommandParser()
-        cmd = parser.parse("playback mysession 2.0")
+        cmd = parser.parse("play mysession 2.0")
 
         assert cmd is not None
-        assert cmd.type == "playback"
+        assert cmd.type == "play"
         assert cmd.args["name"] == "mysession"
         assert cmd.args["speed"] == 2.0
 
-    def test_parse_playback_pause(self) -> None:
-        """Test parsing 'playback pause' command."""
+    def test_parse_play_pause(self) -> None:
+        """Test parsing 'play pause' command."""
         from numchuck.tui.parser import CommandParser
 
         parser = CommandParser()
-        cmd = parser.parse("playback pause")
+        cmd = parser.parse("play pause")
 
         assert cmd is not None
-        assert cmd.type == "playback_pause"
+        assert cmd.type == "play_pause"
 
-    def test_parse_playback_resume(self) -> None:
-        """Test parsing 'playback resume' command."""
+    def test_parse_play_resume(self) -> None:
+        """Test parsing 'play resume' command."""
         from numchuck.tui.parser import CommandParser
 
         parser = CommandParser()
-        cmd = parser.parse("playback resume")
+        cmd = parser.parse("play resume")
 
         assert cmd is not None
-        assert cmd.type == "playback_resume"
+        assert cmd.type == "play_resume"
 
-    def test_parse_playback_stop(self) -> None:
-        """Test parsing 'playback stop' command."""
+    def test_parse_play_stop(self) -> None:
+        """Test parsing 'play stop' command."""
         from numchuck.tui.parser import CommandParser
 
         parser = CommandParser()
-        cmd = parser.parse("playback stop")
+        cmd = parser.parse("play stop")
 
         assert cmd is not None
-        assert cmd.type == "playback_stop"
+        assert cmd.type == "play_stop"
 
     def test_parse_recordings_list(self) -> None:
         """Test parsing 'recordings' command."""
