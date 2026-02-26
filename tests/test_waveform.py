@@ -334,6 +334,10 @@ class TestDecibelConversions:
         assert result == -120.0
 
 
+@pytest.mark.skipif(
+    not hasattr(__import__("sys"), "stdin") or not getattr(__import__("sys").stdout, "isatty", lambda: False)(),
+    reason="Requires a real TTY (prompt_toolkit Application needs a console)",
+)
 class TestREPLMeterInfrastructure:
     """Tests for REPL meter display infrastructure."""
 

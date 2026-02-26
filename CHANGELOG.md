@@ -103,6 +103,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 - **Shell command execution** (`commands.py`): `$ <cmd>` now captures stdout/stderr (routed through `_log()`), enforces a 30-second timeout, reports nonzero exit codes, and catches `TimeoutExpired`/`OSError` instead of running unsanitized with no output capture or error handling.
 
+- **ConvRev segfault on ARM64 macOS CI** (`test_examples.py`): Fixed segfault in `test_chugin_convrev_example` on macos-14 (ARM64). Root cause: `_check_chugin_available()` created up to 2 ChucK instances without calling `shutdown()`, leaving ConvRev's background `std::thread` active. When the test then created a new instance, concurrent ConvRev destructor/thread cleanup races caused a segfault (ARM64's stricter memory ordering exposed this). Fix: all ChucK instances in `test_examples.py` now call `remove_all_shreds()` + `shutdown()` before going out of scope.
+
+- **Windows CI test failures** (`test_waveform.py`): Fixed 3 `TestREPLMeterInfrastructure` tests failing on Windows CI with `NoConsoleScreenBufferError`. These tests instantiate `ChuckREPL()` which creates a `prompt_toolkit.Application` requiring a real TTY. Fix: skip the test class when stdout is not a TTY.
+
 ### Changed
 
 - **REPL help panel** (`repl.py`): F1 help text now shows `word / symbol` forms side by side for all commands that have both.

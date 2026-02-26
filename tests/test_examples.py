@@ -35,6 +35,7 @@ def test_compile_from_file():
 
     # Clean up
     chuck.remove_all_shreds()
+    chuck.shutdown()
 
 
 def test_file_with_working_directory():
@@ -52,6 +53,9 @@ def test_file_with_working_directory():
     full_path = normalize_path(os.path.join(examples_dir, 'blit2.ck'))
     success, _ = chuck.compile_file(full_path)
     assert success
+
+    chuck.remove_all_shreds()
+    chuck.shutdown()
 
 
 def test_chugin_loading():
@@ -99,6 +103,9 @@ def test_chugin_loading():
         '''
         success2, _ = chuck.compile_code(simple_code)
         assert success2, "ChucK should work even without chugins"
+        chuck.remove_all_shreds()
+
+    chuck.shutdown()
 
 
 def test_realtime_file_playback():
@@ -129,6 +136,8 @@ while(true) { 1::samp => now; }
         numchuck.shutdown_audio()
 
     # Clean up
+    chuck.remove_all_shreds()
+    chuck.shutdown()
     os.remove(test_file)
 
 
@@ -159,6 +168,7 @@ def test_multiple_file_compilation():
 
     # Clean up
     chuck.remove_all_shreds()
+    chuck.shutdown()
     os.remove(file1)
     os.remove(file2)
 
@@ -181,6 +191,7 @@ def test_file_with_syntax_error():
     assert len(shred_ids) == 0, "Should not create any shreds"
 
     # Clean up
+    chuck.shutdown()
     os.remove(error_file)
 
 
@@ -226,6 +237,8 @@ def _check_chugin_available(chugin_name: str) -> tuple[bool, bool]:
 
     code = f'@import "{chugin_name}"; {chugin_name} test;'
     success, _ = chuck.compile_code(code)
+    chuck.remove_all_shreds()
+    chuck.shutdown()
     if success:
         return (True, True)  # Available via static linking
 
@@ -242,6 +255,8 @@ def _check_chugin_available(chugin_name: str) -> tuple[bool, bool]:
     chuck2.init()
 
     success, _ = chuck2.compile_code(code)
+    chuck2.remove_all_shreds()
+    chuck2.shutdown()
     if success:
         return (True, False)  # Available via dynamic loading
 
@@ -293,6 +308,7 @@ def test_chugin_bitcrusher_strict():
     assert max_amplitude > 0.01, f"Expected audio output, got max amplitude {max_amplitude}"
 
     chuck.remove_all_shreds()
+    chuck.shutdown()
 
 
 def test_chugin_gverb_strict():
@@ -337,6 +353,7 @@ def test_chugin_gverb_strict():
     assert max_amplitude > 0.001, f"Expected reverb output, got max amplitude {max_amplitude}"
 
     chuck.remove_all_shreds()
+    chuck.shutdown()
 
 
 def test_chugin_convrev_example():
@@ -385,3 +402,4 @@ def test_chugin_convrev_example():
     assert max_amplitude > 0.001, f"Expected audio output from ConvRev, got max amplitude {max_amplitude}"
 
     chuck.remove_all_shreds()
+    chuck.shutdown()
