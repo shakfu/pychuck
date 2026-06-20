@@ -1029,6 +1029,14 @@ t_CKBOOL ChucK::shutdown()
         {
             ck_usleep(1000);
         }
+
+#ifdef __PLATFORM_WINDOWS__
+        // numchuck local patch (see docs/windows_fix.md): Windows audio threads
+        // (WASAPI/DirectSound) need additional time to fully terminate after the
+        // VM reports stopped, otherwise teardown frees memory still in use ->
+        // access violation (0xC0000005). Re-applied after chuck source updates.
+        ck_usleep( 50000 ); // 50ms delay
+#endif
     }
 
     // free vm, compiler, friends

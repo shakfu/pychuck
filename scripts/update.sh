@@ -44,8 +44,29 @@ function update_new_chugin() {
 }
 
 
+# Re-apply numchuck local patches to vendored chuck source. A wholesale chuck
+# update overwrites core/ and host/, silently dropping any source patch (e.g.
+# the Windows shutdown delay -- see docs/windows_fix.md, which regressed exactly
+# this way). Hard-fail if a patch no longer applies so the conflict is noticed
+# instead of shipping a broken Windows build.
+function apply_chuck_patches() {
+	local patch
+	for patch in scripts/patches/*.patch; do
+		[ -e "$patch" ] || continue
+		echo "applying chuck patch: ${patch}"
+		if ! git apply "$patch"; then
+			echo "ERROR: failed to apply ${patch}" >&2
+			echo "       chuck source likely changed upstream; resolve manually." >&2
+			echo "       chuck-old preserved for reference." >&2
+			return 1
+		fi
+	done
+}
+
+
 function update() {
-	update_chuck
+	update_chuck && \
+	apply_chuck_patches && \
 	rm -rf ${THIRDPARTY_DIR}/chuck-old
 	# rm -rf ${THIRDPARTY_DIR}/chugins-old
 }

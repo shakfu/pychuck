@@ -1,6 +1,14 @@
 # Windows Access Violation Fix
 
-**Status: FIXED** (upstream fix in `thirdparty/chuck`)
+**Status: FIXED via a numchuck local patch to vendored chuck** (`thirdparty/chuck/core/chuck.cpp`).
+
+> IMPORTANT: `thirdparty/chuck` is *vendored*, not a git submodule, and
+> `scripts/update.sh` overwrites it wholesale on update -- which silently
+> dropped this patch once already and reintroduced the crash. The patch now
+> lives in `scripts/patches/0001-windows-shutdown-delay.patch` and is
+> re-applied automatically by `apply_chuck_patches` in `update.sh` (which
+> hard-fails if it no longer applies). Do not rely on the edit to
+> `chuck.cpp` surviving an update on its own.
 
 ## Problem Summary
 
@@ -397,7 +405,7 @@ public:
 4. **Maintainability**: No wrapper class or complex binding changes needed
 5. **Automatic**: Works for both explicit cleanup and garbage collection
 
-Since ChucK is included as a submodule in numchuck, we have full control over the upstream code.
+Since ChucK is vendored in numchuck, we can patch the upstream code -- but the patch must be tracked in `scripts/patches/` and re-applied by `update.sh`, because a wholesale update overwrites the vendored tree (this is how the fix regressed once; see the note at the top of this document).
 
 ## Testing
 
