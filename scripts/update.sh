@@ -37,7 +37,10 @@ function update_new_chugin() {
 	rm -rf ${THIRDPARTY_DIR}/chugins-new/"$1"/*.xcodeproj && \
 	rm -rf ${THIRDPARTY_DIR}/chugins-new/"$1"/*.vcxproj && \
 	rm -rf ${THIRDPARTY_DIR}/chugins-new/"$1"/*.sln && \
-	rm -rf ${THIRDPARTY_DIR}/chugins-new/"$1"/.gitignore
+	rm -rf ${THIRDPARTY_DIR}/chugins-new/"$1"/.gitignore && \
+	find ${THIRDPARTY_DIR}/chugins-new/"$1" -type f \
+		\( -name '*.o' -o -name '*.obj' -o -name '*.chug' \
+		   -o -name '*.a' -o -name '*.so' -o -name '*.dylib' \) -delete
 }
 
 
