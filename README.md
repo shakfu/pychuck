@@ -521,7 +521,7 @@ chuck = Chuck(sample_rate=48000, output_channels=2)
 
 # Properties instead of get_param/set_param
 print(chuck.sample_rate)   # 48000
-print(chuck.version)       # "1.5.5.3-dev (chai)"
+print(chuck.version)       # "1.5.5.9-dev (chai)"
 
 # Compile and run
 success, shreds = chuck.compile("SinOsc s => dac; 1::second => now;")
