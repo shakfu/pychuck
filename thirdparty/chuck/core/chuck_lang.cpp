@@ -1316,11 +1316,11 @@ t_CKBOOL init_class_array( Chuck_Env * env, Chuck_Type * type )
 
     // add capacity() // 1.4.1.0
     func = make_new_mfun( "int", "capacity", array_set_capacity );
-    func->doc = "ensure capacity of the array (number of addressable elements).";
+    func->doc = "ensure mininum capacity of the array.";
     func->add_arg( "int", "val" );
     if( !type_engine_import_mfun( env, func ) ) goto error;
     func = make_new_mfun( "int", "capacity", array_get_capacity );
-    func->doc = "get current capacity of the array (number of addressable elements).";
+    func->doc = "get current capacity of the array.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add isInMap() | 1.5.0.8 previously was find()
@@ -3823,7 +3823,10 @@ static void typeGetTypes(
     for( t_CKINT i = 0; i < types.size(); i++ )
     {
         // check special
-        t_CKBOOL special = (types[i]->base_name.length()>0 && types[i]->base_name[0] == '@');
+        // 1.5.5.8 (ge) account for "auto"
+        t_CKBOOL special = (types[i]->base_name.length()>0 &&
+                           (types[i]->base_name[0] == '@' ||
+                            types[i]->xid == te_auto) );
         // if not requesting special types
         if( !isSpecial && (special == TRUE) ) continue;
         // check origin

@@ -101,10 +101,11 @@ t_CKBOOL type_engine_check_code_segment( Chuck_Env * env, a_Stmt_Code stmt, t_CK
 t_CKBOOL type_engine_check_func_def( Chuck_Env * env, a_Func_Def func_def );
 t_CKBOOL type_engine_check_class_def( Chuck_Env * env, a_Class_Def class_def );
 t_CKBOOL type_engine_remember_doc( Chuck_Env * env, a_Stmt_Doc doc );
-t_CKBOOL type_engine_check_stmt_list_for_doc_only( Chuck_Env * env, a_Stmt_List list );
-void type_engine_set_doc( Chuck_Env * env, Chuck_Func * func_def );
-void type_engine_set_doc( Chuck_Env * env, Chuck_Type * class_def );
-void type_engine_set_doc( Chuck_Env * env, Chuck_Value * value );
+t_CKBOOL type_engine_remember_example( Chuck_Env * env, a_Stmt_Example doc );
+t_CKBOOL type_engine_check_stmt_list_for_documentation_only( Chuck_Env * env, a_Stmt_List list );
+t_CKBOOL type_engine_set_doc( Chuck_Env * env, Chuck_Func * func_def );
+t_CKBOOL type_engine_set_doc( Chuck_Env * env, Chuck_Type * class_def );
+t_CKBOOL type_engine_set_doc( Chuck_Env * env, Chuck_Value * value );
 
 // helpers
 void type_engine_init_op_overload_builtin( Chuck_Env * env );
@@ -1009,7 +1010,8 @@ t_CKBOOL type_engine_check_context( Chuck_Env * env,
             {
                 // pick up any @doc statements... the latest is assumed to pertain to an upcoming class | 1.5.4.5 (ge) added
                 // this ensures that @doc (which comes *before* the class def) works for imported class definitions
-                ret = type_engine_check_stmt_list_for_doc_only( env, prog->section->stmt_list );
+                // semantically also include @example statements
+                ret = type_engine_check_stmt_list_for_documentation_only( env, prog->section->stmt_list );
                 // bypass the rest
                 break;
             }
@@ -1182,10 +1184,10 @@ t_CKBOOL type_engine_check_stmt_list( Chuck_Env * env, a_Stmt_List list )
 
 
 //-----------------------------------------------------------------------------
-// name: type_engine_check_stmt_list_for_doc_only() | 1.5.4.5 (ge) added
-// desc: type check a statement list, but only paying attention to @doc statements
+// name: type_engine_check_stmt_list_for_documentation_only() | 1.5.4.5 (ge) added
+// desc: type check a statement list, but only paying attention to @doc @example statements
 //-----------------------------------------------------------------------------
-t_CKBOOL type_engine_check_stmt_list_for_doc_only( Chuck_Env * env, a_Stmt_List list )
+t_CKBOOL type_engine_check_stmt_list_for_documentation_only( Chuck_Env * env, a_Stmt_List list )
 {
     // return type
     t_CKBOOL ret = TRUE;
@@ -1201,6 +1203,12 @@ t_CKBOOL type_engine_check_stmt_list_for_doc_only( Chuck_Env * env, a_Stmt_List 
             {
                 case ae_stmt_doc: // 1.5.4.5 (ge) added
                     ret = type_engine_remember_doc( env, &list->stmt->stmt_doc );
+                    // actually, allow doc errors here, for now, including consecutive @doc
+                    if( !ret ) ret = TRUE; // lol
+                    break;
+
+                case ae_stmt_example: // 1.5.5.8 (ge,nick,alex) added
+                    ret = type_engine_remember_example( env, &list->stmt->stmt_example );
                     // actually, allow doc errors here, for now, including consecutive @doc
                     if( !ret ) ret = TRUE; // lol
                     break;
@@ -1254,6 +1262,7 @@ t_CKBOOL type_engine_verify_stmt_static( Chuck_Env * env, a_Stmt stmt )
         case ae_stmt_return:
         case ae_stmt_code:
         case ae_stmt_doc: // 1.5.4.4 (ge) added
+        case ae_stmt_example: // 1.5.5.8 (ge,nick,alex) added
         default:
             // shouldn't get here
             EM_error2( stmt->where,
@@ -1296,6 +1305,10 @@ t_CKBOOL type_engine_check_stmt( Chuck_Env * env, a_Stmt stmt )
 
         case ae_stmt_doc: // 1.5.4.4 (ge) added
             ret = type_engine_remember_doc( env, &stmt->stmt_doc );
+            break;
+
+        case ae_stmt_example: // 1.5.5.8 (ge,nick,alex) added
+            ret = type_engine_remember_example( env, &stmt->stmt_example );
             break;
 
         case ae_stmt_if:
@@ -1426,6 +1439,8 @@ t_CKBOOL type_engine_check_if( Chuck_Env * env, a_Stmt_If stmt )
     case te_float:
     case te_dur:
     case te_time:
+    case te_object:
+    case te_user:
         break;
 
     default:
@@ -1487,6 +1502,8 @@ t_CKBOOL type_engine_check_for( Chuck_Env * env, a_Stmt_For stmt )
     case te_float:
     case te_dur:
     case te_time:
+    case te_object:
+    case te_user:
         break;
 
     default:
@@ -1670,6 +1687,8 @@ t_CKBOOL type_engine_check_while( Chuck_Env * env, a_Stmt_While stmt )
     case te_float:
     case te_dur:
     case te_time:
+    case te_object:
+    case te_user:
         break;
 
     default:
@@ -1716,6 +1735,8 @@ t_CKBOOL type_engine_check_until( Chuck_Env * env, a_Stmt_Until stmt )
     case te_float:
     case te_dur:
     case te_time:
+    case te_object:
+    case te_user:
         break;
 
     default:
@@ -1923,49 +1944,116 @@ t_CKBOOL type_engine_remember_doc( Chuck_Env * env, a_Stmt_Doc doc )
 
 
 //-----------------------------------------------------------------------------
+// name: type_engine_remember_example()
+// desc: remember @example statement for upcoming target | 1.5.5.8 (ge,nick,alex) added
+//-----------------------------------------------------------------------------
+t_CKBOOL type_engine_remember_example( Chuck_Env * env, a_Stmt_Example example )
+{
+    // get the current context
+    Chuck_Context * context = env->context;
+    // no context?
+    if( !context )
+    {
+        // error
+        EM_error2( example->where, "(internal error) @example encountered NULL file context" );
+        return FALSE;
+    }
+
+    // remember
+    context->stmt_examples.push_back( example );
+
+    // done
+    return TRUE;
+}
+
+
+
+//-----------------------------------------------------------------------------
 // name: type_engine_set_doc()
 // desc: take action for @doc statement
 //-----------------------------------------------------------------------------
-void type_engine_set_doc( Chuck_Env * env, Chuck_Func * func_def )
+t_CKBOOL type_engine_set_doc( Chuck_Env * env, Chuck_Func * func_def )
 {
     // check if we have an outstanding doc stmt
-    if( !env->context || !env->context->stmt_doc ) return;
+    if( !env->context || !env->context->stmt_doc ) return TRUE;
     // get the doc
     a_Stmt_Doc doc = env->context->stmt_doc;
     // reset the remembered @doc
     env->context->stmt_doc = NULL;
     // set the documentation string from first
     func_def->doc = doc->list ? doc->list->desc : "";
+
+    // @examples not supported for function
+    if( env->context->stmt_examples.size() )
+    {
+        // error
+        EM_error2( env->context->stmt_examples.front()->where, "@example not supported for function definitions" );
+        return FALSE;
+    }
+    // reset the remembered examples
+    env->context->stmt_examples.clear();
+    return TRUE;
 }
 //-----------------------------------------------------------------------------
 // name: type_engine_set_doc()
 // desc: take action for @doc statement
 //-----------------------------------------------------------------------------
-void type_engine_set_doc( Chuck_Env * env, Chuck_Type * class_def )
+t_CKBOOL type_engine_set_doc( Chuck_Env * env, Chuck_Type * class_def )
 {
     // check if we have an outstanding doc stmt
-    if( !env->context || !env->context->stmt_doc ) return;
+    if( !env->context || !env->context->stmt_doc ) return TRUE;
     // get the doc
     a_Stmt_Doc doc = env->context->stmt_doc;
     // reset the remembered @doc
     env->context->stmt_doc = NULL;
     // set the documentation string from first
     class_def->doc = doc->list ? doc->list->desc : "";
+
+    // check for @example | 1.5.5.8 (ge,nick,alex) added
+    for( t_CKUINT i = 0; i < env->context->stmt_examples.size(); i++ )
+    {
+        // get current list
+        a_Example e = env->context->stmt_examples[i]->list;
+        // iterate
+        while(e)
+        {
+            // copy the string
+            class_def->examples.push_back( e->desc );
+            // next example in list
+            e = e->next;
+        }
+    }
+    // reset the remembered examples
+    env->context->stmt_examples.clear();
+
+    return TRUE;
 }
 //-----------------------------------------------------------------------------
 // name: type_engine_set_doc()
 // desc: take action for @doc statement
 //-----------------------------------------------------------------------------
-void type_engine_set_doc( Chuck_Env * env, Chuck_Value * value )
+t_CKBOOL type_engine_set_doc( Chuck_Env * env, Chuck_Value * value )
 {
     // check if we have an outstanding doc stmt
-    if( !env->context || !env->context->stmt_doc ) return;
+    if( !env->context || !env->context->stmt_doc ) return TRUE;
     // get the doc
     a_Stmt_Doc doc = env->context->stmt_doc;
     // reset the remembered @doc
     env->context->stmt_doc = NULL;
     // set the documentation string from first
     value->doc = doc->list ? doc->list->desc : "";
+
+    // @examples not supported for values
+    if( env->context->stmt_examples.size() )
+    {
+        // error
+        EM_error2( env->context->stmt_examples.front()->where, "@example not supported for variable definitions" );
+        return FALSE;
+    }
+
+    // reset the remembered examples
+    env->context->stmt_examples.clear();
+    return TRUE;
 }
 
 
@@ -2770,13 +2858,22 @@ t_CKTYPE type_engine_check_op( Chuck_Env * env, ae_Operator op, a_Exp lhs, a_Exp
     case ae_op_shift_right_chuck:
     case ae_op_shift_left_chuck:
         // the above are non-commutative
-    case ae_op_and:
-    case ae_op_or:
     case ae_op_s_xor:
     case ae_op_s_and:
     case ae_op_s_or:
         // shift
         CK_LR( te_int, te_int ) return env->ckt_int;
+    break;
+
+    case ae_op_and:
+    case ae_op_or:
+        // allow Object in if() statements | 1.5.5.7 (azaday)
+        CK_LR( te_int, te_int ) return env->ckt_int;
+        CK_LR( te_object, te_object ) return env->ckt_int;
+        CK_LR( te_user, te_user ) return env->ckt_int;
+        CK_COMMUTE( te_object, te_user ) return env->ckt_int;
+        CK_COMMUTE( te_object, te_int ) return env->ckt_int;
+        CK_COMMUTE( te_user, te_int ) return env->ckt_int;
     break;
 
     case ae_op_percent:
@@ -3428,8 +3525,8 @@ t_CKTYPE type_engine_check_exp_unary( Chuck_Env * env, a_Exp_Unary unary )
             if( unary->exp->s_meta != ae_meta_var )
             {
                 EM_error2( unary->where,
-                    "prefix unary operator '%s' cannot "
-                    "be used on non-mutable data-types", op2str( unary->op ) );
+                          "prefix unary operator '%s' cannot "
+                          "be used on non-mutable data-types", op2str( unary->op ) );
                 return NULL;
             }
 
@@ -3446,15 +3543,28 @@ t_CKTYPE type_engine_check_exp_unary( Chuck_Env * env, a_Exp_Unary unary )
                 return t;
 
             // TODO: check overloading
-        break;
+            break;
 
         case ae_op_minus:
-            // float
-            if( isa( t, env->ckt_float ) ) return t;
+            // float, vec2
+            if(
+               isa( t, env->ckt_float ) ||
+               isa( t, env->ckt_vec2 ) ||
+               isa( t, env->ckt_vec3 ) ||
+               isa( t, env->ckt_vec4 )
+               ) return t;
+
         case ae_op_tilda:
+            // int
+            if( isa( t, env->ckt_int ) ) return t;
+        break;
+
         case ae_op_exclamation:
             // int
             if( isa( t, env->ckt_int ) ) return t;
+            // basically isnull(object) | 1.5.5.8 (azaday)
+            if( isa( t, env->ckt_object) ) return env->ckt_int;
+            // if( isa( t, env->ckt_object) ) return t;
         break;
 
         case ae_op_spork:
@@ -4561,7 +4671,7 @@ t_CKTYPE type_engine_check_exp_decl_part2( Chuck_Env * env, a_Exp_Decl decl )
         // make sure
         assert( value != NULL );
         // set ckdoc, if present | 1.5.4.5 (ge) added
-        type_engine_set_doc( env, value );
+        if( !type_engine_set_doc( env, value ) ) return NULL;
         // get the type
         type = value->type;
         // make sure
@@ -5545,7 +5655,7 @@ t_CKBOOL type_engine_check_class_def( Chuck_Env * env, a_Class_Def class_def )
     }
 
     // set ckdoc, if present | 1.5.4.5 (ge)
-    type_engine_set_doc( env, the_class );
+    if( !type_engine_set_doc( env, the_class ) ) return FALSE;
 
     // NB the following should be done AFTER the parent is completely defined
     // --
@@ -5886,7 +5996,7 @@ t_CKBOOL type_engine_check_func_def( Chuck_Env * env, a_Func_Def f )
     }
 
     // set ckdoc, if present | 1.5.4.5 (ge)
-    type_engine_set_doc( env, theFunc );
+    if( !type_engine_set_doc( env, theFunc ) ) goto error;
 
     // type check the code
     assert( f->code == NULL || f->code->s_type == ae_stmt_code );
@@ -5981,7 +6091,7 @@ Chuck_Namespace::~Chuck_Namespace()
 void Chuck_Namespace::add_type( const std::string & xid, Chuck_Type * theType )
 {
     // log it
-    EM_log( CK_LOG_DEBUG, "namespace '%s' adding type '%s'->'%s'", this->name.c_str(), xid.c_str(), theType->name().c_str() );
+    EM_log( CK_LOG_FINER, "namespace '%s' adding type '%s'->'%s'", this->name.c_str(), xid.c_str(), theType->name().c_str() );
     // add it
     this->type.add( xid, theType );
 }
@@ -5996,7 +6106,7 @@ void Chuck_Namespace::add_type( const std::string & xid, Chuck_Type * theType )
 void Chuck_Namespace::add_value( const std::string & xid, Chuck_Value * theValue )
 {
     // log it
-    EM_log( CK_LOG_DEBUG, "namespace '%s' adding value '%s'->'%s'", this->name.c_str(), xid.c_str(), theValue->name.c_str() );
+    EM_log( CK_LOG_FINER, "namespace '%s' adding value '%s'->'%s'", this->name.c_str(), xid.c_str(), theValue->name.c_str() );
     // add it
     this->value.add( xid, theValue );
 }
@@ -6011,7 +6121,7 @@ void Chuck_Namespace::add_value( const std::string & xid, Chuck_Value * theValue
 void Chuck_Namespace::add_func( const std::string & xid, Chuck_Func * theFunc )
 {
     // log it
-    EM_log( CK_LOG_DEBUG, "namespace '%s' adding func '%s'->'%s'", this->name.c_str(), xid.c_str(), theFunc->base_name.c_str() );
+    EM_log( CK_LOG_FINER, "namespace '%s' adding func '%s'->'%s'", this->name.c_str(), xid.c_str(), theFunc->base_name.c_str() );
     // add it
     this->func.add( xid, theFunc );
 }
@@ -8083,7 +8193,9 @@ void type_engine_init_op_overload_builtin( Chuck_Env * env )
     // && & || | ^ << >> %
     //-------------------------------------------------------------------------
     registry->reserve( env->ckt_int, ae_op_and, env->ckt_int );
+    registry->reserve( env->ckt_object, ae_op_and, env->ckt_int, TRUE ); // 1.5.5.8 (azaday) reserve
     registry->reserve( env->ckt_int, ae_op_or, env->ckt_int );
+    registry->reserve( env->ckt_object, ae_op_or, env->ckt_int, TRUE ); // 1.5.5.8 (azaday) reserve
     registry->reserve( env->ckt_int, ae_op_s_and, env->ckt_int );
     registry->reserve( env->ckt_int, ae_op_s_or, env->ckt_int );
     registry->reserve( env->ckt_int, ae_op_s_xor, env->ckt_int );
@@ -8188,8 +8300,12 @@ void type_engine_init_op_overload_builtin( Chuck_Env * env )
     registry->reserve( NULL, ae_op_minusminus, env->ckt_float );
     registry->reserve( NULL, ae_op_minus, env->ckt_int );
     registry->reserve( NULL, ae_op_minus, env->ckt_float );
+    registry->reserve( NULL, ae_op_minus, env->ckt_vec2 );
+    registry->reserve( NULL, ae_op_minus, env->ckt_vec3 );
+    registry->reserve( NULL, ae_op_minus, env->ckt_vec4 );
     registry->reserve( NULL, ae_op_tilda, env->ckt_int );
-    registry->reserve( NULL, ae_op_exclamation, env->ckt_int );
+    // registry->reserve( NULL, ae_op_exclamation, env->ckt_int ); // 1.5.5.8 (azaday, ge) commented out since ! is now disabled from all overloading
+    // registry->reserve( NULL, ae_op_exclamation, env->ckt_object ); // 1.5.5.8 (azaday, ge) commented out since ! is now disabled from all overloading
     registry->reserve( NULL, ae_op_new, env->ckt_object );
 
     //-------------------------------------------------------------------------
@@ -8236,7 +8352,7 @@ t_CKBOOL type_engine_init_op_overload( Chuck_Env * env )
     registry->add( ae_op_and )->configure( TRUE, false, false );
     registry->add( ae_op_or )->configure( TRUE, false, false );
     registry->add( ae_op_assign )->configure( false, false, false );
-    registry->add( ae_op_exclamation )->configure( false, TRUE, false );
+    registry->add( ae_op_exclamation )->configure( false, false, false ); // disabled for pre-unary | 1.5.5.8 (azaday,ge)
     registry->add( ae_op_s_or )->configure( TRUE, false, false );
     registry->add( ae_op_s_and )->configure( TRUE, false, false );
     registry->add( ae_op_s_xor )->configure( TRUE, false, false );
@@ -8256,7 +8372,7 @@ t_CKBOOL type_engine_init_op_overload( Chuck_Env * env )
     registry->add( ae_op_percent_chuck )->configure( TRUE, false, false );
     registry->add( ae_op_shift_right )->configure( TRUE, false, false );
     registry->add( ae_op_shift_left )->configure( TRUE, false, false );
-    registry->add( ae_op_tilda )->configure( false, false, false );
+    registry->add( ae_op_tilda )->configure( false, TRUE, false ); // enabled for pre-unary | 1.5.5.8 (ge,azaday)
     registry->add( ae_op_new )->configure( false, false, false );
     registry->add( ae_op_coloncolon )->configure( TRUE, false, false );
     registry->add( ae_op_at_chuck )->configure( false, false, false );

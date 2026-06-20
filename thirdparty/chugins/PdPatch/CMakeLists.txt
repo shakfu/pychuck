@@ -3,8 +3,9 @@ include(FetchContent)
 FetchContent_Declare(
     libpd
     GIT_REPOSITORY https://github.com/libpd/libpd.git
-    GIT_TAG        master
+    GIT_TAG        0.16.0  # bundles pure-data 0.56-3 via its pinned submodule
     GIT_SUBMODULES "pure-data"
+    GIT_SHALLOW    TRUE
     EXCLUDE_FROM_ALL
 )
 

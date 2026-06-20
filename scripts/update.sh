@@ -18,7 +18,6 @@ function update_chuck() {
 	cp ${THIRDPARTY_DIR}/chuck/CMakeLists.txt ${THIRDPARTY_DIR}/chuck-new/ && \
 	cp ${THIRDPARTY_DIR}/chuck/core/CMakeLists.txt ${THIRDPARTY_DIR}/chuck-new/core/ && \
 	cp ${THIRDPARTY_DIR}/chuck/host/CMakeLists.txt ${THIRDPARTY_DIR}/chuck-new/host/ && \
-	cp -rf ${THIRDPARTY_DIR}/chuck/host_embed ${THIRDPARTY_DIR}/chuck-new/ &&  \
 	mv ${THIRDPARTY_DIR}/chuck ${THIRDPARTY_DIR}/chuck-old && \
 	mv ${THIRDPARTY_DIR}/chuck-new ${THIRDPARTY_DIR}/chuck
 }

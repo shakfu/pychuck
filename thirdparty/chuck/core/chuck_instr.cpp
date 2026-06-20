@@ -3236,6 +3236,51 @@ void Chuck_Instr_Negate_double::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
 // name: execute()
 // desc: ...
 //-----------------------------------------------------------------------------
+void Chuck_Instr_Negate_vec2::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
+{
+    t_CKVEC2* sp = (t_CKVEC2 *)shred->reg->sp;
+    (sp-1)->x *= -1;
+    (sp-1)->y *= -1;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: execute()
+// desc: ...
+//-----------------------------------------------------------------------------
+void Chuck_Instr_Negate_vec3::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
+{
+    t_CKVEC3* sp = (t_CKVEC3 *)shred->reg->sp;
+    (sp-1)->x *= -1;
+    (sp-1)->y *= -1;
+    (sp-1)->z *= -1;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: execute()
+// desc: ...
+//-----------------------------------------------------------------------------
+void Chuck_Instr_Negate_vec4::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
+{
+    t_CKVEC4* sp = (t_CKVEC4 *)shred->reg->sp;
+    (sp-1)->x *= -1;
+    (sp-1)->y *= -1;
+    (sp-1)->z *= -1;
+    (sp-1)->w *= -1;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: execute()
+// desc: ...
+//-----------------------------------------------------------------------------
 void Chuck_Instr_Branch_Lt_double::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
 {
     t_CKFLOAT *& sp = (t_CKFLOAT *&)shred->reg->sp;
@@ -3880,6 +3925,22 @@ void Chuck_Instr_Or::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
     pop_( sp, 2 );
     push_( sp, val_(sp) || val_(sp+1) );
 }
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: execute()
+// desc: ...
+//-----------------------------------------------------------------------------
+void Chuck_Instr_Boolify::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
+{
+    t_CKUINT *& sp = (t_CKUINT *&)shred->reg->sp;
+    pop_( sp, 1 );
+    t_CKINT v = val_(sp);
+    push_( sp, v != 0 );
+}
+
 
 
 
@@ -9583,7 +9644,7 @@ void Chuck_Instr_Hack::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
                 }
             }
             else
-                CK_FPRINTF_STDERR( "%d :(%s)\n", *(sp-1), m_type_ref->c_name() );
+                CK_FPRINTF_STDERR( "%ld :(%s)\n", *(sp-1), m_type_ref->c_name() );
         }
         else
         {
@@ -9720,7 +9781,7 @@ void Chuck_Instr_Gack::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
                     if( *(sp) == 0 )
                         CK_FPRINTF_STDERR( "null " );
                     else
-                        CK_FPRINTF_STDERR( "0x%lx :(%s|refcount=%d)\n", *(sp), type->c_name(), obj->m_ref_count );
+                        CK_FPRINTF_STDERR( "0x%lx :(%s|refcount=%d) ", *(sp), type->c_name(), obj->m_ref_count );
                         // CK_FPRINTF_STDERR( "0x%lx (refcount=%d) ", *(sp), obj->m_ref_count );
                 }
                 else

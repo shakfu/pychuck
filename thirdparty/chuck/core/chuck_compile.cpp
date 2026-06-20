@@ -273,6 +273,20 @@ t_CKBOOL Chuck_Compiler::importChugin( const string & path,
                                        const string & name,
                                        string & errorStr )
 {
+    // check if chugin of same name (regardless of path)
+    // has already been loaded | 1.5.5.8 (ge) added
+    if( m_importRegistry.isChuginLoaded( path ) )
+    {
+        // print `[chugin] X.chug`
+        logChuginLoad( name, CK_LOG_HERALD );
+        // print `[SKIP]`
+        EM_log_opts( CK_LOG_HERALD, EM_LOG_NO_PREFIX, "[%s]", TC::orange("SKIP",true).c_str() );
+        // print reason
+        EM_log( CK_LOG_HERALD, " |- (chugin of same name already imported)" );
+        // done
+        return FALSE;
+    }
+
     // check if this import should be in its namespace | 1.5.4.0 (ge) added
     if( createNamespace )
     {
@@ -623,8 +637,11 @@ std::string Chuck_Compiler::resolveFilename( const std::string & filename,
     vector<string> exts; exts.push_back(".ck"); exts.push_back(".chug"); exts.push_back(".chug.wasm");
 
     // log
-    EM_log( CK_LOG_FINE, "resolving filename: '%s' importer: '%s' expand-search: %s",
-            filename.c_str(), importerAbsolutePath.c_str(), expandSearchToGlobal ? "YES" : "NO" );
+    EM_log( CK_LOG_FINE, "resolving filename: '%s'", filename.c_str() );
+    EM_pushlog();
+    EM_log( CK_LOG_FINE, "importer: '%s'", importerAbsolutePath.c_str() );
+    EM_log( CK_LOG_FINE, "expand-search: %s", expandSearchToGlobal ? "YES" : "NO" );
+    EM_poplog();
 
     // check if already absolute path
     if( isAlreadyAbsolutePath )
@@ -1195,6 +1212,9 @@ t_CKBOOL Chuck_Compiler::bind( f_ck_query query_func, const string & name,
     // commit what is in the type checker at this point
     env->global()->commit();
 
+    // preserve all operator overloads currently in registry | added 1.5.5.8 (ben)
+    env->op_registry.preserve();
+
     // pop indent level
     EM_poplog();
 
@@ -1639,9 +1659,9 @@ t_CKBOOL Chuck_Compiler::import_chugin_opt( const string & path, const string & 
     // get env
     Chuck_Env * env = this->env();
 
-    // NOTE this (verbose >= 5) is more informative if the chugin crashes, we can see the name
+    // NOTE this (running with verbose >= 5) is more informative if the chugin crashes while loading, we can see the name
     EM_log( CK_LOG_INFO, "@import loading [chugin] %s...", name.c_str() );
-    EM_log( CK_LOG_FINE, " |- path: '%s'", path.c_str() );
+    EM_log( CK_LOG_INFO, " |- path: '%s'", path.c_str() );
 
     // create chuck DLL data structure
     Chuck_DLL * dll = new Chuck_DLL( this->carrier(), name != "" ? name.c_str() : (extract_filepath_file(path)).c_str() );
@@ -2385,6 +2405,34 @@ void Chuck_ImportRegistry::clearAllUserImports()
         // erase each entry by key
         m_importedTargets.erase( itersToErase[i] );
     }
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: isChuginLoaded()
+// desc: check if a same-name chugin is already imported, ignoring path
+//-----------------------------------------------------------------------------
+t_CKBOOL Chuck_ImportRegistry::isChuginLoaded( const std::string & path )
+{
+    // remove path before chugin name and lower case
+    std::string name = tolower( extract_filepath_file( path ) );
+
+    // iterate
+    map<std::string, Chuck_DLL *>::iterator iterC;
+    for( iterC = m_importedChugins.begin(); iterC != m_importedChugins.end(); iterC++ )
+    {
+        // get the chugin
+        Chuck_DLL * chugin = iterC->second;
+        // remove path portion and lower case
+        std::string chugin_name = tolower( extract_filepath_file( chugin->filepath() ) );
+        // compare name
+        if( name == chugin_name ) return TRUE;
+    }
+
+    // no match found
+    return FALSE;
 }
 
 

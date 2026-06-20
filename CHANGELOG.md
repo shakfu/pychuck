@@ -15,6 +15,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ## [Unreleased]
 
+## [0.2.0]
+
+### Changed
+
+- **Upgraded ChucK core to 1.5.5.9-dev (chai)** (`thirdparty/chuck/`): Updated the vendored ChucK to the current development build. Required one binding-level adjustment, noted under Fixed below.
+
+- **Pinned PdPatch's libpd dependency to a release tag** (`thirdparty/chugins/PdPatch/CMakeLists.txt`): The `FetchContent_Declare` for libpd now pins `GIT_TAG 0.16.0` (with `GIT_SHALLOW TRUE`) instead of tracking the moving `master` branch. libpd 0.16.0 bundles pure-data 0.56-3 via its pinned submodule. This makes the build reproducible and fixes a configure-time failure where `master` advancing upstream left the cached libpd checkout dirty and blocked the FetchContent git update step.
+
+### Fixed
+
+- **Build break after ChucK core update: `ChucK::shutdown()` is now protected** (`src/_numchuck.cpp`): Upstream moved `shutdown()` out of the public API; it is invoked by `~ChucK()`. The binding's `shutdown` method no longer calls it directly (which no longer compiled) and instead only clears the Python-side chout/cherr and instance callbacks. VM teardown happens when the high-level `Chuck.close()` drops its sole reference to the instance, triggering the destructor -- preserving the prior teardown order (callbacks cleared before VM shutdown) without the now-illegal direct call.
+
 ## [0.1.11]
 
 ### Added

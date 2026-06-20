@@ -551,7 +551,12 @@ NB_MODULE(_numchuck, m) {
             &ChucK::now,
             "Get current ChucK time")
 
-        // Explicit shutdown method for proper cleanup (especially on Windows)
+        // Explicit cleanup hook run before the instance is released.
+        // ChucK::shutdown() is protected as of upstream and is invoked by
+        // ~ChucK(); the high-level wrapper (Chuck.close) drops its sole
+        // reference right after calling this, which triggers that teardown.
+        // Here we only clear the Python-side callbacks, in the correct order
+        // (before VM teardown), which the destructor does not do itself.
         .def("shutdown",
             [](ChucK& self) {
                 if (!self.isInit()) {
@@ -564,11 +569,8 @@ NB_MODULE(_numchuck, m) {
                 // Clear chout/cherr callbacks on the ChucK instance itself
                 self.setChoutCallback(nullptr);
                 self.setCherrCallback(nullptr);
-
-                // Call ChucK's shutdown which includes Windows-specific delays
-                self.shutdown();
             },
-            "Explicitly shutdown ChucK instance")
+            "Clear Python-side callbacks; VM shuts down when the instance is released")
 
         // Color/display methods
         .def("toggle_global_color_textoutput",

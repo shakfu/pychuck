@@ -253,10 +253,6 @@ public:
     //   |- (called once at end when all instances done, usually by host)
     static void globalCleanup();
 
-public:
-    // shutdown ChucK instance (can be called explicitly before destruction)
-    t_CKBOOL shutdown();
-
 protected:
     // global initialization for all instances
     //   |- (called once at beginning internally by ChucK)
@@ -300,6 +296,8 @@ protected:
     t_CKBOOL initChugins();
     // init OTF programming system
     t_CKBOOL initOTF();
+    // shutdown
+    t_CKBOOL shutdown();
 
     // initialize default params
     void initDefaultParams();

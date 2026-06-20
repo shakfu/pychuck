@@ -1666,6 +1666,45 @@ public:
 
 
 //-----------------------------------------------------------------------------
+// name: struct Chuck_Instr_Negate_vec2
+// desc: ...
+//-----------------------------------------------------------------------------
+struct Chuck_Instr_Negate_vec2 : public Chuck_Instr
+{
+public:
+    virtual void execute( Chuck_VM * vm, Chuck_VM_Shred * shred );
+};
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: struct Chuck_Instr_Negate_vec3
+// desc: ...
+//-----------------------------------------------------------------------------
+struct Chuck_Instr_Negate_vec3 : public Chuck_Instr
+{
+public:
+    virtual void execute( Chuck_VM * vm, Chuck_VM_Shred * shred );
+};
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: struct Chuck_Instr_Negate_vec4
+// desc: ...
+//-----------------------------------------------------------------------------
+struct Chuck_Instr_Negate_vec4 : public Chuck_Instr
+{
+public:
+    virtual void execute( Chuck_VM * vm, Chuck_VM_Shred * shred );
+};
+
+
+
+
+//-----------------------------------------------------------------------------
 // name: struct Chuck_Instr_Lt_double
 // desc: ...
 //-----------------------------------------------------------------------------
@@ -2021,6 +2060,20 @@ public:
 // desc: ...
 //-----------------------------------------------------------------------------
 struct Chuck_Instr_Or : public Chuck_Instr_Binary_Op
+{
+public:
+    virtual void execute( Chuck_VM * vm, Chuck_VM_Shred * shred );
+};
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: struct Chuck_Instr_Boolify
+// desc: convert int value on reg stack to a boolean 0=>0; non-zero=>1
+//       added 1.5.5.8 (ge,nick) in April 2026 for AND and OR optimization
+//-----------------------------------------------------------------------------
+struct Chuck_Instr_Boolify : public Chuck_Instr
 {
 public:
     virtual void execute( Chuck_VM * vm, Chuck_VM_Shred * shred );
