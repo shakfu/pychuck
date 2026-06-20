@@ -6,6 +6,9 @@ Checks that:
   2. Every file in RECORD exists in the ZIP (no dangling entries)
   3. SHA256 hashes match for all recorded files
   4. File sizes match for all recorded files
+  5. No directory entries (names ending in "/") appear in the ZIP or RECORD --
+     these carry the empty-content hash and pass a naive hash check, but PyPI's
+     strict parser rejects them as "file contents do not match RECORD"
 
 See: https://blog.pypi.org/posts/2025-08-07-wheel-archive-confusion-attacks/
 
@@ -62,6 +65,15 @@ def validate_wheel(path: str) -> list[str]:
 
         actual_files = {n for n in zf.namelist() if n != record_name}
         recorded_files = set(recorded.keys())
+
+        # Reject directory entries (names ending in "/"). Canonical wheels
+        # contain only files. A directory entry carries the empty-content hash
+        # in RECORD, so it slips past the hash/size checks below, but PyPI's
+        # strict parser rejects it as "file contents do not match RECORD".
+        for name in sorted(n for n in actual_files if n.endswith("/")):
+            errors.append(f"directory entry in ZIP (not allowed): {name}")
+        for name in sorted(n for n in recorded_files if n.endswith("/")):
+            errors.append(f"directory entry in RECORD (not allowed): {name}")
 
         # Check for files in ZIP but not in RECORD (smuggled files)
         extra = sorted(actual_files - recorded_files)

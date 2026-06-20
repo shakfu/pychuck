@@ -151,6 +151,13 @@ def _validate_record(wheel_path: str) -> None:
         actual_files = {n for n in zf.namelist() if n != record_name}
         recorded_files = set(recorded.keys())
 
+        # Directory entries (names ending in "/") are not allowed -- they carry
+        # the empty-content hash and pass the hash check below, but PyPI's
+        # strict parser rejects them. The rewrite above strips them; this is the
+        # backstop.
+        for name in sorted(n for n in actual_files | recorded_files if n.endswith("/")):
+            errors.append(f"directory entry not allowed: {name}")
+
         for name in sorted(actual_files - recorded_files):
             errors.append(f"file in ZIP but not in RECORD: {name}")
         for name in sorted(recorded_files - actual_files):
@@ -192,6 +199,13 @@ def rename_in_wheel(
     with ZipFile(src_wheel, "r") as zin, ZipFile(dst_wheel, "w", ZIP_DEFLATED) as zout:
         record_path = _record_path(zin)
         for item in zin.infolist():
+            # Drop directory entries (names ending in "/"). Canonical wheels
+            # contain only files; a directory entry listed in RECORD (with the
+            # empty-content hash) passes a naive hash comparison but trips
+            # PyPI's strict RECORD/archive check -> "file contents do not match
+            # RECORD". See check_wheel_record.py for the validation gate.
+            if item.filename.endswith("/"):
+                continue
             data = zin.read(item.filename)
             stem = Path(item.filename).stem
             should_rename = (
