@@ -15,6 +15,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ## [Unreleased]
 
+## [0.2.1]
+
+### Added
+
+- **Global UGen sample tap** (`src/_numchuck.cpp`, `api.py`): `ChucK.get_ugen_samples(name, num_frames, num_channels=1)` and `Chuck.ugen_samples(...)` read the most recent samples from a named `global UGen`, which taps audio mid-graph rather than the summed dac output that `run()` returns. Returns a float32 array, 1-D for mono and channel-major `(channels, frames)` otherwise, matching ChucK's non-interleaved multichannel layout. The ChucK side must enable buffering first (`1 => tap.buffered;`), otherwise ChucK fills the buffer with zeros.
+
+- **Race-free tap capture during real-time audio** (`src/_numchuck.cpp`, `api.py`): `add_tap(name, num_channels, capacity_frames)`, `remove_tap(name)` and `list_taps()`, with `Chuck.add_tap()` / `remove_tap()` / `taps`. Reading a UGen buffer from Python while the audio thread writes it is a data race -- `Chuck_UGen` keeps an 8192-sample `AccumBuffer` whose write offset is a plain integer and whose `get_most_recent()` memcpy's with no synchronization. Measured on a pure sine: 831 of 274,240 reads of the full ring came back spliced (0.3%), with discontinuities up to 9x the waveform's own maximum sample-to-sample step; smaller reads had ring headroom and showed none. A registered tap is instead sampled on the audio thread immediately after `chuck->run()` returns, when nothing else is writing, and appended to a per-tap ring published under a seqlock, so the audio thread never blocks and a colliding reader retries rather than returning spliced data. The same measurement through a tap: zero torn reads in 1.2 million. Taps also accumulate history across callbacks, so reads are not limited to one audio block. While real-time audio is running, reading an unregistered UGen now raises with a message pointing at `add_tap()` instead of silently returning possibly-torn data; offline reads are unchanged, since the VM only advances inside `run()`, which holds the GIL.
+
+- **Abort the running shred** (`src/_numchuck.cpp`, `api.py`): `ChucK.abort_current_shred()` and `Chuck.abort_shred()` flag the shred currently executing in the VM. This is the only way to break out of a shred stuck in a loop that never advances time, which `remove_shred` cannot reach. The VM only has a current shred while inside a compute cycle, so this applies during real-time audio, called from another thread; it returns `False` when there is nothing to abort.
+
+- **Shred lifecycle watcher** (`src/_numchuck.cpp`, `api.py`, `__init__.py`): `ChucK.subscribe_shred_watcher(callback, options)` / `remove_shred_watcher()` and `Chuck.on_shred(callback)` deliver `(code, shred_id, name)` as shreds are sporked, removed, suspended or activated, replacing the need to poll `get_all_shred_ids()`. Subscription flags `SHRED_WATCH_SPORK`, `_REMOVE`, `_SUSPEND`, `_ACTIVATE`, `_ALL` and `_NONE` are exported from the package. One watcher per instance; it is unsubscribed on shutdown so no notification can arrive after the Python callable is dropped.
+
+- **Indexed and associative global array getters** (`src/_numchuck.cpp`, `api.py`): `get_global_int_array_value`, `get_global_float_array_value`, `get_global_associative_int_array_value` and `get_global_associative_float_array_value` complete the array API, whose setters already existed -- values written by key from Python could not previously be read back, since an associative array has no whole-array fetch. The high-level `Chuck` class gained a global-array section covering whole arrays, elements by index and entries by key (`set_int_array`/`get_int_array`, `set_int_array_value`/`get_int_array_value`, `set_assoc_int`/`get_assoc_int`, and float equivalents).
+
+- **Runtime adaptive block size** (`src/_numchuck.cpp`, `api.py`): `ChucK.set_adaptive(max_block_size)` / `get_adaptive()` and `Chuck.set_adaptive()` / `Chuck.adaptive` read and change the shreduler's adaptive block processing on a running VM. Guarded on both sides: UGens allocate their vectorized buffers when they are created (the dac, adc and bunghole during VM init), so enabling adaptive mode on a VM that started non-adaptive would run the vectorized code path over buffers that were never allocated -- a segfault -- and raising the size past what init allocated overruns them. The binding raises `RuntimeError` and `ValueError` respectively instead.
+
+- **Richer shred metadata** (`src/_numchuck.cpp`): `get_shred_info` now also reports `is_blocked` (waiting on an event), `wake_time`, `start` and the shred's `args`.
+
+### Fixed
+
+- **`vm_adaptive=True` silently did nothing** (`api.py`, `constants.py`): `PARAM_VM_ADAPTIVE` is a maximum block size, not a flag, and ChucK treats any value `<= 1` as off -- so passing `True` set it to 1 and left adaptive mode disabled. `Chuck(vm_adaptive=...)` now accepts a block size directly, with `True` selecting `DEFAULT_ADAPTIVE_BLOCK_SIZE` (512), and the `vm_adaptive` property reports whether the size actually enables the mode.
+
 ## [0.2.0]
 
 ### Changed

@@ -9,6 +9,43 @@
 
 ---
 
+## Real-time Audio: Global UGen Taps
+
+### High Priority
+
+- [ ] **Remove the audio-thread allocation in tap capture** (`src/_numchuck.cpp`, `capture_taps`)
+  - ChucK keeps `m_global_ugens` private (`chuck_globals.h:356`) and exposes only
+    `getGlobalUGenSamples(const char *, ...)`, so every capture builds a `std::string`
+    temporary for the map lookup -- heap-free only when the small-string optimization
+    covers the name
+  - Bounded in count (one lookup per active tap per block, taps capped at 8) and
+    chuck-max's perform routine does the same, but it is still a potentially
+    unbounded-latency call on the audio thread
+  - Fix: vendored patch under `scripts/patches/` exposing a UGen accessor, resolve the
+    `Chuck_UGen *` once in `add_tap()`, then read the buffer directly per block.
+    `apply_patches()` in `scripts/update.sh` re-applies it after a chuck update
+
+- [ ] **Run the tap tearing regression test in CI**
+  (`tests/test_ugen_tap.py::test_realtime_tap_reads_are_never_torn`)
+  - The test is marked `realtime`; every CI job filters with `-k "not realtime"`
+    (`.github/workflows/ci.yml:71`, `wheels.yml:72`, `pip-test.yml:47`), so the check
+    that catches spliced tap reads never runs there
+  - It is the only guard against a regression that was silent in normal use: 0.3% of
+    full-ring reads, correct-looking data with a discontinuity in the middle
+  - Options: a dummy/virtual audio device on the CI runners, or a harness that drives
+    the capture path from a worker thread without real hardware
+
+### Notes
+
+- [x] **Seqlock reader must back off, not spin** (`src/_numchuck.cpp`, `read_tap_snapshot`)
+  - The first version retried 256 times with no delay and timed out spuriously: the
+    collision check is so cheap that all attempts fit inside the single publish window
+    they were waiting on
+  - Now waits 200 us between attempts, with the GIL released, over 64 attempts.
+    Worth remembering for any future lock-free reader in this codebase
+
+---
+
 ## REPL Issues
 
 ### High Priority

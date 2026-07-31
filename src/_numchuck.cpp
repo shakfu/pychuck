@@ -21,6 +21,8 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstdio>
+#include <cstring>
 #include <mutex>
 #include <stdexcept>
 #include <sstream>
@@ -43,6 +45,167 @@ static std::atomic<float> g_meter_rms_right{0.0f};
 static std::atomic<float> g_meter_peak_left{0.0f};
 static std::atomic<float> g_meter_peak_right{0.0f};
 
+// Global UGen taps.
+//
+// Reading a global UGen's buffer straight from Python while real-time audio
+// runs is a data race: Chuck_UGen keeps an 8192-sample AccumBuffer whose write
+// offset is a plain integer, and get_most_recent() memcpy's out of it with no
+// synchronization at all. With a read close to the ring size the audio thread
+// laps into the window mid-copy and the caller gets a spliced waveform -- 0.3%
+// of 8192-frame reads in a 3-second measurement, with discontinuities 9x the
+// signal's own maximum sample-to-sample step.
+//
+// So the sample fetch moves to the audio thread, where it runs right after
+// chuck->run() returns and nothing else is writing. Each block is appended to a
+// per-tap ring published under a seqlock: the audio thread never blocks, and a
+// Python reader that collides with a publish retries instead of returning
+// spliced data.
+namespace {
+
+constexpr size_t CK_MAX_TAPS = 8;
+constexpr size_t CK_TAP_NAME_MAX = 128;
+constexpr int CK_TAP_READ_ATTEMPTS = 64;
+constexpr t_CKUINT CK_TAP_RETRY_USEC = 200;
+
+struct TapSlot {
+    // published state, read by both threads
+    std::atomic<bool> active{false};
+    std::atomic<uint64_t> seq{0};            // even: stable, odd: publish in progress
+    std::atomic<size_t> write_pos{0};        // next frame index in the ring
+    std::atomic<uint64_t> frames_written{0};
+
+    // configuration, only touched while the slot is inactive
+    ChucK* owner{nullptr};
+    char name[CK_TAP_NAME_MAX]{};
+    int channels{1};
+    size_t capacity{0};                      // frames of history
+
+    std::vector<SAMPLE> ring;                // channels * capacity, channel-major
+    std::vector<SAMPLE> staging;             // channels * capacity scratch
+};
+
+TapSlot g_taps[CK_MAX_TAPS];
+std::mutex g_tap_mutex;                      // serializes registration from Python
+std::atomic<uint64_t> g_audio_callback_count{0};
+std::atomic<ChucK*> g_audio_chuck{nullptr};  // instance currently driving audio
+
+// Called from the audio thread once per block, after the VM has run.
+void capture_taps(ChucK* chuck, t_CKUINT numFrames) {
+    Chuck_Globals_Manager* globals = chuck->globals();
+    if (!globals) return;
+
+    for (TapSlot& slot : g_taps) {
+        if (!slot.active.load(std::memory_order_acquire)) continue;
+        if (slot.owner != chuck) continue;
+
+        size_t frames = std::min(static_cast<size_t>(numFrames), slot.capacity);
+        if (frames == 0) continue;
+
+        // Caveat: ChucK resolves the name through a std::map<std::string, ...>
+        // whose UGen pointers it keeps private, so this lookup builds a string
+        // temporary on the audio thread -- heap-free only for names short
+        // enough for the small-string optimization. It runs once per active tap
+        // per block and taps are capped, so the cost is bounded; chuck-max does
+        // the same thing in its perform routine.
+        bool ok = (slot.channels == 1)
+            ? globals->getGlobalUGenSamples(slot.name, slot.staging.data(),
+                                            static_cast<int>(frames))
+            : globals->getGlobalUGenSamplesMulti(slot.name, slot.staging.data(),
+                                                 static_cast<int>(frames), slot.channels);
+        if (!ok) continue;
+
+        // publish: odd sequence marks the ring as in flux
+        slot.seq.fetch_add(1, std::memory_order_acq_rel);
+        std::atomic_thread_fence(std::memory_order_release);
+
+        size_t pos = slot.write_pos.load(std::memory_order_relaxed);
+        size_t first = std::min(frames, slot.capacity - pos);
+        for (int c = 0; c < slot.channels; c++) {
+            SAMPLE* dst = slot.ring.data() + static_cast<size_t>(c) * slot.capacity;
+            const SAMPLE* src = slot.staging.data() + static_cast<size_t>(c) * frames;
+            memcpy(dst + pos, src, first * sizeof(SAMPLE));
+            if (frames > first) {
+                memcpy(dst, src + first, (frames - first) * sizeof(SAMPLE));
+            }
+        }
+
+        slot.write_pos.store((pos + frames) % slot.capacity, std::memory_order_relaxed);
+        slot.frames_written.fetch_add(frames, std::memory_order_relaxed);
+        slot.seq.fetch_add(1, std::memory_order_release);
+    }
+}
+
+// Find the slot serving a name for an instance, or nullptr
+TapSlot* find_tap(ChucK* chuck, const std::string& name, bool active_only) {
+    for (TapSlot& slot : g_taps) {
+        if (active_only && !slot.active.load(std::memory_order_acquire)) continue;
+        if (slot.owner != chuck) continue;
+        if (name == slot.name) return &slot;
+    }
+    return nullptr;
+}
+
+bool audio_running_for(ChucK* chuck) {
+    return g_audio_chuck.load(std::memory_order_acquire) == chuck;
+}
+
+// After deactivating a slot, wait for the audio thread to leave it before its
+// configuration is touched again. Bounded: a stalled or stopped audio thread
+// must not hang the caller.
+void wait_for_audio_quiescence(ChucK* chuck) {
+    if (!audio_running_for(chuck)) return;
+
+    nb::gil_scoped_release release;
+    uint64_t start = g_audio_callback_count.load(std::memory_order_acquire);
+    for (int i = 0; i < 200; i++) {
+        if (g_audio_callback_count.load(std::memory_order_acquire) - start >= 2) return;
+        ck_usleep(1000);
+    }
+}
+
+// Copy the most recent num_frames from a tap's ring, retrying if the audio
+// thread publishes during the copy. Returns false if it never settles.
+bool read_tap_snapshot(TapSlot& slot, size_t num_frames, SAMPLE* out) {
+    size_t channels = static_cast<size_t>(slot.channels);
+
+    for (int attempt = 0; attempt < CK_TAP_READ_ATTEMPTS; attempt++) {
+        // back off after a collision rather than spinning: a publish takes
+        // microseconds, so a bare retry loop would burn every attempt inside
+        // the one window it is waiting on
+        if (attempt > 0) ck_usleep(CK_TAP_RETRY_USEC);
+
+        uint64_t before = slot.seq.load(std::memory_order_acquire);
+        if (before & 1) continue;  // publish in progress
+
+        size_t pos = slot.write_pos.load(std::memory_order_relaxed);
+        uint64_t available = slot.frames_written.load(std::memory_order_relaxed);
+
+        // frames actually backed by captured audio; anything older stays zero
+        size_t have = static_cast<size_t>(
+            std::min<uint64_t>(std::min<uint64_t>(available, slot.capacity), num_frames));
+        size_t lead = num_frames - have;
+        // pos is one past the newest frame, so the window starts `have` behind it
+        size_t start = (pos + slot.capacity - have) % slot.capacity;
+        size_t first = std::min(have, slot.capacity - start);
+
+        for (size_t c = 0; c < channels; c++) {
+            const SAMPLE* src = slot.ring.data() + c * slot.capacity;
+            SAMPLE* dst = out + c * num_frames;
+            memset(dst, 0, lead * sizeof(SAMPLE));
+            memcpy(dst + lead, src + start, first * sizeof(SAMPLE));
+            if (have > first) {
+                memcpy(dst + lead + first, src, (have - first) * sizeof(SAMPLE));
+            }
+        }
+
+        std::atomic_thread_fence(std::memory_order_acquire);
+        if (slot.seq.load(std::memory_order_relaxed) == before) return true;
+    }
+    return false;
+}
+
+}  // namespace
+
 // Audio callback function - uses userData to get ChucK instance
 static void audio_callback_func(SAMPLE* input, SAMPLE* output, t_CKUINT numFrames,
                                 t_CKUINT numInChans, t_CKUINT numOutChans, void* userData) {
@@ -51,7 +214,11 @@ static void audio_callback_func(SAMPLE* input, SAMPLE* output, t_CKUINT numFrame
         // Set current ChucK instance for output callbacks
         g_current_chuck = chuck;
         chuck->run(input, output, numFrames);
+        // sample any registered global UGens here, while the VM is between
+        // blocks and nothing is writing their buffers
+        capture_taps(chuck, numFrames);
         g_current_chuck = nullptr;
+        g_audio_callback_count.fetch_add(1, std::memory_order_release);
 
         // Calculate audio meters after processing
         if (numOutChans >= 2 && numFrames > 0) {
@@ -187,6 +354,13 @@ static std::unordered_map<std::uintptr_t, int> g_chout_callbacks;
 static std::unordered_map<std::uintptr_t, int> g_cherr_callbacks;
 static std::mutex g_output_callback_mutex;
 
+// Shred lifecycle watchers, keyed by Chuck_VM pointer. The VM hands the
+// watcher the VM itself but no per-listener id, and remove_watcher() matches on
+// the function pointer alone, so a single static wrapper serves every instance
+// and the VM pointer is what identifies whose callback to run.
+static std::unordered_map<std::uintptr_t, int> g_shred_watchers;
+static std::mutex g_shred_watcher_mutex;
+
 // Helper: Store Python callable and return ID
 static int store_callback(nb::callable callback) {
     std::lock_guard<std::mutex> lock(g_callback_mutex);
@@ -211,25 +385,60 @@ static nb::callable get_callback(int id) {
     return nb::callable();
 }
 
+// Forward declaration: registered with the VM, so it must be a plain function
+static void CK_DLL_CALL cb_shred_watcher_wrapper(Chuck_VM_Shred* shred, t_CKINT code,
+                                                 t_CKINT param, Chuck_VM* vm, void* bindle);
+
 // Helper: Clean up all callbacks for a specific ChucK instance
 // Must be called before instance destruction to prevent dangling pointers
 static void cleanup_instance_callbacks(ChucK* chuck) {
     std::uintptr_t key = reinterpret_cast<std::uintptr_t>(chuck);
 
-    std::lock_guard<std::mutex> lock(g_output_callback_mutex);
+    {
+        std::lock_guard<std::mutex> lock(g_output_callback_mutex);
 
-    // Clean up chout callback
-    auto chout_it = g_chout_callbacks.find(key);
-    if (chout_it != g_chout_callbacks.end()) {
-        remove_callback(chout_it->second);
-        g_chout_callbacks.erase(chout_it);
+        // Clean up chout callback
+        auto chout_it = g_chout_callbacks.find(key);
+        if (chout_it != g_chout_callbacks.end()) {
+            remove_callback(chout_it->second);
+            g_chout_callbacks.erase(chout_it);
+        }
+
+        // Clean up cherr callback
+        auto cherr_it = g_cherr_callbacks.find(key);
+        if (cherr_it != g_cherr_callbacks.end()) {
+            remove_callback(cherr_it->second);
+            g_cherr_callbacks.erase(cherr_it);
+        }
     }
 
-    // Clean up cherr callback
-    auto cherr_it = g_cherr_callbacks.find(key);
-    if (cherr_it != g_cherr_callbacks.end()) {
-        remove_callback(cherr_it->second);
-        g_cherr_callbacks.erase(cherr_it);
+    // Release this instance's taps so the audio thread cannot reach into a
+    // slot pointing at a VM that is about to go away
+    {
+        std::lock_guard<std::mutex> lock(g_tap_mutex);
+        bool released = false;
+        for (TapSlot& slot : g_taps) {
+            if (slot.owner == chuck && slot.active.load(std::memory_order_acquire)) {
+                slot.active.store(false, std::memory_order_release);
+                released = true;
+            }
+        }
+        if (released) {
+            wait_for_audio_quiescence(chuck);
+        }
+    }
+
+    // Clean up the shred watcher; unsubscribing from the VM first so that no
+    // notification can arrive after the Python callable is dropped
+    if (chuck->vm()) {
+        std::uintptr_t vm_key = reinterpret_cast<std::uintptr_t>(chuck->vm());
+        std::lock_guard<std::mutex> lock(g_shred_watcher_mutex);
+        auto it = g_shred_watchers.find(vm_key);
+        if (it != g_shred_watchers.end()) {
+            chuck->vm()->remove_watcher(cb_shred_watcher_wrapper);
+            remove_callback(it->second);
+            g_shred_watchers.erase(it);
+        }
     }
 }
 
@@ -289,6 +498,34 @@ static void cb_event_wrapper(t_CKINT callback_id) {
         callback();
     }
     // Note: Don't remove callback for events - they're persistent
+}
+
+// Shred lifecycle callback wrapper - looks up callback by the notifying VM.
+// Called from the VM as shreds are sporked and removed, which on real-time
+// audio means the audio thread; the GIL is acquired the same way the event
+// listener wrapper above does it.
+static void CK_DLL_CALL cb_shred_watcher_wrapper(Chuck_VM_Shred* shred, t_CKINT code,
+                                                 t_CKINT param, Chuck_VM* vm, void* bindle) {
+    (void)param;   // the VM always notifies with param 0
+    (void)bindle;  // the VM pointer identifies the instance instead
+
+    int callback_id = 0;
+    {
+        std::lock_guard<std::mutex> lock(g_shred_watcher_mutex);
+        auto it = g_shred_watchers.find(reinterpret_cast<std::uintptr_t>(vm));
+        if (it != g_shred_watchers.end()) {
+            callback_id = it->second;
+        }
+    }
+    if (callback_id == 0) return;
+
+    nb::callable callback = get_callback(callback_id);
+    if (callback.is_valid()) {
+        nb::gil_scoped_acquire acquire;
+        t_CKUINT shred_id = shred ? shred->get_id() : 0;
+        std::string name = shred ? shred->name : std::string();
+        callback(static_cast<t_CKINT>(code), shred_id, name);
+    }
 }
 
 // Chout callback wrapper - looks up callback by current ChucK instance
@@ -412,6 +649,14 @@ NB_MODULE(_numchuck, m) {
     m.attr("LOG_ALL") = CK_LOG_ALL;
     m.attr("PARAM_VM_HALT") = CHUCK_PARAM_VM_HALT;
     m.attr("PARAM_WORKING_DIRECTORY") = CHUCK_PARAM_WORKING_DIRECTORY;
+
+    // Shred watcher subscription flags (combine with |)
+    m.attr("SHRED_WATCH_NONE") = static_cast<t_CKUINT>(ckvm_shreds_watch_NONE);
+    m.attr("SHRED_WATCH_SPORK") = static_cast<t_CKUINT>(ckvm_shreds_watch_SPORK);
+    m.attr("SHRED_WATCH_REMOVE") = static_cast<t_CKUINT>(ckvm_shreds_watch_REMOVE);
+    m.attr("SHRED_WATCH_SUSPEND") = static_cast<t_CKUINT>(ckvm_shreds_watch_SUSPEND);
+    m.attr("SHRED_WATCH_ACTIVATE") = static_cast<t_CKUINT>(ckvm_shreds_watch_ACTIVATE);
+    m.attr("SHRED_WATCH_ALL") = static_cast<t_CKUINT>(ckvm_shreds_watch_ALL);
 
     // Main ChucK class
     nb::class_<ChucK>(m, "ChucK", "ChucK virtual machine and compiler")
@@ -746,6 +991,220 @@ NB_MODULE(_numchuck, m) {
             },
             "name"_a, "callback"_a,
             "Get a global float array (async via callback)")
+        .def("get_global_int_array_value",
+            [](ChucK& self, const std::string& name, t_CKUINT index, nb::callable callback) {
+                int id = store_callback(callback);
+                if (!self.globals()->getGlobalIntArrayValue(name.c_str(), id, index, cb_get_int_wrapper)) {
+                    remove_callback(id);
+                    throw std::runtime_error("Failed to get global int array value '" + name + "[" + std::to_string(index) + "]'");
+                }
+            },
+            "name"_a, "index"_a, "callback"_a,
+            "Get a global int array element by index (async via callback)")
+        .def("get_global_float_array_value",
+            [](ChucK& self, const std::string& name, t_CKUINT index, nb::callable callback) {
+                int id = store_callback(callback);
+                if (!self.globals()->getGlobalFloatArrayValue(name.c_str(), id, index, cb_get_float_wrapper)) {
+                    remove_callback(id);
+                    throw std::runtime_error("Failed to get global float array value '" + name + "[" + std::to_string(index) + "]'");
+                }
+            },
+            "name"_a, "index"_a, "callback"_a,
+            "Get a global float array element by index (async via callback)")
+        .def("get_global_associative_int_array_value",
+            [](ChucK& self, const std::string& name, const std::string& key, nb::callable callback) {
+                int id = store_callback(callback);
+                if (!self.globals()->getGlobalAssociativeIntArrayValue(name.c_str(), id, key.c_str(), cb_get_int_wrapper)) {
+                    remove_callback(id);
+                    throw std::runtime_error("Failed to get global associative int array value '" + name + "[\"" + key + "\"]'");
+                }
+            },
+            "name"_a, "key"_a, "callback"_a,
+            "Get a global associative int array element by key (async via callback)")
+        .def("get_global_associative_float_array_value",
+            [](ChucK& self, const std::string& name, const std::string& key, nb::callable callback) {
+                int id = store_callback(callback);
+                if (!self.globals()->getGlobalAssociativeFloatArrayValue(name.c_str(), id, key.c_str(), cb_get_float_wrapper)) {
+                    remove_callback(id);
+                    throw std::runtime_error("Failed to get global associative float array value '" + name + "[\"" + key + "\"]'");
+                }
+            },
+            "name"_a, "key"_a, "callback"_a,
+            "Get a global associative float array element by key (async via callback)")
+
+        // Global UGen sample access
+        .def("get_ugen_samples",
+            [](ChucK& self, const std::string& name, int num_frames, int num_channels) {
+                if (!self.globals()) {
+                    throw std::runtime_error("Globals manager not initialized");
+                }
+                if (num_frames <= 0) {
+                    throw std::invalid_argument("num_frames must be positive");
+                }
+                if (num_channels <= 0) {
+                    throw std::invalid_argument("num_channels must be positive");
+                }
+
+                size_t total = static_cast<size_t>(num_frames) * static_cast<size_t>(num_channels);
+                SAMPLE* data = new SAMPLE[total]();
+
+                // While the audio thread is running it is writing the UGen's
+                // buffer, and reading it from here races with those writes.
+                // A registered tap is captured on the audio thread instead, so
+                // serve from its snapshot; without one, refuse rather than hand
+                // back data that may be spliced.
+                if (audio_running_for(&self)) {
+                    std::lock_guard<std::mutex> lock(g_tap_mutex);
+                    TapSlot* slot = find_tap(&self, name, true);
+                    if (!slot) {
+                        delete[] data;
+                        throw std::runtime_error(
+                            "Cannot read global UGen '" + name + "' while real-time audio "
+                            "is running: the audio thread is writing that buffer. Register "
+                            "it first with add_tap('" + name + "'), which captures the "
+                            "samples on the audio thread instead");
+                    }
+                    if (slot->channels != num_channels) {
+                        delete[] data;
+                        throw std::invalid_argument(
+                            "Tap '" + name + "' was registered for " +
+                            std::to_string(slot->channels) + " channel(s), not " +
+                            std::to_string(num_channels));
+                    }
+                    bool got_snapshot;
+                    {
+                        // the copy and any retry backoff do not touch Python
+                        nb::gil_scoped_release unlocked;
+                        got_snapshot = read_tap_snapshot(
+                            *slot, static_cast<size_t>(num_frames), data);
+                    }
+                    if (!got_snapshot) {
+                        delete[] data;
+                        throw std::runtime_error(
+                            "Timed out reading a consistent snapshot of tap '" + name + "'");
+                    }
+
+                    nb::capsule tap_owner(data, [](void* p) noexcept {
+                        delete[] static_cast<SAMPLE*>(p);
+                    });
+                    if (num_channels == 1) {
+                        size_t shape[1] = { static_cast<size_t>(num_frames) };
+                        return nb::cast(nb::ndarray<nb::numpy, SAMPLE, nb::ndim<1>>(
+                            data, 1, shape, tap_owner));
+                    }
+                    size_t shape[2] = { static_cast<size_t>(num_channels),
+                                        static_cast<size_t>(num_frames) };
+                    return nb::cast(nb::ndarray<nb::numpy, SAMPLE, nb::ndim<2>>(
+                        data, 2, shape, tap_owner));
+                }
+
+                // Offline: the VM only advances inside run(), which holds the
+                // GIL, so no other Python thread can be running it here.
+                // the multichannel variant requires an exact channel match, so
+                // mono goes through the single-channel call
+                bool ok = (num_channels == 1)
+                    ? self.globals()->getGlobalUGenSamples(name.c_str(), data, num_frames)
+                    : self.globals()->getGlobalUGenSamplesMulti(name.c_str(), data, num_frames, num_channels);
+
+                if (!ok) {
+                    delete[] data;
+                    throw std::runtime_error(
+                        "Failed to read samples from global UGen '" + name +
+                        "' (not a global UGen, or channel count mismatch)");
+                }
+
+                nb::capsule owner(data, [](void* p) noexcept {
+                    delete[] static_cast<SAMPLE*>(p);
+                });
+
+                // getGlobalUGenSamplesMulti writes one channel after another,
+                // so multichannel results are channel-major, not interleaved
+                if (num_channels == 1) {
+                    size_t shape[1] = { static_cast<size_t>(num_frames) };
+                    return nb::cast(nb::ndarray<nb::numpy, SAMPLE, nb::ndim<1>>(data, 1, shape, owner));
+                }
+                size_t shape[2] = { static_cast<size_t>(num_channels), static_cast<size_t>(num_frames) };
+                return nb::cast(nb::ndarray<nb::numpy, SAMPLE, nb::ndim<2>>(data, 2, shape, owner));
+            },
+            "name"_a, "num_frames"_a, "num_channels"_a = 1,
+            "Read the most recent samples from a global UGen. The ChucK-side "
+            "UGen must have been put in buffered mode (e.g. 'tap.buffered(1)'), "
+            "otherwise the buffer reads as zeros. Returns a 1-D array for mono "
+            "and a (channels, frames) array otherwise. While real-time audio is "
+            "running the UGen must be registered with add_tap() first, which "
+            "captures it on the audio thread; a direct read would race with it")
+        .def("add_tap",
+            [](ChucK& self, const std::string& name, int num_channels, int capacity_frames) {
+                if (name.empty() || name.size() >= CK_TAP_NAME_MAX) {
+                    throw std::invalid_argument("Tap name must be 1-127 characters");
+                }
+                if (num_channels <= 0) {
+                    throw std::invalid_argument("num_channels must be positive");
+                }
+                if (capacity_frames <= 0) {
+                    throw std::invalid_argument("capacity_frames must be positive");
+                }
+
+                std::lock_guard<std::mutex> lock(g_tap_mutex);
+
+                TapSlot* slot = find_tap(&self, name, false);
+                if (!slot) {
+                    for (TapSlot& candidate : g_taps) {
+                        if (!candidate.active.load(std::memory_order_acquire)) {
+                            slot = &candidate;
+                            break;
+                        }
+                    }
+                }
+                if (!slot) {
+                    throw std::runtime_error(
+                        "No free tap slots (maximum " + std::to_string(CK_MAX_TAPS) + ")");
+                }
+
+                // stop the audio thread using this slot before reconfiguring it
+                slot->active.store(false, std::memory_order_release);
+                wait_for_audio_quiescence(&self);
+
+                slot->owner = &self;
+                std::snprintf(slot->name, CK_TAP_NAME_MAX, "%s", name.c_str());
+                slot->channels = num_channels;
+                slot->capacity = static_cast<size_t>(capacity_frames);
+                slot->ring.assign(slot->capacity * num_channels, 0.0f);
+                slot->staging.assign(slot->capacity * num_channels, 0.0f);
+                slot->write_pos.store(0, std::memory_order_relaxed);
+                slot->frames_written.store(0, std::memory_order_relaxed);
+                slot->seq.store(0, std::memory_order_relaxed);
+                slot->active.store(true, std::memory_order_release);
+            },
+            "name"_a, "num_channels"_a = 1, "capacity_frames"_a = 8192,
+            "Register a global UGen to be sampled on the audio thread, which is "
+            "what makes get_ugen_samples() safe during real-time audio. Keeps "
+            "capacity_frames of history; re-registering a name reconfigures it")
+        .def("remove_tap",
+            [](ChucK& self, const std::string& name) {
+                std::lock_guard<std::mutex> lock(g_tap_mutex);
+                TapSlot* slot = find_tap(&self, name, true);
+                if (!slot) {
+                    return false;
+                }
+                slot->active.store(false, std::memory_order_release);
+                wait_for_audio_quiescence(&self);
+                return true;
+            },
+            "name"_a,
+            "Unregister a tap; returns False if it was not registered")
+        .def("list_taps",
+            [](ChucK& self) {
+                std::lock_guard<std::mutex> lock(g_tap_mutex);
+                std::vector<std::string> names;
+                for (TapSlot& slot : g_taps) {
+                    if (!slot.active.load(std::memory_order_acquire)) continue;
+                    if (slot.owner != &self) continue;
+                    names.push_back(slot.name);
+                }
+                return names;
+            },
+            "Names of the global UGens currently registered as taps")
 
         // Global event management
         .def("signal_global_event",
@@ -880,10 +1339,114 @@ NB_MODULE(_numchuck, m) {
                 info["name"] = shred->name;
                 info["is_running"] = shred->is_running;
                 info["is_done"] = shred->is_done;
+                // a shred waiting on an event holds a pointer to it
+                info["is_blocked"] = (shred->event != nullptr);
+                info["wake_time"] = shred->wake_time;
+                info["start"] = shred->start;
+                info["args"] = shred->args;
                 return info;
             },
             "shred_id"_a,
             "Get information about a shred")
+        .def("abort_current_shred",
+            [](ChucK& self) {
+                if (!self.vm()) {
+                    throw std::runtime_error("VM not initialized");
+                }
+                return static_cast<bool>(self.vm()->abort_current_shred());
+            },
+            "Abort the shred currently executing in the VM, breaking out of a "
+            "shred stuck in a loop that never advances time (which remove_shred "
+            "cannot reach). Only has a target while the VM is inside a compute "
+            "cycle, so call it from another thread during real-time audio; "
+            "returns False when there is nothing to abort")
+        .def("subscribe_shred_watcher",
+            [](ChucK& self, nb::callable callback, t_CKUINT options) {
+                if (!self.vm()) {
+                    throw std::runtime_error("VM not initialized");
+                }
+                std::uintptr_t vm_key = reinterpret_cast<std::uintptr_t>(self.vm());
+                int id = store_callback(callback);
+                {
+                    std::lock_guard<std::mutex> lock(g_shred_watcher_mutex);
+                    auto it = g_shred_watchers.find(vm_key);
+                    if (it != g_shred_watchers.end()) {
+                        remove_callback(it->second);
+                    }
+                    g_shred_watchers[vm_key] = id;
+                }
+                self.vm()->subscribe_watcher(cb_shred_watcher_wrapper, options, nullptr);
+            },
+            "callback"_a, "options"_a = static_cast<t_CKUINT>(ckvm_shreds_watch_ALL),
+            "Call callback(code, shred_id, name) as shreds are sporked, removed, "
+            "suspended or activated; code is one of the SHRED_WATCH_* flags. "
+            "One watcher per instance -- subscribing again replaces it. The "
+            "callback runs on whichever thread drives the VM")
+        .def("remove_shred_watcher",
+            [](ChucK& self) {
+                if (!self.vm()) {
+                    throw std::runtime_error("VM not initialized");
+                }
+                std::uintptr_t vm_key = reinterpret_cast<std::uintptr_t>(self.vm());
+                std::lock_guard<std::mutex> lock(g_shred_watcher_mutex);
+                auto it = g_shred_watchers.find(vm_key);
+                if (it == g_shred_watchers.end()) {
+                    return false;
+                }
+                self.vm()->remove_watcher(cb_shred_watcher_wrapper);
+                remove_callback(it->second);
+                g_shred_watchers.erase(it);
+                return true;
+            },
+            "Unsubscribe the shred watcher; returns False if none was set")
+
+        // Adaptive block processing
+        .def("set_adaptive",
+            [](ChucK& self, t_CKUINT max_block_size) {
+                if (!self.vm() || !self.vm()->shreduler()) {
+                    throw std::runtime_error("VM not initialized");
+                }
+
+                // UGens allocate their vectorized buffers when they are
+                // instantiated, sized to the shreduler's block size at that
+                // moment -- and the dac, adc and bunghole are built during VM
+                // init. Switching a VM that started non-adaptive into the
+                // vectorized code path therefore runs it over buffers that were
+                // never allocated (a segfault on the next run), and raising the
+                // size past what init allocated overruns them silently.
+                t_CKUINT ceiling = self.getParamInt(CHUCK_PARAM_VM_ADAPTIVE);
+                if (max_block_size > 1) {
+                    if (ceiling <= 1) {
+                        throw std::runtime_error(
+                            "VM was not initialized for adaptive block processing; "
+                            "set the vm_adaptive parameter to a block size before init()");
+                    }
+                    if (max_block_size > ceiling) {
+                        throw std::invalid_argument(
+                            "max_block_size " + std::to_string(max_block_size) +
+                            " exceeds the " + std::to_string(ceiling) +
+                            " allocated at init; buffers are sized once");
+                    }
+                }
+
+                self.vm()->shreduler()->set_adaptive(max_block_size);
+            },
+            "max_block_size"_a,
+            "Set the shreduler's adaptive block size at runtime; a size of 1 or "
+            "0 disables adaptive mode. Only valid on a VM initialized with the "
+            "vm_adaptive parameter, and only up to that initial size, because "
+            "the vectorized buffers are allocated once when a UGen is created")
+        .def("get_adaptive",
+            [](ChucK& self) {
+                if (!self.vm() || !self.vm()->shreduler()) {
+                    throw std::runtime_error("VM not initialized");
+                }
+                nb::dict info;
+                info["adaptive"] = static_cast<bool>(self.vm()->shreduler()->m_adaptive);
+                info["max_block_size"] = self.vm()->shreduler()->m_max_block_size;
+                return info;
+            },
+            "Get adaptive block processing state as {adaptive, max_block_size}")
 
         // VM control messages
         .def("clear_vm",
@@ -1068,6 +1631,10 @@ NB_MODULE(_numchuck, m) {
                 throw std::runtime_error("Failed to start audio system");
             }
 
+            // marks the instance whose UGen buffers the audio thread is now
+            // writing, which is what makes a direct tap read unsafe
+            g_audio_chuck.store(&chuck, std::memory_order_release);
+
             return success;
         },
         "chuck"_a,
@@ -1086,6 +1653,8 @@ NB_MODULE(_numchuck, m) {
             if (g_audio_context) {
                 g_audio_context->stop();
             }
+            // no audio thread writing any more, so direct tap reads are safe again
+            g_audio_chuck.store(nullptr, std::memory_order_release);
             return true;
         },
         "Stop real-time audio playback");
@@ -1097,6 +1666,7 @@ NB_MODULE(_numchuck, m) {
                 g_audio_context->cleanup(msWait);
                 g_audio_context.reset();
             }
+            g_audio_chuck.store(nullptr, std::memory_order_release);
         },
         "msWait"_a = 0,
         "Shutdown audio system");
@@ -1141,6 +1711,16 @@ NB_MODULE(_numchuck, m) {
                 std::lock_guard<std::mutex> lock(g_output_callback_mutex);
                 g_chout_callbacks.clear();
                 g_cherr_callbacks.clear();
+            }
+            {
+                std::lock_guard<std::mutex> lock(g_shred_watcher_mutex);
+                g_shred_watchers.clear();
+            }
+            {
+                std::lock_guard<std::mutex> lock(g_tap_mutex);
+                for (TapSlot& slot : g_taps) {
+                    slot.active.store(false, std::memory_order_release);
+                }
             }
         },
         "Internal cleanup function for callbacks (called during module unload)");

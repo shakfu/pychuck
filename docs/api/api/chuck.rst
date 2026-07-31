@@ -32,6 +32,28 @@ ChucK Class
    .. automethod:: get_global_float
    .. automethod:: get_global_string
 
+   .. rubric:: Global Arrays
+
+   .. automethod:: set_global_int_array
+   .. automethod:: set_global_float_array
+   .. automethod:: set_global_int_array_value
+   .. automethod:: set_global_float_array_value
+   .. automethod:: set_global_associative_int_array_value
+   .. automethod:: set_global_associative_float_array_value
+   .. automethod:: get_global_int_array
+   .. automethod:: get_global_float_array
+   .. automethod:: get_global_int_array_value
+   .. automethod:: get_global_float_array_value
+   .. automethod:: get_global_associative_int_array_value
+   .. automethod:: get_global_associative_float_array_value
+
+   .. rubric:: Global UGens
+
+   .. automethod:: get_ugen_samples
+   .. automethod:: add_tap
+   .. automethod:: remove_tap
+   .. automethod:: list_taps
+
    .. rubric:: Global Events
 
    .. automethod:: signal_global_event
@@ -45,12 +67,21 @@ ChucK Class
    .. automethod:: remove_all_shreds
    .. automethod:: replace_shred
    .. automethod:: get_all_shred_ids
+   .. automethod:: get_ready_shred_ids
+   .. automethod:: get_blocked_shred_ids
+   .. automethod:: get_last_shred_id
+   .. automethod:: get_next_shred_id
    .. automethod:: get_shred_info
+   .. automethod:: abort_current_shred
+   .. automethod:: subscribe_shred_watcher
+   .. automethod:: remove_shred_watcher
 
    .. rubric:: VM Control
 
    .. automethod:: clear_vm
    .. automethod:: reset_shred_id
+   .. automethod:: set_adaptive
+   .. automethod:: get_adaptive
 
    .. rubric:: Status Methods
 

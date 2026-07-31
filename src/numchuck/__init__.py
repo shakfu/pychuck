@@ -36,6 +36,16 @@ from ._version import __version__, __version_info__
 # Core API
 from .api import Chuck, GlobalFloat, GlobalInt, GlobalString, Shred
 
+# Shred watcher flags, for Chuck.on_shred(options=...)
+from ._numchuck import (
+    SHRED_WATCH_ACTIVATE,
+    SHRED_WATCH_ALL,
+    SHRED_WATCH_NONE,
+    SHRED_WATCH_REMOVE,
+    SHRED_WATCH_SPORK,
+    SHRED_WATCH_SUSPEND,
+)
+
 # Rendering
 from .render import RenderError, render, render_file, to_wav
 
@@ -52,6 +62,13 @@ __all__ = [
     "GlobalInt",
     "GlobalFloat",
     "GlobalString",
+    # Shred watcher flags
+    "SHRED_WATCH_NONE",
+    "SHRED_WATCH_SPORK",
+    "SHRED_WATCH_REMOVE",
+    "SHRED_WATCH_SUSPEND",
+    "SHRED_WATCH_ACTIVATE",
+    "SHRED_WATCH_ALL",
     # Rendering
     "render",
     "render_file",

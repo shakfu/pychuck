@@ -38,11 +38,13 @@ import numpy as np
 
 from . import _numchuck
 from .constants import (
+    DEFAULT_ADAPTIVE_BLOCK_SIZE,
     DEFAULT_INPUT_CHANNELS,
     DEFAULT_OTF_PORT,
     DEFAULT_OUTPUT_CHANNELS,
     DEFAULT_RUN_FRAMES,
     DEFAULT_SAMPLE_RATE,
+    DEFAULT_TAP_CAPACITY_FRAMES,
 )
 from .paths import get_numchuck_home
 
@@ -53,6 +55,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 T = TypeVar("T", int, float, str)
+_R = TypeVar("_R")  # result type of a VM callback-based getter
 
 
 class Chuck:
@@ -68,7 +71,10 @@ class Chuck:
         working_directory: Working directory for file operations
         chugin_enable: Enable chugin loading (default: True)
         user_chugins: List of user chugin paths (default: None)
-        vm_adaptive: Enable adaptive VM timing (default: False)
+        vm_adaptive: Adaptive block processing. True selects a default block
+            size, or pass the maximum block size directly. It must be set here:
+            UGens allocate their vectorized buffers when created, so the mode
+            cannot be switched on later (default: False)
         vm_halt: Halt VM when no shreds (default: False)
         auto_depend: Enable automatic dependency resolution (default: False)
         deprecate_level: Deprecation warning level 0-2 (default: 1)
@@ -88,7 +94,7 @@ class Chuck:
         working_directory: str = "",
         chugin_enable: bool = True,
         user_chugins: list[str] | None = None,
-        vm_adaptive: bool = False,
+        vm_adaptive: bool | int = False,
         vm_halt: bool = False,
         auto_depend: bool = False,
         deprecate_level: int = 1,
@@ -155,7 +161,14 @@ class Chuck:
             self._chuck.set_param_string_list(
                 _numchuck.PARAM_USER_CHUGINS, chugin_files
             )
-        self._chuck.set_param(_numchuck.PARAM_VM_ADAPTIVE, int(vm_adaptive))
+        # PARAM_VM_ADAPTIVE is a maximum block size, not a flag: ChucK treats
+        # anything <= 1 as "off", so passing True alone would silently do
+        # nothing. True selects a default block size instead.
+        if vm_adaptive is True:
+            adaptive_size = DEFAULT_ADAPTIVE_BLOCK_SIZE
+        else:
+            adaptive_size = int(vm_adaptive)
+        self._chuck.set_param(_numchuck.PARAM_VM_ADAPTIVE, adaptive_size)
         self._chuck.set_param(_numchuck.PARAM_VM_HALT, int(vm_halt))
         self._chuck.set_param(_numchuck.PARAM_AUTO_DEPEND, int(auto_depend))
         self._chuck.set_param(_numchuck.PARAM_DEPRECATE_LEVEL, deprecate_level)
@@ -451,8 +464,39 @@ class Chuck:
 
     @property
     def vm_adaptive(self) -> bool:
-        """Whether adaptive VM timing is enabled."""
-        return bool(self._chuck.get_param_int(_numchuck.PARAM_VM_ADAPTIVE))
+        """Whether adaptive block processing was enabled at construction.
+
+        This reads the init parameter, which also fixes the largest block size
+        the VM can ever use. For the shreduler's live state, and to change it
+        within that ceiling, use the `adaptive` property and set_adaptive().
+        """
+        return self._chuck.get_param_int(_numchuck.PARAM_VM_ADAPTIVE) > 1
+
+    @property
+    def adaptive(self) -> dict[str, Any]:
+        """Live adaptive block processing state.
+
+        Returns:
+            Dict with `adaptive` (bool) and `max_block_size` (int)
+        """
+        return self._chuck.get_adaptive()
+
+    def set_adaptive(self, max_block_size: int) -> None:
+        """Set the shreduler's adaptive block size on a running VM.
+
+        Only valid when the instance was constructed with vm_adaptive, and only
+        up to that size: the vectorized buffers a UGen uses are allocated once,
+        when the UGen is created.
+
+        Args:
+            max_block_size: Maximum block size in samples; 1 or 0 turns
+                adaptive mode off
+
+        Raises:
+            RuntimeError: The VM was not constructed with vm_adaptive
+            ValueError: max_block_size exceeds the size set at construction
+        """
+        self._chuck.set_adaptive(max_block_size)
 
     @property
     def vm_halt(self) -> bool:
@@ -566,9 +610,49 @@ class Chuck:
         """Get information about a shred.
 
         Returns:
-            Dict with shred info, or None if not found
+            Dict with id, name, is_running, is_done, is_blocked, wake_time,
+            start and args, or None if not found
         """
         return self._chuck.get_shred_info(shred_id)
+
+    def abort_shred(self) -> bool:
+        """Abort the shred currently executing in the VM.
+
+        This is the only way to break out of a shred stuck in a loop that never
+        advances time; remove_shred() cannot reach such a shred because the VM
+        never returns from it. The VM only has a current shred while it is
+        inside a compute cycle, so this is useful from another thread while
+        real-time audio runs, and reports False when there is nothing to abort.
+
+        Returns:
+            True if a shred was aborted
+        """
+        return self._chuck.abort_current_shred()
+
+    def on_shred(
+        self,
+        callback: Callable[[int, int, str], None],
+        options: int = _numchuck.SHRED_WATCH_ALL,
+        # SHRED_WATCH_* flags; combine with |
+    ) -> None:
+        """Register a callback for shred lifecycle changes.
+
+        The callback receives (code, shred_id, name), where code is one of the
+        SHRED_WATCH_SPORK / REMOVE / SUSPEND / ACTIVATE flags. Only one watcher
+        is active per instance; registering again replaces it.
+
+        The callback runs on whichever thread drives the VM, which during
+        real-time audio is the audio thread -- keep it short.
+        """
+        self._chuck.subscribe_shred_watcher(callback, options)
+
+    def remove_shred_watcher(self) -> bool:
+        """Unregister the shred lifecycle callback.
+
+        Returns:
+            True if a watcher was registered
+        """
+        return self._chuck.remove_shred_watcher()
 
     def clear(self) -> None:
         """Remove all shreds from the VM.
@@ -679,6 +763,200 @@ class Chuck:
         The callback will be invoked during the next run() call.
         """
         self._chuck.get_global_string(name, callback)
+
+    # -------------------------------------------------------------------------
+    # Global arrays
+    #
+    # Reads go through the VM's callback queue like the scalar getters, so each
+    # one runs the VM briefly to let the callback fire. Associative arrays can
+    # only be read one key at a time -- ChucK offers no whole-map fetch.
+    # -------------------------------------------------------------------------
+
+    def _get_via_callback(
+        self,
+        name: str,
+        kind: str,
+        run_frames: int,
+        request: Callable[[Callable[[_R], None]], None],
+    ) -> _R:
+        result: list[_R] = []
+        request(result.append)
+        self.run(run_frames)
+        if not result:
+            raise RuntimeError(
+                f"Failed to get global {kind} '{name}' - callback not invoked. "
+                f"Try increasing run_frames (currently {run_frames})."
+            )
+        return result[0]
+
+    def set_int_array(self, name: str, values: list[int]) -> None:
+        """Set a global int array."""
+        self._chuck.set_global_int_array(name, values)
+
+    def get_int_array(
+        self, name: str, run_frames: int = DEFAULT_RUN_FRAMES
+    ) -> list[int]:
+        """Get a global int array."""
+        return self._get_via_callback(
+            name,
+            "int array",
+            run_frames,
+            lambda cb: self._chuck.get_global_int_array(name, cb),
+        )
+
+    def set_float_array(self, name: str, values: list[float]) -> None:
+        """Set a global float array."""
+        self._chuck.set_global_float_array(name, values)
+
+    def get_float_array(
+        self, name: str, run_frames: int = DEFAULT_RUN_FRAMES
+    ) -> list[float]:
+        """Get a global float array."""
+        return self._get_via_callback(
+            name,
+            "float array",
+            run_frames,
+            lambda cb: self._chuck.get_global_float_array(name, cb),
+        )
+
+    def set_int_array_value(self, name: str, index: int, value: int) -> None:
+        """Set one element of a global int array."""
+        self._chuck.set_global_int_array_value(name, index, value)
+
+    def get_int_array_value(
+        self, name: str, index: int, run_frames: int = DEFAULT_RUN_FRAMES
+    ) -> int:
+        """Get one element of a global int array."""
+
+        def request(cb: Callable[[int], None]) -> None:
+            self._chuck.get_global_int_array_value(name, index, cb)
+
+        return self._get_via_callback(
+            f"{name}[{index}]", "int array value", run_frames, request
+        )
+
+    def set_float_array_value(self, name: str, index: int, value: float) -> None:
+        """Set one element of a global float array."""
+        self._chuck.set_global_float_array_value(name, index, value)
+
+    def get_float_array_value(
+        self, name: str, index: int, run_frames: int = DEFAULT_RUN_FRAMES
+    ) -> float:
+        """Get one element of a global float array."""
+
+        def request(cb: Callable[[float], None]) -> None:
+            self._chuck.get_global_float_array_value(name, index, cb)
+
+        return self._get_via_callback(
+            f"{name}[{index}]", "float array value", run_frames, request
+        )
+
+    def set_assoc_int(self, name: str, key: str, value: int) -> None:
+        """Set one entry of a global associative int array."""
+        self._chuck.set_global_associative_int_array_value(name, key, value)
+
+    def get_assoc_int(
+        self, name: str, key: str, run_frames: int = DEFAULT_RUN_FRAMES
+    ) -> int:
+        """Get one entry of a global associative int array."""
+
+        def request(cb: Callable[[int], None]) -> None:
+            self._chuck.get_global_associative_int_array_value(name, key, cb)
+
+        return self._get_via_callback(
+            f'{name}["{key}"]', "associative int value", run_frames, request
+        )
+
+    def set_assoc_float(self, name: str, key: str, value: float) -> None:
+        """Set one entry of a global associative float array."""
+        self._chuck.set_global_associative_float_array_value(name, key, value)
+
+    def get_assoc_float(
+        self, name: str, key: str, run_frames: int = DEFAULT_RUN_FRAMES
+    ) -> float:
+        """Get one entry of a global associative float array."""
+
+        def request(cb: Callable[[float], None]) -> None:
+            self._chuck.get_global_associative_float_array_value(name, key, cb)
+
+        return self._get_via_callback(
+            f'{name}["{key}"]', "associative float value", run_frames, request
+        )
+
+    # -------------------------------------------------------------------------
+    # Global UGens
+    # -------------------------------------------------------------------------
+
+    def ugen_samples(
+        self, name: str, num_frames: int, num_channels: int = 1
+    ) -> NDArray[np.float32]:
+        """Read the most recent samples from a global UGen.
+
+        This taps audio mid-graph, wherever a `global UGen` sits, rather than
+        the summed dac output that run() returns.
+
+        The ChucK side must put the UGen in buffered mode first, otherwise the
+        buffer reads as all zeros::
+
+            global Gain tap;
+            tap.buffered(1);
+            SinOsc s => tap => dac;
+
+        While real-time audio is running the UGen must be registered with
+        add_tap() first. ChucK's own UGen buffer has no synchronization, so
+        reading it from here while the audio thread writes it can return a
+        spliced waveform; a registered tap is captured on the audio thread
+        instead and read back from a consistent snapshot.
+
+        Args:
+            name: Name of the global UGen
+            num_frames: Number of frames to read
+            num_channels: Channel count; must match the UGen exactly when > 1
+
+        Returns:
+            float32 array, 1-D for mono and (num_channels, num_frames)
+            channel-major otherwise
+
+        Raises:
+            RuntimeError: Real-time audio is running and no tap is registered
+        """
+        return self._chuck.get_ugen_samples(name, num_frames, num_channels)
+
+    def add_tap(
+        self,
+        name: str,
+        num_channels: int = 1,
+        capacity_frames: int = DEFAULT_TAP_CAPACITY_FRAMES,
+    ) -> None:
+        """Register a global UGen to be sampled on the audio thread.
+
+        This is what makes ugen_samples() safe during real-time audio. The tap
+        accumulates capacity_frames of history, so reads are not limited to a
+        single audio block. Registering a name that is already tapped
+        reconfigures it.
+
+        Args:
+            name: Name of the global UGen
+            num_channels: Channel count the UGen presents
+            capacity_frames: Frames of history to keep
+
+        Raises:
+            RuntimeError: No free tap slots remain
+        """
+        self._chuck.add_tap(name, num_channels, capacity_frames)
+
+    def remove_tap(self, name: str) -> bool:
+        """Unregister a tap.
+
+        Returns:
+            True if the tap was registered
+        """
+        return self._chuck.remove_tap(name)
+
+    @property
+    def taps(self) -> list[str]:
+        """Names of the global UGens currently registered as taps."""
+        return self._chuck.list_taps()
 
     # -------------------------------------------------------------------------
     # Global events

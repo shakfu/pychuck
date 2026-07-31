@@ -15,6 +15,8 @@ DEFAULT_INPUT_CHANNELS = 2  # Stereo input (for API, 0 for real-time)
 DEFAULT_BUFFER_SIZE = 512  # Frames per audio buffer
 DEFAULT_NUM_BUFFERS = 8  # Number of audio buffers
 DEFAULT_RUN_FRAMES = 256  # Frames to run for async callback execution
+DEFAULT_ADAPTIVE_BLOCK_SIZE = 512  # Max block size when adaptive mode is on
+DEFAULT_TAP_CAPACITY_FRAMES = 8192  # History kept per global UGen tap
 
 # =============================================================================
 # Network Ports
