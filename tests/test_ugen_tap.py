@@ -272,6 +272,28 @@ def test_tap_slots_are_finite():
         chuck.remove_tap(f"tap{i}")
 
 
+def test_taps_do_not_leak_across_instances():
+    """A new instance must not inherit taps from a destroyed one.
+
+    Tap slots are keyed by the ChucK instance pointer, and the allocator hands a
+    destroyed instance's address straight to the next one. An instance collected
+    by the garbage collector never runs the shutdown path, so without an
+    explicit release its registrations outlived it: 18 of 20 fresh instances
+    picked up the dead one's tap, and CI caught it as a stale name in
+    list_taps() several tests later.
+    """
+    leaked = []
+    for i in range(20):
+        chuck = make_chuck()
+        if chuck.list_taps():
+            leaked.append((i, chuck.list_taps()))
+        chuck.add_tap("leaky", 1, 64)  # deliberately never removed
+        del chuck
+        gc.collect()
+
+    assert leaked == []
+
+
 def test_offline_reads_ignore_taps():
     """With no audio thread there is nothing to race, so reads stay direct."""
     chuck = make_chuck()

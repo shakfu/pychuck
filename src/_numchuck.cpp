@@ -74,8 +74,10 @@ struct TapSlot {
     std::atomic<size_t> write_pos{0};        // next frame index in the ring
     std::atomic<uint64_t> frames_written{0};
 
-    // configuration, only touched while the slot is inactive
-    ChucK* owner{nullptr};
+    // configuration, only touched while the slot is inactive. owner is atomic
+    // because it is cleared when a new instance is constructed at the same
+    // address, which can happen while the audio thread is scanning slots.
+    std::atomic<ChucK*> owner{nullptr};
     char name[CK_TAP_NAME_MAX]{};
     int channels{1};
     size_t capacity{0};                      // frames of history
@@ -96,7 +98,7 @@ void capture_taps(ChucK* chuck, t_CKUINT numFrames) {
 
     for (TapSlot& slot : g_taps) {
         if (!slot.active.load(std::memory_order_acquire)) continue;
-        if (slot.owner != chuck) continue;
+        if (slot.owner.load(std::memory_order_relaxed) != chuck) continue;
 
         size_t frames = std::min(static_cast<size_t>(numFrames), slot.capacity);
         if (frames == 0) continue;
@@ -139,7 +141,7 @@ void capture_taps(ChucK* chuck, t_CKUINT numFrames) {
 TapSlot* find_tap(ChucK* chuck, const std::string& name, bool active_only) {
     for (TapSlot& slot : g_taps) {
         if (active_only && !slot.active.load(std::memory_order_acquire)) continue;
-        if (slot.owner != chuck) continue;
+        if (slot.owner.load(std::memory_order_relaxed) != chuck) continue;
         if (name == slot.name) return &slot;
     }
     return nullptr;
@@ -389,6 +391,38 @@ static nb::callable get_callback(int id) {
 static void CK_DLL_CALL cb_shred_watcher_wrapper(Chuck_VM_Shred* shred, t_CKINT code,
                                                  t_CKINT param, Chuck_VM* vm, void* bindle);
 
+// Drop every registration keyed to this address.
+//
+// The registries below identify an instance by its pointer, and the allocator
+// hands a destroyed instance's address straight back to the next one -- a fresh
+// ChucK inherited a dead instance's tap in 18 of 20 attempts. Instances that go
+// away through garbage collection never run the shutdown path, so the release
+// has to happen when a new object claims the address instead.
+static void release_instance_state(ChucK* chuck) {
+    {
+        std::lock_guard<std::mutex> lock(g_tap_mutex);
+        for (TapSlot& slot : g_taps) {
+            if (slot.owner.load(std::memory_order_relaxed) != chuck) continue;
+            // deactivate before disowning: the audio thread checks active first
+            slot.active.store(false, std::memory_order_release);
+            slot.owner.store(nullptr, std::memory_order_relaxed);
+        }
+    }
+
+    std::uintptr_t key = reinterpret_cast<std::uintptr_t>(chuck);
+    std::lock_guard<std::mutex> lock(g_output_callback_mutex);
+    auto chout_it = g_chout_callbacks.find(key);
+    if (chout_it != g_chout_callbacks.end()) {
+        remove_callback(chout_it->second);
+        g_chout_callbacks.erase(chout_it);
+    }
+    auto cherr_it = g_cherr_callbacks.find(key);
+    if (cherr_it != g_cherr_callbacks.end()) {
+        remove_callback(cherr_it->second);
+        g_cherr_callbacks.erase(cherr_it);
+    }
+}
+
 // Helper: Clean up all callbacks for a specific ChucK instance
 // Must be called before instance destruction to prevent dangling pointers
 static void cleanup_instance_callbacks(ChucK* chuck) {
@@ -418,7 +452,8 @@ static void cleanup_instance_callbacks(ChucK* chuck) {
         std::lock_guard<std::mutex> lock(g_tap_mutex);
         bool released = false;
         for (TapSlot& slot : g_taps) {
-            if (slot.owner == chuck && slot.active.load(std::memory_order_acquire)) {
+            if (slot.owner.load(std::memory_order_relaxed) == chuck
+                && slot.active.load(std::memory_order_acquire)) {
                 slot.active.store(false, std::memory_order_release);
                 released = true;
             }
@@ -660,7 +695,15 @@ NB_MODULE(_numchuck, m) {
 
     // Main ChucK class
     nb::class_<ChucK>(m, "ChucK", "ChucK virtual machine and compiler")
-        .def(nb::init<>(), "Create a new ChucK instance")
+        .def("__init__",
+            [](ChucK* self) {
+                new (self) ChucK();
+                // the allocator may have just handed us a destroyed instance's
+                // address; start from a clean registry rather than inheriting
+                // whatever it left behind
+                release_instance_state(self);
+            },
+            "Create a new ChucK instance")
 
         // Parameter methods
         .def("set_param",
@@ -698,7 +741,22 @@ NB_MODULE(_numchuck, m) {
 
         // Initialization methods
         .def("init",
-            &ChucK::init,
+            [](ChucK& self) {
+                bool ok = self.init();
+                // the VM is created here, and its address is just as reusable
+                // as the instance's, so drop any watcher left over from a VM
+                // that previously lived at this address
+                if (ok && self.vm()) {
+                    std::lock_guard<std::mutex> lock(g_shred_watcher_mutex);
+                    auto it = g_shred_watchers.find(
+                        reinterpret_cast<std::uintptr_t>(self.vm()));
+                    if (it != g_shred_watchers.end()) {
+                        remove_callback(it->second);
+                        g_shred_watchers.erase(it);
+                    }
+                }
+                return ok;
+            },
             "Initialize ChucK instance with current parameters")
         .def("start",
             &ChucK::start,
@@ -1165,7 +1223,7 @@ NB_MODULE(_numchuck, m) {
                 slot->active.store(false, std::memory_order_release);
                 wait_for_audio_quiescence(&self);
 
-                slot->owner = &self;
+                slot->owner.store(&self, std::memory_order_relaxed);
                 std::snprintf(slot->name, CK_TAP_NAME_MAX, "%s", name.c_str());
                 slot->channels = num_channels;
                 slot->capacity = static_cast<size_t>(capacity_frames);
@@ -1199,7 +1257,7 @@ NB_MODULE(_numchuck, m) {
                 std::vector<std::string> names;
                 for (TapSlot& slot : g_taps) {
                     if (!slot.active.load(std::memory_order_acquire)) continue;
-                    if (slot.owner != &self) continue;
+                    if (slot.owner.load(std::memory_order_relaxed) != &self) continue;
                     names.push_back(slot.name);
                 }
                 return names;
