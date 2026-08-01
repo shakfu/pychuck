@@ -15,10 +15,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ## [Unreleased]
 
-### Fixed
-
-- **A new ChucK instance inherited a destroyed one's taps** (`src/_numchuck.cpp`): Tap slots are keyed by the instance pointer, and the allocator hands a destroyed instance's address straight to the next one. An instance released by the garbage collector never runs the shutdown path that deactivates its slots, so its registrations outlived it and were adopted by whichever instance landed on that address -- measured at 18 of 20 attempts. `list_taps()` reported a tap the caller never registered, and during real-time audio `get_ugen_samples()` would have served that stale ring instead of refusing the read. Construction now releases everything keyed to the address it claims, and `init()` does the same for the shred watcher, which is keyed by the VM pointer and equally reusable. The tap slot's owner became atomic, since it is now cleared while the audio thread may be scanning slots. Caught by CI on macOS x86_64: a tap leaked from one test surfaced as a stale name several tests later, on a run whose test filter changed the allocation pattern enough to reuse the address. The pointer-keyed chout/cherr maps are cleared by the same path; they were stale but unreachable, because their C++ hook has to be installed on each instance separately.
-
 ## [0.2.1]
 
 ### Added
