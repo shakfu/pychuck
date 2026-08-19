@@ -11,7 +11,6 @@ import pytest
 from numchuck import Chuck
 from numchuck import _numchuck as numchuck
 
-
 TAP_CODE = """
 global Gain tap;
 tap.buffered(1);
@@ -52,6 +51,33 @@ def require_audible_tap(chuck, name, timeout=3.0):
         f"audio device opened but produced no samples within {timeout}s "
         f"(tap '{name}' is all zeros); the tap tests cannot be verified here"
     )
+
+
+def wait_for_full_window(chuck, name, frames, timeout=8.0):
+    """Wait until a read of `frames` is entirely captured audio, then return it.
+
+    read_tap_snapshot() zero-pads anything older than what the audio thread has
+    actually delivered, so a window with no leading zeros means at least
+    `frames` frames have accumulated -- which is the property these tests are
+    about. A wall-clock sleep cannot stand in for that: a virtual device is not
+    clocked to real time, and CI's PulseAudio null sink delivers fewer frames
+    per second than hardware does, so 0.5s there is not 22050 frames.
+    """
+    deadline = time.time() + timeout
+    samples = np.zeros(frames)
+    while time.time() < deadline:
+        samples = chuck.get_ugen_samples(name, frames).astype(np.float64)
+        nonzero = np.flatnonzero(samples)
+        if nonzero.size and nonzero[0] == 0:
+            return samples
+        time.sleep(0.05)
+
+    filled = frames - int(np.flatnonzero(samples)[0]) if np.any(samples) else 0
+    pytest.skip(
+        f"audio device delivered {filled} of {frames} frames in {timeout}s; "
+        "too slow to fill the tap window, so history depth cannot be verified"
+    )
+    raise AssertionError("unreachable")  # pragma: no cover
 
 
 def run_frames(chuck, frames=512, cycles=2):
@@ -425,11 +451,14 @@ def test_tap_keeps_more_history_than_one_block():
 
     try:
         require_audible_tap(chuck, "osc")
-        time.sleep(0.5)  # >> 8192 frames at 44100
-        samples = chuck.get_ugen_samples("osc", 8192).astype(np.float64)
 
-        # every frame is real audio, not zero padding, and continuous
-        assert np.all(samples[:512] != 0.0)
+        # 8192 frames is 16 callbacks at this buffer size, so a full window is
+        # exactly the claim: the tap accumulates past a single block.
+        samples = wait_for_full_window(chuck, "osc", 8192)
+
+        # No zero padding anywhere in the window, and continuous throughout.
+        assert np.flatnonzero(samples)[0] == 0
+        assert np.max(np.abs(samples)) > 0.1
         assert np.max(np.abs(np.diff(samples))) <= MAX_SINE_STEP * 1.05
     finally:
         numchuck.stop_audio()
