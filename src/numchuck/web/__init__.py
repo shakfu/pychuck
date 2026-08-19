@@ -1,18 +1,47 @@
 """numchuck web server module.
 
 Provides a browser-based IDE for ChucK live coding.
+
+Security
+--------
+Everything this server exposes -- ``/api/compile``, the WebSocket REPL, the
+globals endpoints -- amounts to running arbitrary ChucK, and ChucK can touch the
+filesystem. So the server is only as safe as the set of people who can reach it:
+
+* It binds ``127.0.0.1`` unless the caller passes something else.
+* Every bind gets an auth token, generated if one was not supplied, and without
+  it each ``/api/`` request and the WebSocket upgrade are refused. Loopback is
+  included: it keeps the browser honest, but it is not a private channel -- any
+  other process on the machine can reach it, and a non-browser client sends no
+  ``Origin`` for the check below to act on.
+* The C++ layer rejects any request whose ``Origin`` disagrees with its
+  ``Host``, which is what stops a page on another site from driving the IDE over
+  a WebSocket -- those are not covered by the same-origin policy on their own.
+
+Commands that would spawn a local process (``shell``, the external-editor
+commands) are refused outright; see ``_DENIED_COMMANDS``.
 """
 
 from __future__ import annotations
 
+import ipaddress
 import json
+import secrets
 import threading
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from ..constants import DEFAULT_WEB_PORT, MAX_CONSOLE_LINES
-from ..tui.parser import CommandParser
+from ..constants import (
+    DEFAULT_WEB_HOST,
+    DEFAULT_WEB_PORT,
+    MAX_CONSOLE_LINES,
+    WEB_TOKEN_BYTES,
+)
+from ..services import AudioService, GlobalsService, ShredService
+from ..tui.parser import Command, CommandParser
+from ..tui.commands import CommandExecutor
+from ..tui.session import ChuckSession
 
 # Broadcast interval for meters and globals (seconds)
 METER_BROADCAST_INTERVAL = 0.1  # 100ms for smooth meter updates
@@ -31,6 +60,30 @@ except ImportError:
     _WebServer = None  # type: ignore
 
 
+# Commands the shared executor supports but the web front-end must not run.
+# Two kinds: those that start a process on the machine hosting the server, and
+# those that only terminate at a terminal (an infinite loop broken by Ctrl-C
+# would hold the server thread forever). Mapping them here rather than omitting
+# them means the browser gets a reason instead of "unknown command", and the
+# test suite can assert the list stays exhaustive against the executor.
+_DENIED_COMMANDS: dict[str, str] = {
+    "shell": "shell commands are disabled in the web IDE",
+    "open_editor": "the external editor is not available in the web IDE",
+    "edit_shred": "the external editor is not available in the web IDE; use 'edit' in the browser",
+    "watch": "'watch' runs until interrupted at a terminal; the shreds panel updates live instead",
+}
+
+
+def is_loopback_host(host: str) -> bool:
+    """Whether binding to ``host`` keeps the server off the network."""
+    if host in ("localhost", ""):
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
 class WebChuckServer:
     """High-level web server for browser-based ChucK IDE.
 
@@ -43,7 +96,7 @@ class WebChuckServer:
         >>> chuck = Chuck()
         >>> server = WebChuckServer(chuck, port=8080)
         >>> server.start()
-        >>> # Browse to http://localhost:8080
+        >>> # Browse to server.url
         >>> server.stop()
     """
 
@@ -54,6 +107,8 @@ class WebChuckServer:
         self,
         chuck: Chuck,
         port: int = DEFAULT_WEB_PORT,
+        host: str = DEFAULT_WEB_HOST,
+        auth_token: str | None = None,
         static_dir: str | Path | None = None,
     ) -> None:
         """Initialize web server.
@@ -61,6 +116,12 @@ class WebChuckServer:
         Args:
             chuck: ChucK instance to control
             port: HTTP port to listen on (default: 8080)
+            host: Address to bind (default: 127.0.0.1, loopback only)
+            auth_token: Bearer token required on /api/ and /ws. Left as None a
+                token is generated, exposed as ``auth_token`` and embedded in
+                ``url`` -- including for a loopback bind, since loopback is not
+                a private channel on a shared machine. Pass "" to disable auth
+                deliberately.
             static_dir: Directory for static files (optional, uses package's static/ if None)
         """
         if not WEB_AVAILABLE:
@@ -72,6 +133,18 @@ class WebChuckServer:
         self._chuck = chuck
         self._server = _WebServer()
         self._server.port = port
+        self._server.host = host
+        self._host = host
+
+        # Always minted, loopback included. The origin check stops a *browser*
+        # on another site, but it only applies to requests that carry an Origin
+        # -- any local process can POST to /api/compile without one, and on a
+        # shared machine that is every other user on the box. The token is what
+        # makes the IDE the operator's rather than the host's. Same reasoning as
+        # Jupyter, which also tokenizes a localhost bind.
+        if auth_token is None:
+            auth_token = secrets.token_urlsafe(WEB_TOKEN_BYTES)
+        self._server.auth_token = auth_token
 
         # Use provided static_dir or default to package's static folder
         if static_dir:
@@ -82,27 +155,40 @@ class WebChuckServer:
         # Set up API handler
         self._server.set_api_handler(self._handle_api)
 
-        # Track shred start times for elapsed display
-        self._shred_times: dict[int, float] = {}
+        # Shared command layer. The web front-end runs the same executor as the
+        # TUI over the same services, so a command added in one place exists in
+        # both -- the two used to carry independent dispatchers that silently
+        # drifted apart.
+        raw = chuck.raw
+        self._session = ChuckSession(raw)
+        self._shreds = ShredService(raw, self._session)
+        self._globals = GlobalsService(raw)
+        self._audio = AudioService(raw)
+        self._executor = CommandExecutor(
+            self._session,
+            shred_service=self._shreds,
+            globals_service=self._globals,
+            log_callback=self._executor_output,
+        )
+        self._parser = CommandParser()
 
-        # Track shred source code for preview
-        self._shred_code: dict[int, str] = {}
+        # Per-thread capture of executor output, so a REPL command can return
+        # what it printed. Thread-local because the broadcast loop also logs.
+        self._capture = threading.local()
+
+        # Wall-clock start time per shred, for the elapsed column. The session
+        # records ChucK VM time, which is not what the UI shows.
+        self._shred_times: dict[int, float] = {}
 
         # Console output buffer
         self._console_lines: list[dict[str, str]] = []
         self._max_console_lines = MAX_CONSOLE_LINES
 
-        # Recording state
-        self._recording = False
-        self._recorded_samples: list[float] = []
-
         # Broadcast loop state
         self._broadcast_thread: threading.Thread | None = None
         self._broadcast_stop_event = threading.Event()
         self._last_globals_json = ""
-
-        # REPL support
-        self._parser = CommandParser()
+        self._last_audio_running = False
 
         # Set up console capture
         self._setup_console_capture()
@@ -132,7 +218,45 @@ class WebChuckServer:
         if self._server.is_running:
             self._server.broadcast(json.dumps(entry))
 
-    def _handle_api(self, method: str, uri: str, body: str) -> str:
+    def _executor_output(self, message: str) -> None:
+        """Receive a line printed by the shared command executor."""
+        buffer: list[str] | None = getattr(self._capture, "lines", None)
+        if buffer is not None:
+            buffer.append(message)
+        else:
+            self._log(message, "info")
+
+    # -------------------------------------------------------------------------
+    # Auth / addressing
+    # -------------------------------------------------------------------------
+
+    @property
+    def host(self) -> str:
+        """Address the server binds to."""
+        return self._host
+
+    @property
+    def auth_token(self) -> str:
+        """Bearer token required by clients, or "" when auth is disabled."""
+        token: str = self._server.auth_token
+        return token
+
+    @property
+    def url(self) -> str:
+        """Server URL, carrying the auth token when one is required."""
+        # A wildcard bind has no single address to advertise; loopback is the
+        # one that always reaches it from the host itself.
+        display = "localhost" if self._host in ("0.0.0.0", "::", "") else self._host
+        if ":" in display and not display.startswith("["):
+            display = f"[{display}]"
+        base = f"http://{display}:{self.port}"
+        return f"{base}/?token={self.auth_token}" if self.auth_token else base
+
+    # -------------------------------------------------------------------------
+    # HTTP API
+    # -------------------------------------------------------------------------
+
+    def _handle_api(self, method: str, uri: str, body: str) -> tuple[int, str]:
         """Handle API requests from web clients.
 
         Args:
@@ -141,7 +265,7 @@ class WebChuckServer:
             body: Request body (JSON string)
 
         Returns:
-            JSON response string
+            (http_status, json_response_body)
         """
         try:
             # Only parse body for methods that have one
@@ -152,45 +276,63 @@ class WebChuckServer:
         except json.JSONDecodeError:
             data = {}
 
-        # Route API requests
+        try:
+            return self._route(method, uri, data)
+        except Exception as e:  # noqa: BLE001 - must not escape into the C++ loop
+            return 500, json.dumps({"error": f"{type(e).__name__}: {e}"})
+
+    def _route(self, method: str, uri: str, data: dict[str, Any]) -> tuple[int, str]:
+        """Dispatch a request to its handler."""
         if uri == "/api/status":
-            return self._api_status()
-        elif uri == "/api/compile" and method == "POST":
+            return 200, self._api_status()
+        if uri == "/api/compile" and method == "POST":
             return self._api_compile(data)
-        elif uri.startswith("/api/shred/") and method == "DELETE":
-            shred_id = int(uri.split("/")[-1])
-            return self._api_remove_shred(shred_id)
-        elif uri == "/api/clear" and method == "POST":
+        if uri == "/api/clear" and method == "POST":
             return self._api_clear()
-        elif uri == "/api/audio/start" and method == "POST":
+        if uri == "/api/audio/start" and method == "POST":
             return self._api_start_audio()
-        elif uri == "/api/audio/stop" and method == "POST":
+        if uri == "/api/audio/stop" and method == "POST":
             return self._api_stop_audio()
-        elif uri == "/api/globals" and method == "GET":
+        if uri == "/api/globals" and method == "GET":
             return self._api_list_globals()
-        elif uri.startswith("/api/global/") and method == "GET":
-            name = uri.split("/")[-1]
-            return self._api_get_global(name, data)
-        elif uri.startswith("/api/global/") and method == "POST":
-            name = uri.split("/")[-1]
-            return self._api_set_global(name, data)
-        elif (
-            uri.startswith("/api/shred/") and uri.endswith("/code") and method == "GET"
-        ):
-            shred_id = int(uri.split("/")[-2])
-            return self._api_get_shred_code(shred_id)
-        elif (
-            uri.startswith("/api/shred/")
-            and uri.endswith("/replace")
-            and method == "POST"
-        ):
-            shred_id = int(uri.split("/")[-2])
-            return self._api_replace_shred(shred_id, data)
-        elif method == "WS":
-            # WebSocket message
-            return self._handle_ws_message(data)
-        else:
-            return json.dumps({"error": f"Unknown endpoint: {method} {uri}"})
+        if uri.startswith("/api/global/"):
+            name = uri[len("/api/global/") :]
+            if not name:
+                return 404, json.dumps({"error": "Missing global name"})
+            if method == "GET":
+                return self._api_get_global(name, data)
+            if method == "POST":
+                return self._api_set_global(name, data)
+
+        if uri.startswith("/api/shred/"):
+            # /api/shred/<id>, /api/shred/<id>/code, /api/shred/<id>/replace
+            rest = uri[len("/api/shred/") :].split("/")
+            # A non-numeric id is a client mistake, not a server fault: parsing
+            # it unguarded used to raise ValueError and answer 500.
+            try:
+                shred_id = int(rest[0])
+            except ValueError:
+                return 400, json.dumps({"error": f"Invalid shred id: {rest[0]!r}"})
+            tail = rest[1] if len(rest) > 1 else ""
+            if tail == "" and method == "DELETE":
+                return self._api_remove_shred(shred_id)
+            if tail == "code" and method == "GET":
+                return 200, self._api_get_shred_code(shred_id)
+            if tail == "replace" and method == "POST":
+                return self._api_replace_shred(shred_id, data)
+
+        if method == "WS":
+            return 200, self._handle_ws_message(data)
+
+        return 404, json.dumps({"error": f"Unknown endpoint: {method} {uri}"})
+
+    @staticmethod
+    def _ok(**fields: Any) -> tuple[int, str]:
+        return 200, json.dumps({"success": True, **fields})
+
+    @staticmethod
+    def _fail(message: str, status: int = 400) -> tuple[int, str]:
+        return status, json.dumps({"success": False, "error": message})
 
     def _api_status(self) -> str:
         """Get current status."""
@@ -203,167 +345,139 @@ class WebChuckServer:
             }
         )
 
-    def _api_compile(self, data: dict[str, Any]) -> str:
+    def _api_compile(self, data: dict[str, Any]) -> tuple[int, str]:
         """Compile and spork ChucK code."""
         code = data.get("code", "")
         if not code:
-            return json.dumps({"success": False, "error": "No code provided"})
+            return self._fail("No code provided")
 
-        try:
-            success, shred_ids = self._chuck.compile(code)
-            if success:
-                # Track shred start times and code
-                now = time.time()
-                # Truncate code for preview (first 500 chars)
-                preview = code[:500] + ("..." if len(code) > 500 else "")
-                for sid in shred_ids:
-                    self._shred_times[sid] = now
-                    self._shred_code[sid] = preview
+        result = self._shreds.spork_code(code)
+        if not result.success:
+            return self._fail(result.error or "Compilation failed", status=422)
 
-                self._broadcast_shreds_update()
-                return json.dumps({"success": True, "shred_ids": shred_ids})
-            else:
-                return json.dumps({"success": False, "error": "Compilation failed"})
-        except Exception as e:
-            return json.dumps({"success": False, "error": str(e)})
+        self._note_new_shreds(result.shred_ids)
+        self._broadcast_shreds_update()
+        return self._ok(shred_ids=result.shred_ids)
 
-    def _api_remove_shred(self, shred_id: int) -> str:
+    def _api_remove_shred(self, shred_id: int) -> tuple[int, str]:
         """Remove a shred by ID."""
-        try:
-            self._chuck.remove_shred(shred_id)
-            self._shred_times.pop(shred_id, None)
-            self._shred_code.pop(shred_id, None)
-            self._broadcast_shreds_update()
-            return json.dumps({"success": True})
-        except Exception as e:
-            return json.dumps({"success": False, "error": str(e)})
+        if not self._shreds.remove_shred(shred_id):
+            return self._fail(f"Failed to remove shred {shred_id}", status=404)
+        self._shred_times.pop(shred_id, None)
+        self._broadcast_shreds_update()
+        return self._ok()
 
-    def _api_clear(self) -> str:
+    def _api_clear(self) -> tuple[int, str]:
         """Clear all shreds."""
-        try:
-            self._chuck.clear()
-            self._shred_times.clear()
-            self._shred_code.clear()
-            self._broadcast_shreds_update()
-            return json.dumps({"success": True})
-        except Exception as e:
-            return json.dumps({"success": False, "error": str(e)})
+        if not self._shreds.clear_vm():
+            return self._fail("Failed to clear VM", status=500)
+        self._shred_times.clear()
+        self._broadcast_shreds_update()
+        return self._ok()
 
-    def _api_start_audio(self) -> str:
+    def _api_start_audio(self) -> tuple[int, str]:
         """Start real-time audio."""
-        try:
-            from .._numchuck import start_audio
+        self._audio.sync_state()
+        if not self._audio.start():
+            return self._fail("Failed to start audio", status=500)
+        self._broadcast_audio_status(True)
+        return self._ok()
 
-            start_audio(self._chuck.raw)
-            self._broadcast_audio_status(True)
-            return json.dumps({"success": True})
-        except Exception as e:
-            return json.dumps({"success": False, "error": str(e)})
-
-    def _api_stop_audio(self) -> str:
+    def _api_stop_audio(self) -> tuple[int, str]:
         """Stop real-time audio."""
-        try:
-            from .._numchuck import stop_audio
+        self._audio.sync_state()
+        if not self._audio.stop():
+            return self._fail("Failed to stop audio", status=500)
+        self._broadcast_audio_status(False)
+        return self._ok()
 
-            stop_audio()
-            self._broadcast_audio_status(False)
-            return json.dumps({"success": True})
-        except Exception as e:
-            return json.dumps({"success": False, "error": str(e)})
-
-    def _api_list_globals(self) -> str:
+    def _api_list_globals(self) -> tuple[int, str]:
         """List all global variables with their values."""
-        try:
-            globals_list = self._chuck.raw.get_all_globals()
-            result: list[dict[str, Any]] = []
-            for var_type, name in globals_list:
-                entry: dict[str, Any] = {"type": var_type, "name": name}
-                # Try to get the value
-                try:
-                    if var_type == "int":
-                        entry["value"] = self._chuck.get_int(name)
-                    elif var_type == "float":
-                        entry["value"] = self._chuck.get_float(name)
-                    elif var_type == "string":
-                        entry["value"] = self._chuck.get_string(name)
-                except Exception:
-                    entry["value"] = None
-                result.append(entry)
-            return json.dumps({"globals": result})
-        except Exception as e:
-            return json.dumps({"error": str(e)})
+        return 200, self._globals_json()
 
-    def _api_get_global(self, name: str, data: dict[str, Any]) -> str:
-        """Get a global variable value."""
-        var_type = data.get("type", "float")
-        try:
-            value: int | float | str
-            if var_type == "int":
-                value = self._chuck.get_int(name)
-            elif var_type == "float":
-                value = self._chuck.get_float(name)
-            elif var_type == "string":
-                value = self._chuck.get_string(name)
+    def _globals_json(self) -> str:
+        """Serialize the globals table."""
+        result: list[dict[str, Any]] = []
+        for info in self._globals.list_globals():
+            entry: dict[str, Any] = {"type": info.type, "name": info.name}
+            if info.type == "int":
+                entry["value"] = self._globals.get_global_int(info.name)
+            elif info.type == "float":
+                entry["value"] = self._globals.get_global_float(info.name)
+            elif info.type == "string":
+                entry["value"] = self._globals.get_global_string(info.name)
             else:
-                return json.dumps({"error": f"Unknown type: {var_type}"})
-            return json.dumps({"name": name, "type": var_type, "value": value})
-        except Exception as e:
-            return json.dumps({"error": str(e)})
+                entry["value"] = None
+            result.append(entry)
+        return json.dumps({"globals": result})
+
+    def _api_get_global(self, name: str, data: dict[str, Any]) -> tuple[int, str]:
+        """Get a global variable value."""
+        var_type = data.get("type")
+        if var_type is None:
+            found = self._globals.get_global(name)
+            if found is None:
+                return 404, json.dumps({"error": f"Global '{name}' not found"})
+            var_type, value = found
+        elif var_type == "int":
+            value = self._globals.get_global_int(name)
+        elif var_type == "float":
+            value = self._globals.get_global_float(name)
+        elif var_type == "string":
+            value = self._globals.get_global_string(name)
+        else:
+            return 400, json.dumps({"error": f"Unknown type: {var_type}"})
+        return 200, json.dumps({"name": name, "type": var_type, "value": value})
 
     def _api_get_shred_code(self, shred_id: int) -> str:
         """Get the code associated with a shred."""
-        code = self._shred_code.get(shred_id, "")
-        return json.dumps({"shred_id": shred_id, "code": code})
+        record = self._session.shreds.get(shred_id, {})
+        return json.dumps({"shred_id": shred_id, "code": record.get("source", "")})
 
-    def _api_replace_shred(self, shred_id: int, data: dict[str, Any]) -> str:
+    def _api_replace_shred(
+        self, shred_id: int, data: dict[str, Any]
+    ) -> tuple[int, str]:
         """Replace a shred with new code."""
         code = data.get("code", "")
         if not code:
-            return json.dumps({"success": False, "error": "No code provided"})
+            return self._fail("No code provided")
 
-        try:
-            # Remove old shred
-            self._chuck.remove_shred(shred_id)
-            self._shred_times.pop(shred_id, None)
-            self._shred_code.pop(shred_id, None)
+        result = self._shreds.replace_shred(shred_id, code)
+        if not result.success:
+            return self._fail(result.error or "Compilation failed", status=422)
 
-            # Compile new code
-            success, shred_ids = self._chuck.compile(code)
-            if success:
-                now = time.time()
-                preview = code[:500] + ("..." if len(code) > 500 else "")
-                for sid in shred_ids:
-                    self._shred_times[sid] = now
-                    self._shred_code[sid] = preview
-                self._broadcast_shreds_update()
-                return json.dumps({"success": True, "shred_ids": shred_ids})
-            else:
-                return json.dumps({"success": False, "error": "Compilation failed"})
-        except Exception as e:
-            return json.dumps({"success": False, "error": str(e)})
+        self._shred_times.pop(shred_id, None)
+        self._note_new_shreds(result.shred_ids)
+        self._broadcast_shreds_update()
+        return self._ok(shred_ids=result.shred_ids)
 
-    def _api_set_global(self, name: str, data: dict[str, Any]) -> str:
+    def _api_set_global(self, name: str, data: dict[str, Any]) -> tuple[int, str]:
         """Set a global variable."""
         value = data.get("value")
         var_type = data.get("type", "float")
 
         if value is None:
-            return json.dumps({"success": False, "error": "No value provided"})
+            return self._fail("No value provided")
 
         try:
             if var_type == "int":
-                self._chuck.set_int(name, int(value))
+                ok = self._globals.set_global_int(name, int(value))
             elif var_type == "float":
-                self._chuck.set_float(name, float(value))
+                ok = self._globals.set_global_float(name, float(value))
             elif var_type == "string":
-                self._chuck.set_string(name, str(value))
+                ok = self._globals.set_global_string(name, str(value))
             else:
-                return json.dumps(
-                    {"success": False, "error": f"Unknown type: {var_type}"}
-                )
-            return json.dumps({"success": True})
-        except Exception as e:
-            return json.dumps({"success": False, "error": str(e)})
+                return self._fail(f"Unknown type: {var_type}")
+        except (TypeError, ValueError) as e:
+            return self._fail(f"Invalid value for {var_type}: {e}")
+
+        if not ok:
+            return self._fail(f"Failed to set global '{name}'", status=500)
+        return self._ok()
+
+    # -------------------------------------------------------------------------
+    # WebSocket / REPL
+    # -------------------------------------------------------------------------
 
     def _handle_ws_message(self, data: dict[str, Any]) -> str:
         """Handle WebSocket message from client."""
@@ -384,265 +498,58 @@ class WebChuckServer:
         if not input_text:
             return ""
 
-        # Handle help command directly
         if input_text.lower() == "help":
             return self._repl_help()
 
-        # Try to parse as a command
         cmd = self._parser.parse(input_text)
-
-        if cmd:
-            return self._execute_repl_command(cmd)
-        else:
-            # Not a recognized command - try to compile as ChucK code
+        if cmd is None:
+            # Not a recognized command - treat it as ChucK source
             return self._compile_repl_code(input_text)
+        return self._execute_repl_command(cmd)
 
-    def _execute_repl_command(self, cmd: Any) -> str:
-        """Execute a parsed REPL command."""
-        cmd_type = cmd.type
-        args = cmd.args
+    def _execute_repl_command(self, cmd: Command) -> str:
+        """Run a parsed command through the shared executor."""
+        denied = _DENIED_COMMANDS.get(cmd.type)
+        if denied is not None:
+            return self._repl_error(denied)
 
+        if cmd.type == "help":
+            return self._repl_help()
+        if cmd.type == "exit":
+            return self._repl_output("Close the browser tab to disconnect", "info")
+        if cmd.type == "clear_screen":
+            return json.dumps({"type": "repl_clear"})
+
+        was_running = self._is_audio_running()
+        self._capture.lines = []
         try:
-            # Shred management
-            if cmd_type == "spork_file":
-                path = args.get("path", "")
-                success, shred_ids = self._chuck.compile_file(path)
-                if success:
-                    now = time.time()
-                    for sid in shred_ids:
-                        self._shred_times[sid] = now
-                        self._shred_code[sid] = f"file: {path}"
-                    self._broadcast_shreds_update()
-                    return self._repl_output(
-                        f"[shred {shred_ids}]: sporking file: {path}", "success"
-                    )
-                else:
-                    return self._repl_error(f"Failed to compile: {path}")
+            error = self._executor.execute(cmd)
+            output = "\n".join(self._capture.lines)
+        except Exception as e:  # noqa: BLE001 - a bad command must not kill the socket
+            return self._repl_error(f"{type(e).__name__}: {e}")
+        finally:
+            self._capture.lines = None
 
-            elif cmd_type == "spork_code":
-                code = args.get("code", "")
-                return self._compile_repl_code(code)
+        self._sync_shred_times()
+        self._broadcast_shreds_update()
+        now_running = self._is_audio_running()
+        if now_running != was_running:
+            self._broadcast_audio_status(now_running)
 
-            elif cmd_type == "remove_shred":
-                sid = args.get("id")
-                self._chuck.remove_shred(sid)
-                self._shred_times.pop(sid, None)
-                self._shred_code.pop(sid, None)
-                self._broadcast_shreds_update()
-                return self._repl_output(f"[shred {sid}]: removed", "info")
-
-            elif cmd_type == "abort_shred":
-                sid = args.get("id")
-                self._chuck.remove_shred(sid)
-                self._shred_times.pop(sid, None)
-                self._shred_code.pop(sid, None)
-                self._broadcast_shreds_update()
-                return self._repl_output(f"[shred {sid}]: abort", "info")
-
-            elif cmd_type == "remove_all":
-                self._chuck.clear()
-                self._shred_times.clear()
-                self._shred_code.clear()
-                self._broadcast_shreds_update()
-                return self._repl_output("Removed all shreds", "info")
-
-            elif cmd_type == "clear_vm":
-                self._chuck.clear()
-                self._shred_times.clear()
-                self._shred_code.clear()
-                self._broadcast_shreds_update()
-                return self._repl_output("VM cleared", "info")
-
-            elif cmd_type == "reset_id":
-                self._chuck.reset_id()
-                return self._repl_output("Shred ID counter reset", "info")
-
-            elif cmd_type == "replace_shred":
-                sid = args.get("id")
-                code = args.get("code", "")
-                try:
-                    new_id = self._chuck.replace_shred(sid, code)
-                    self._shred_times.pop(sid, None)
-                    self._shred_code.pop(sid, None)
-                    now = time.time()
-                    self._shred_times[new_id] = now
-                    self._shred_code[new_id] = code[:100] + (
-                        "..." if len(code) > 100 else ""
-                    )
-                    self._broadcast_shreds_update()
-                    return self._repl_output(
-                        f"[shred {sid}]: replaced with [shred {new_id}]", "success"
-                    )
-                except Exception as e:
-                    return self._repl_error(f"Failed to replace shred {sid}: {e}")
-
-            elif cmd_type == "replace_shred_file":
-                sid = args.get("id")
-                path = args.get("path", "")
-                try:
-                    # Read file and replace
-                    with open(path) as f:
-                        code = f.read()
-                    new_id = self._chuck.replace_shred(sid, code)
-                    self._shred_times.pop(sid, None)
-                    self._shred_code.pop(sid, None)
-                    now = time.time()
-                    self._shred_times[new_id] = now
-                    self._shred_code[new_id] = f"file: {path}"
-                    self._broadcast_shreds_update()
-                    return self._repl_output(
-                        f"[shred {sid}]: replaced with {path} [shred {new_id}]",
-                        "success",
-                    )
-                except FileNotFoundError:
-                    return self._repl_error(f"File not found: {path}")
-                except Exception as e:
-                    return self._repl_error(f"Failed to replace shred {sid}: {e}")
-
-            # Status commands
-            elif cmd_type == "status":
-                return self._repl_status()
-
-            elif cmd_type == "list_shreds":
-                return self._repl_list_shreds()
-
-            elif cmd_type == "shred_info":
-                sid = args.get("id")
-                info = self._chuck.shred_info(sid)
-                if info:
-                    return self._repl_output(f"Shred {sid}: {info}", "info")
-                else:
-                    return self._repl_error(f"Shred {sid} not found")
-
-            elif cmd_type == "current_time":
-                now_time = self._chuck.raw.now()
-                srate = self._chuck.sample_rate
-                seconds = now_time / srate
-                return self._repl_output(
-                    f"now: {now_time:.0f} samples ({seconds:.3f}s)", "info"
-                )
-
-            elif cmd_type == "list_globals":
-                return self._repl_list_globals()
-
-            elif cmd_type == "audio_info":
-                from .._numchuck import audio_info, is_audio_running
-
-                running = is_audio_running()
-                info = audio_info()
-                status = "running" if running else "stopped"
-                return self._repl_output(
-                    f"Audio: {status}\n"
-                    f"  Sample rate: {info.get('sample_rate', 0)} Hz\n"
-                    f"  Output channels: {info.get('num_channels_out', 0)}\n"
-                    f"  Input channels: {info.get('num_channels_in', 0)}\n"
-                    f"  Buffer size: {info.get('buffer_size', 0)}",
-                    "info",
-                )
-
-            # Global variables
-            elif cmd_type == "set_global":
-                name = args.get("name", "")
-                value = args.get("value", "")
-                # Try to determine type and set
-                try:
-                    if "." in value:
-                        self._chuck.set_float(name, float(value))
-                    else:
-                        self._chuck.set_int(name, int(value))
-                    return self._repl_output(f"{name} = {value}", "success")
-                except ValueError:
-                    self._chuck.set_string(name, value)
-                    return self._repl_output(f'{name} = "{value}"', "success")
-
-            elif cmd_type == "get_global":
-                name = args.get("name", "")
-                # Try to get value (try int, then float, then string)
-                try:
-                    value = self._chuck.get_int(name)
-                    return self._repl_output(f"{name} = {value}", "info")
-                except Exception:
-                    pass
-                try:
-                    value = self._chuck.get_float(name)
-                    return self._repl_output(f"{name} = {value}", "info")
-                except Exception:
-                    pass
-                try:
-                    value = self._chuck.get_string(name)
-                    return self._repl_output(f'{name} = "{value}"', "info")
-                except Exception:
-                    return self._repl_error(f"Global '{name}' not found")
-
-            # Events
-            elif cmd_type == "signal_event":
-                name = args.get("name", "")
-                self._chuck.signal_event(name)
-                return self._repl_output(f"Signaled event: {name}", "info")
-
-            elif cmd_type == "broadcast_event":
-                name = args.get("name", "")
-                self._chuck.broadcast_event(name)
-                return self._repl_output(f"Broadcast event: {name}", "info")
-
-            # Audio control
-            elif cmd_type == "start_audio":
-                from .._numchuck import start_audio
-
-                start_audio(self._chuck.raw)
-                self._broadcast_audio_status(True)
-                return self._repl_output("Audio started", "success")
-
-            elif cmd_type == "stop_audio":
-                from .._numchuck import stop_audio
-
-                stop_audio()
-                self._broadcast_audio_status(False)
-                return self._repl_output("Audio stopped", "info")
-
-            elif cmd_type == "shutdown_audio":
-                from .._numchuck import shutdown_audio
-
-                shutdown_audio()
-                self._broadcast_audio_status(False)
-                return self._repl_output("Audio shutdown", "info")
-
-            # Help
-            elif cmd_type == "help":
-                return self._repl_help()
-
-            # Exit (no-op in web)
-            elif cmd_type == "exit":
-                return self._repl_output("Use browser to close the page", "info")
-
-            # Clear screen (handled client-side, but acknowledge)
-            elif cmd_type == "clear_screen":
-                return self._repl_output("", "info")
-
-            else:
-                return self._repl_error(f"Unknown command: {cmd_type}")
-
-        except Exception as e:
-            return self._repl_error(str(e))
+        if error:
+            return self._repl_error(error)
+        return self._repl_output(output, "success" if output else "info")
 
     def _compile_repl_code(self, code: str) -> str:
         """Compile ChucK code from REPL input."""
-        try:
-            success, shred_ids = self._chuck.compile(code)
-            if success:
-                now = time.time()
-                preview = code[:100] + ("..." if len(code) > 100 else "")
-                for sid in shred_ids:
-                    self._shred_times[sid] = now
-                    self._shred_code[sid] = preview
-                self._broadcast_shreds_update()
-                return self._repl_output(
-                    f"[shred {shred_ids}]: sporking code", "success"
-                )
-            else:
-                return self._repl_error("Compilation failed")
-        except Exception as e:
-            return self._repl_error(str(e))
+        result = self._shreds.spork_code(code)
+        if not result.success:
+            return self._repl_error(result.error or "Compilation failed")
+        self._note_new_shreds(result.shred_ids)
+        self._broadcast_shreds_update()
+        return self._repl_output(
+            f"[shred {result.shred_ids}]: sporking code", "success"
+        )
 
     def _repl_output(self, text: str, style: str = "info") -> str:
         """Create REPL output message."""
@@ -652,66 +559,12 @@ class WebChuckServer:
         """Create REPL error message."""
         return json.dumps({"type": "repl_error", "text": text})
 
-    def _repl_status(self) -> str:
-        """Get REPL status output."""
-        shreds = self._chuck.shreds
-        running = self._is_audio_running()
-        now_time = self._chuck.raw.now()
-        srate = self._chuck.sample_rate
-
-        lines = [
-            f"Audio: {'running' if running else 'stopped'}",
-            f"Shreds: {len(shreds)} running",
-            f"Now: {now_time:.0f} samples ({now_time / srate:.3f}s)",
-        ]
-        if shreds:
-            lines.append("Active shreds: " + ", ".join(str(s) for s in shreds))
-
-        return self._repl_output("\n".join(lines), "info")
-
-    def _repl_list_shreds(self) -> str:
-        """List shreds for REPL."""
-        shreds = self._get_shreds_info()
-        if not shreds:
-            return self._repl_output("No shreds running", "info")
-
-        lines = ["ID    Name                 Time"]
-        lines.append("-" * 40)
-        for s in shreds:
-            name = s.get("name", "code")[:20]
-            lines.append(f"{s['id']:<5} {name:<20} {s['time']}")
-
-        return self._repl_output("\n".join(lines), "info")
-
-    def _repl_list_globals(self) -> str:
-        """List global variables for REPL."""
-        try:
-            globals_list = self._chuck.raw.get_all_globals()
-            if not globals_list:
-                return self._repl_output("No global variables", "info")
-
-            lines = ["Type    Name                 Value"]
-            lines.append("-" * 45)
-            for var_type, name in globals_list:
-                value: str = "?"
-                try:
-                    if var_type == "int":
-                        value = str(self._chuck.get_int(name))
-                    elif var_type == "float":
-                        value = f"{self._chuck.get_float(name):.4f}"
-                    elif var_type == "string":
-                        value = f'"{self._chuck.get_string(name)}"'
-                except Exception:
-                    pass
-                lines.append(f"{var_type:<7} {name:<20} {value}")
-
-            return self._repl_output("\n".join(lines), "info")
-        except Exception as e:
-            return self._repl_error(str(e))
-
     def _repl_help(self) -> str:
         """Show REPL help."""
-        help_text = """numchuck REPL Commands:
+        denied = "\n".join(
+            f"  {name:<18} unavailable here" for name in sorted(_DENIED_COMMANDS)
+        )
+        help_text = f"""numchuck REPL Commands:
 
 Shred Management (ChucK-compatible):
   + file.ck          Spork/add a file
@@ -744,42 +597,66 @@ VM Control:
   reset              Reset shred ID counter (reset.id)
   help               Show this help
 
+Disabled in the browser (they would run a process on the server):
+{denied}
+
 Or enter ChucK code directly to compile and run."""
         return self._repl_output(help_text, "info")
 
+    # -------------------------------------------------------------------------
+    # Shred bookkeeping
+    # -------------------------------------------------------------------------
+
+    def _note_new_shreds(self, shred_ids: list[int]) -> None:
+        """Stamp wall-clock start times for freshly sporked shreds."""
+        now = time.time()
+        for sid in shred_ids:
+            self._shred_times[sid] = now
+
+    def _sync_shred_times(self) -> None:
+        """Add times for shreds that appeared, drop those that are gone."""
+        now = time.time()
+        live = set(self._session.shreds)
+        for sid in live - self._shred_times.keys():
+            self._shred_times[sid] = now
+        for sid in self._shred_times.keys() - live:
+            del self._shred_times[sid]
+
     def _get_shreds_info(self) -> list[dict[str, Any]]:
         """Get information about running shreds."""
-        shreds = []
+        # Reconcile with the VM's own shred list to pick up anything added out
+        # of band (OTF) or since finished -- but only while the VM is actually
+        # being driven. A spork is a queued message: with no audio running the
+        # VM never processes it, so its id list stays empty and syncing against
+        # it would discard every shred the session legitimately knows about.
+        if self._is_audio_running():
+            self._session.sync_shreds()
+        self._sync_shred_times()
+
         now = time.time()
-
-        for sid in self._chuck.shreds:
-            try:
-                info = self._chuck.shred_info(sid)
-                start_time = self._shred_times.get(sid, now)
-                elapsed = int(now - start_time)
-                minutes, seconds = divmod(elapsed, 60)
-
-                shreds.append(
-                    {
-                        "id": sid,
-                        "name": info.get("name", "code") if info else "code",
-                        "time": f"{minutes:02d}:{seconds:02d}",
-                        "code": self._shred_code.get(sid, ""),
-                    }
-                )
-            except Exception:
-                shreds.append({"id": sid, "name": "code", "time": "00:00", "code": ""})
-
+        shreds = []
+        for sid, record in sorted(self._session.shreds.items()):
+            elapsed = int(now - self._shred_times.get(sid, now))
+            minutes, seconds = divmod(elapsed, 60)
+            shreds.append(
+                {
+                    "id": sid,
+                    "name": record.get("name", "code"),
+                    "time": f"{minutes:02d}:{seconds:02d}",
+                    "code": record.get("source", ""),
+                }
+            )
         return shreds
 
     def _is_audio_running(self) -> bool:
-        """Check if audio is running."""
-        try:
-            from .._numchuck import is_audio_running
+        """Check if audio is running, according to the audio system itself."""
+        # Not self._audio.is_running: the REPL executor calls start_audio()
+        # directly, so the service's own flag is not authoritative here.
+        return self._audio.sync_state()
 
-            return is_audio_running()
-        except Exception:
-            return False
+    # -------------------------------------------------------------------------
+    # Broadcasting
+    # -------------------------------------------------------------------------
 
     def _broadcast_shreds_update(self) -> None:
         """Broadcast shreds update to all clients."""
@@ -789,6 +666,7 @@ Or enter ChucK code directly to compile and run."""
 
     def _broadcast_audio_status(self, running: bool) -> None:
         """Broadcast audio status to all clients."""
+        self._last_audio_running = running
         if self._server.is_running:
             self._server.broadcast(
                 json.dumps({"type": "audio_status", "running": running})
@@ -812,7 +690,7 @@ Or enter ChucK code directly to compile and run."""
                     "peak_right": meters.get("peak_right", 0.0),
                 }
                 self._server.broadcast(json.dumps(msg))
-        except Exception:
+        except (RuntimeError, OSError):
             pass
 
     def _broadcast_globals_if_changed(self) -> None:
@@ -821,15 +699,16 @@ Or enter ChucK code directly to compile and run."""
             return
 
         try:
-            globals_json = self._api_list_globals()
-            if globals_json != self._last_globals_json:
-                self._last_globals_json = globals_json
-                # Parse and reformat for WebSocket message
-                data = json.loads(globals_json)
-                msg = {"type": "globals", "globals": data.get("globals", [])}
-                self._server.broadcast(json.dumps(msg))
-        except Exception:
-            pass
+            globals_json = self._globals_json()
+        except (RuntimeError, OSError):
+            return
+        if globals_json == self._last_globals_json:
+            return
+        self._last_globals_json = globals_json
+        data = json.loads(globals_json)
+        self._server.broadcast(
+            json.dumps({"type": "globals", "globals": data.get("globals", [])})
+        )
 
     def _broadcast_loop(self) -> None:
         """Background loop for meter and globals broadcasting."""
@@ -849,6 +728,10 @@ Or enter ChucK code directly to compile and run."""
             # Sleep for the meter interval
             self._broadcast_stop_event.wait(METER_BROADCAST_INTERVAL)
 
+    # -------------------------------------------------------------------------
+    # Lifecycle
+    # -------------------------------------------------------------------------
+
     @property
     def port(self) -> int:
         """Server port."""
@@ -864,15 +747,13 @@ Or enter ChucK code directly to compile and run."""
         """Number of connected WebSocket clients."""
         return self._server.client_count
 
-    @property
-    def url(self) -> str:
-        """Server URL."""
-        return f"http://localhost:{self.port}"
-
     def start(self) -> None:
         """Start the web server."""
         if not self._server.start():
-            raise RuntimeError("Failed to start web server")
+            raise RuntimeError(
+                f"Failed to start web server on {self._host}:{self.port} "
+                "(address in use, or not permitted)"
+            )
 
         # Start broadcast loop thread
         self._broadcast_stop_event.clear()
@@ -894,7 +775,7 @@ Or enter ChucK code directly to compile and run."""
         self._chuck.set_stdout_callback(None)
         self._chuck.set_stderr_callback(None)
         # Clear API handler to break cycle: self -> _server -> handler -> self
-        self._server.set_api_handler(lambda m, u, b: "")
+        self._server.set_api_handler(lambda m, u, b: (204, ""))
 
     def __enter__(self) -> "WebChuckServer":
         """Context manager entry."""
@@ -906,4 +787,4 @@ Or enter ChucK code directly to compile and run."""
         self.stop()
 
 
-__all__ = ["WebChuckServer", "WEB_AVAILABLE"]
+__all__ = ["WebChuckServer", "WEB_AVAILABLE", "is_loopback_host"]

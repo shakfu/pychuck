@@ -225,3 +225,5 @@ __marimo__/
 .claude
 CLAUDE.md
 
+# mkdocs build output
+site/

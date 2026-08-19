@@ -1,11 +1,11 @@
 name: CI
 
-on: [workflow_dispatch]
-  # push:
-  #   branches: [ main, develop ]
-  # pull_request:
-  #   branches: [ main, develop ]
-  # workflow_dispatch:
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
 
 jobs:
   test:
@@ -26,7 +26,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          submodules: recursive
           fetch-depth: 0
 
       - name: Set up Python ${{ matrix.python-version }}
@@ -86,8 +85,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -99,17 +96,140 @@ jobs:
 
       - name: Install linting tools
         run: |
-          uv pip install --system ruff mypy
+          uv pip install --system ruff
 
       - name: Run ruff check
         run: |
           ruff check src/numchuck --select E,F,W,I --ignore E501
-        continue-on-error: true
 
       - name: Run ruff format check
         run: |
           ruff format --check src/numchuck
-        continue-on-error: true
+
+  realtime:
+    name: Real-time Audio Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            libasound2-dev \
+            libasound2-plugins \
+            alsa-utils \
+            bison \
+            flex
+
+      # The tap seqlock is the most intricate code in the project and its only
+      # regression test needs an audio device. snd-dummy provides one without
+      # hardware, so the test runs here instead of only on a developer laptop.
+      - name: Set up a dummy ALSA device
+        run: |
+          sudo modprobe snd-dummy
+          # Fail loudly rather than let the tests skip themselves into a
+          # green run that checked nothing.
+          aplay -l
+          test -e /dev/snd/pcmC0D0p
+
+      - name: Build and install package
+        run: |
+          uv sync --reinstall-package numchuck
+
+      - name: Run real-time tests
+        run: |
+          uv run pytest -v --tb=short -rs -m realtime
+
+  docs:
+    name: Docs Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            libasound2-dev \
+            bison \
+            flex
+
+      # mkdocstrings introspects the compiled extension to pull its docstrings,
+      # so the package has to be built before the docs can be.
+      - name: Build and install package
+        run: |
+          uv sync --group docs --reinstall-package numchuck
+
+      # --strict: a broken cross-reference or a page missing from the nav fails
+      # the build rather than shipping a dead link.
+      - name: Build documentation
+        run: |
+          uv run --group docs mkdocs build --strict
+
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            libasound2-dev \
+            bison \
+            flex
+
+      - name: Build and install package
+        run: |
+          uv sync --reinstall-package numchuck
+
+      - name: Run mypy
+        run: |
+          uv run mypy --strict src/
 
   coverage:
     name: Code Coverage
@@ -118,8 +238,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Set up Python
         uses: actions/setup-python@v5

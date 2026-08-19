@@ -1,12 +1,20 @@
 """Tests for the paths module."""
 
-import os
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from numchuck import paths
+
+
+@pytest.fixture(autouse=True)
+def reset_local_dir(monkeypatch):
+    """Keep the project-local opt-in from leaking between tests."""
+    monkeypatch.delenv("NUMCHUCK_LOCAL", raising=False)
+    paths.enable_local_dir(False)
+    yield
+    paths.enable_local_dir(False)
 
 
 class TestGetNumchuckDir:
@@ -19,6 +27,7 @@ class TestGetNumchuckDir:
         local_numchuck.mkdir()
 
         monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
 
         result = paths.get_numchuck_dir()
 
@@ -28,6 +37,7 @@ class TestGetNumchuckDir:
         """Test that home .numchuck is used when no local exists."""
         # No local .numchuck in tmp_path
         monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
 
         with patch.object(Path, "home", return_value=tmp_path / "fake_home"):
             result = paths.get_numchuck_dir()
@@ -43,12 +53,101 @@ class TestGetNumchuckDir:
         home_numchuck.mkdir(parents=True)
 
         monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
 
         with patch.object(Path, "home", return_value=tmp_path / "fake_home"):
             result = paths.get_numchuck_dir()
 
         # Should return local, not home
         assert result == local_numchuck
+
+
+class TestLocalDirOptIn:
+    """A project-local ./.numchuck is only honoured on request.
+
+    It can supply chugins, which are native libraries loaded into the process,
+    so merely running numchuck inside a checked-out repository must not pick
+    them up.
+    """
+
+    def _stage_local(self, tmp_path, monkeypatch):
+        local = tmp_path / ".numchuck"
+        local.mkdir()
+        monkeypatch.chdir(tmp_path)
+        return local
+
+    def test_local_dir_ignored_by_default(self, tmp_path, monkeypatch):
+        """An existing ./.numchuck is not used unless opted into."""
+        self._stage_local(tmp_path, monkeypatch)
+
+        with patch.object(Path, "home", return_value=tmp_path / "fake_home"):
+            assert paths.get_numchuck_dir() == tmp_path / "fake_home" / ".numchuck"
+        assert paths.get_local_numchuck_dir() is None
+        assert paths.local_dir_enabled() is False
+
+    def test_local_dir_used_when_enabled(self, tmp_path, monkeypatch):
+        """enable_local_dir() is what --local calls."""
+        local = self._stage_local(tmp_path, monkeypatch)
+        paths.enable_local_dir()
+
+        assert paths.get_numchuck_dir() == local
+        assert paths.get_local_numchuck_dir() == local
+
+    def test_local_dir_enabled_by_environment(self, tmp_path, monkeypatch):
+        """NUMCHUCK_LOCAL=1 opts in without a CLI flag."""
+        local = self._stage_local(tmp_path, monkeypatch)
+        monkeypatch.setenv("NUMCHUCK_LOCAL", "1")
+
+        assert paths.local_dir_enabled() is True
+        assert paths.get_numchuck_dir() == local
+
+    def test_environment_zero_does_not_opt_in(self, tmp_path, monkeypatch):
+        """NUMCHUCK_LOCAL=0 is off, not merely 'set'."""
+        self._stage_local(tmp_path, monkeypatch)
+        monkeypatch.setenv("NUMCHUCK_LOCAL", "0")
+
+        assert paths.local_dir_enabled() is False
+        assert paths.get_local_numchuck_dir() is None
+
+    def test_enable_can_be_reversed(self, tmp_path, monkeypatch):
+        """enable_local_dir(False) puts it back."""
+        self._stage_local(tmp_path, monkeypatch)
+        paths.enable_local_dir()
+        paths.enable_local_dir(False)
+
+        assert paths.get_local_numchuck_dir() is None
+
+    def test_missing_local_dir_is_none_even_when_enabled(self, tmp_path, monkeypatch):
+        """Opting in does not invent a directory."""
+        monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
+
+        assert paths.get_local_numchuck_dir() is None
+
+
+class TestConfigPathIsSingleSourced:
+    """config.get_config_path() and paths.get_config_file() must agree.
+
+    They used to be defined independently, disagreeing about whether a
+    project-local .numchuck could override the config location.
+    """
+
+    def test_config_module_delegates_to_paths(self, tmp_path, monkeypatch):
+        from numchuck import config
+
+        monkeypatch.chdir(tmp_path)
+        with patch.object(Path, "home", return_value=tmp_path / "fake_home"):
+            assert config.get_config_path() == paths.get_config_file()
+
+    def test_config_path_follows_local_opt_in(self, tmp_path, monkeypatch):
+        from numchuck import config
+
+        local = tmp_path / ".numchuck"
+        local.mkdir()
+        monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
+
+        assert config.get_config_path() == local / "config.toml"
 
 
 class TestGetNumchuckHome:
@@ -67,6 +166,7 @@ class TestGetNumchuckHome:
         local_numchuck = tmp_path / ".numchuck"
         local_numchuck.mkdir()
         monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
 
         with patch.object(Path, "home", return_value=tmp_path / "fake_home"):
             result = paths.get_numchuck_home()
@@ -83,6 +183,7 @@ class TestDirectoryGetters:
         local_numchuck = tmp_path / ".numchuck"
         local_numchuck.mkdir()
         monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
 
         result = paths.get_snippets_dir()
 
@@ -93,6 +194,7 @@ class TestDirectoryGetters:
         local_numchuck = tmp_path / ".numchuck"
         local_numchuck.mkdir()
         monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
 
         result = paths.get_history_file()
 
@@ -103,6 +205,7 @@ class TestDirectoryGetters:
         local_numchuck = tmp_path / ".numchuck"
         local_numchuck.mkdir()
         monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
 
         result = paths.get_sessions_dir()
 
@@ -113,6 +216,7 @@ class TestDirectoryGetters:
         local_numchuck = tmp_path / ".numchuck"
         local_numchuck.mkdir()
         monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
 
         result = paths.get_logs_dir()
 
@@ -123,6 +227,7 @@ class TestDirectoryGetters:
         local_numchuck = tmp_path / ".numchuck"
         local_numchuck.mkdir()
         monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
 
         result = paths.get_config_file()
 
@@ -133,6 +238,7 @@ class TestDirectoryGetters:
         local_numchuck = tmp_path / ".numchuck"
         local_numchuck.mkdir()
         monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
 
         result = paths.get_projects_dir()
 
@@ -143,6 +249,7 @@ class TestDirectoryGetters:
         local_numchuck = tmp_path / ".numchuck"
         local_numchuck.mkdir()
         monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
 
         result = paths.get_recordings_dir()
 
@@ -153,40 +260,22 @@ class TestDirectoryGetters:
         local_numchuck = tmp_path / ".numchuck"
         local_numchuck.mkdir()
         monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
 
         result = paths.get_examples_dir()
 
         assert result == local_numchuck / "examples"
-
-    def test_get_themes_dir(self, tmp_path, monkeypatch):
-        """Test get_themes_dir returns correct path."""
-        local_numchuck = tmp_path / ".numchuck"
-        local_numchuck.mkdir()
-        monkeypatch.chdir(tmp_path)
-
-        result = paths.get_themes_dir()
-
-        assert result == local_numchuck / "themes"
 
     def test_get_chugins_dir(self, tmp_path, monkeypatch):
         """Test get_chugins_dir returns correct path."""
         local_numchuck = tmp_path / ".numchuck"
         local_numchuck.mkdir()
         monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
 
         result = paths.get_chugins_dir()
 
         assert result == local_numchuck / "chugins"
-
-    def test_get_keybindings_dir(self, tmp_path, monkeypatch):
-        """Test get_keybindings_dir returns correct path."""
-        local_numchuck = tmp_path / ".numchuck"
-        local_numchuck.mkdir()
-        monkeypatch.chdir(tmp_path)
-
-        result = paths.get_keybindings_dir()
-
-        assert result == local_numchuck / "keybindings"
 
 
 class TestEnsureNumchuckDirectories:
@@ -228,6 +317,7 @@ class TestListSnippets:
     def test_returns_empty_when_no_snippets_dir(self, tmp_path, monkeypatch):
         """Test that empty list is returned when snippets dir doesn't exist."""
         monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
 
         with patch.object(Path, "home", return_value=tmp_path):
             result = paths.list_snippets()
@@ -244,6 +334,7 @@ class TestListSnippets:
         (snippets_dir / "readme.txt").write_text("not a snippet")
 
         monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
 
         result = paths.list_snippets()
 
@@ -260,6 +351,7 @@ class TestListSnippets:
         (snippets_dir / "beta.ck").write_text("")
 
         monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
 
         result = paths.list_snippets()
 
@@ -277,6 +369,7 @@ class TestGetSnippetPath:
         snippet_file.write_text("SinOsc s => dac;")
 
         monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
 
         result = paths.get_snippet_path("test")
 
@@ -288,6 +381,7 @@ class TestGetSnippetPath:
         snippets_dir.mkdir(parents=True)
 
         monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
 
         result = paths.get_snippet_path("nonexistent")
 
@@ -300,6 +394,7 @@ class TestListAllSnippets:
     def test_returns_empty_when_no_snippets(self, tmp_path, monkeypatch):
         """Test empty list when no snippets directories exist."""
         monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
 
         with patch.object(Path, "home", return_value=tmp_path / "fake_home"):
             result = paths.list_all_snippets()
@@ -313,6 +408,7 @@ class TestListAllSnippets:
         (local_snippets / "local_snippet.ck").write_text("")
 
         monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
 
         with patch.object(Path, "home", return_value=tmp_path / "fake_home"):
             result = paths.list_all_snippets()
@@ -326,6 +422,7 @@ class TestListAllSnippets:
         (global_snippets / "global_snippet.ck").write_text("")
 
         monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
 
         with patch.object(Path, "home", return_value=tmp_path / "fake_home"):
             result = paths.list_all_snippets()
@@ -344,6 +441,7 @@ class TestListAllSnippets:
         (global_snippets / "shared.ck").write_text("global version")
 
         monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
 
         with patch.object(Path, "home", return_value=tmp_path / "fake_home"):
             result = paths.list_all_snippets()
@@ -370,6 +468,7 @@ class TestGetSnippetPathWithSource:
         (global_snippets / "test.ck").write_text("global")
 
         monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
 
         with patch.object(Path, "home", return_value=tmp_path / "fake_home"):
             path, source = paths.get_snippet_path_with_source("test")
@@ -385,6 +484,7 @@ class TestGetSnippetPathWithSource:
         global_file.write_text("global")
 
         monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
 
         with patch.object(Path, "home", return_value=tmp_path / "fake_home"):
             path, source = paths.get_snippet_path_with_source("test")
@@ -395,6 +495,7 @@ class TestGetSnippetPathWithSource:
     def test_returns_none_when_not_found(self, tmp_path, monkeypatch):
         """Test that (None, None) is returned when snippet not found."""
         monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
 
         with patch.object(Path, "home", return_value=tmp_path / "fake_home"):
             path, source = paths.get_snippet_path_with_source("nonexistent")
@@ -409,6 +510,7 @@ class TestListProjects:
     def test_returns_empty_when_no_projects_dir(self, tmp_path, monkeypatch):
         """Test empty list when projects directory doesn't exist."""
         monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
 
         with patch.object(Path, "home", return_value=tmp_path):
             result = paths.list_projects()
@@ -424,6 +526,7 @@ class TestListProjects:
         (projects_dir / "not_a_project.txt").write_text("")  # File, not dir
 
         monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
 
         result = paths.list_projects()
 
@@ -441,6 +544,7 @@ class TestCreateProject:
         numchuck_dir.mkdir()
 
         monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
 
         result = paths.create_project("my_project")
 
@@ -458,6 +562,7 @@ class TestGetProjectPath:
         numchuck_dir.mkdir()
 
         monkeypatch.chdir(tmp_path)
+        paths.enable_local_dir()
 
         result = paths.get_project_path("my_project")
 

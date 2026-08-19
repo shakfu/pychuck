@@ -1,5 +1,7 @@
 PROJECT_NAME = numchuck
-VERSION = 0.1.9
+# Read from the package rather than restated here: the two drifted, and every
+# archive built by `make` carried a stale version in its name.
+VERSION = $(shell sed -n 's/^__version__ = "\(.*\)"/\1/p' src/numchuck/_version.py)
 
 PLATFORM = $(shell uname)
 CONFIG = Release
@@ -35,7 +37,7 @@ ZIP = $(DIST_NAME).zip
 
 
 .PHONY: all build clean test coverage install repl snap typecheck lint format \
-		qa check publish publish-test test-review
+		qa check publish publish-test test-review docs docs-serve docs-deploy
 
 all: build
 
@@ -54,6 +56,17 @@ test-review:
 coverage:
 	@uv run pytest --cov=numchuck --cov-report term-missing:skip-covered --cov-report=html
 
+# --strict turns a broken cross-reference or a page missing from the nav into a
+# build failure, which is the only thing that keeps generated API docs honest.
+docs:
+	@uv run --group docs mkdocs build --strict
+
+docs-serve:
+	@uv run --group docs mkdocs serve
+
+docs-deploy:
+	@uv run --group docs mkdocs gh-deploy --force
+
 repl:
 	@uv run numchuck repl
 
@@ -69,7 +82,7 @@ lint:
 format:
 	@uv run ruff format src/
 
-qa: test lint typecheck format
+qa: test lint typecheck format docs
 
 check:
 	@uv run twine check dist/*.whl

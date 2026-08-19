@@ -1,321 +1,253 @@
-# Error Handling in numchuck
+# Error handling
 
-## Overview
+numchuck raises exceptions rather than returning error codes, with one
+deliberate exception: **compilation reports failure through its return value**,
+not by raising. That asymmetry is the single most important thing on this page.
 
-numchuck uses **exception-based error handling** consistently across all APIs. This document describes the error handling strategy and best practices.
+Every behaviour documented here was checked against the current build.
 
-## Error Handling Strategy
+## Exception types
 
-### Principle: Exceptions for All Errors
+| Exception | Raised when | Example |
+| --- | --- | --- |
+| `ValueError` | An argument is invalid before ChucK is involved | empty code, non-positive frame counts, out-of-range tap capacity |
+| `RuntimeError` | An operation failed, or the object is unusable | shred not found, instance already closed, VM not initialized |
+| `RenderError` | A one-call render helper could not compile or render | `render("@@@ bad")` |
+| `FileNotFoundError` | A `.ck` file passed to a render helper does not exist | `render_file("/nope.ck")` |
+| `TypeError` | Wrong type entirely | passing an int where a name is expected |
 
-All numchuck operations that can fail will raise Python exceptions. **Never rely on return values alone to detect errors** - check for exceptions.
+## Compilation does not raise
 
-### Exception Types
-
-| Exception Type | When Raised | Example |
-|----------------|-------------|---------|
-| `ValueError` | Invalid input parameters | Empty strings, zero/negative counts |
-| `RuntimeError` | Operation failed or ChucK not initialized | Compilation errors, VM not ready |
-| `TypeError` | Incorrect type passed | Passing int where string expected |
-
-## Common Patterns
-
-### 1. Initialization
-
-```python
-import numchuck
-
-# Always check initialization
-chuck = numchuck.ChucK()
-try:
-    chuck.init(44100, 2)
-except RuntimeError as e:
-    print(f"Failed to initialize ChucK: {e}")
-    exit(1)
-
-# Or use the convenience method (raises on failure)
-try:
-    chuck = numchuck.ChucK.create(44100, 2)
-except RuntimeError as e:
-    print(f"Failed to create ChucK: {e}")
-    exit(1)
-```
-
-### 2. Compilation
+`compile()` and `compile_file()` return `(success, shred_ids)`. A syntax error
+is a normal, expected outcome for a live-coding tool, so it comes back as
+`(False, [])` with ChucK's diagnostics on stderr:
 
 ```python
-# compile_code returns (success, shred_ids) tuple
-# Raises exceptions for invalid inputs
-try:
-    success, shred_ids = chuck.compile_code(code)
-    if success:
-        print(f"Compiled: shred IDs {shred_ids}")
-    else:
-        print("Compilation failed (syntax error)")
-except ValueError as e:
-    print(f"Invalid input: {e}")  # e.g., empty code
-except RuntimeError as e:
-    print(f"Runtime error: {e}")  # e.g., not initialized
+success, shred_ids = chuck.compile("this is not chuck @@@")
+# -> (False, [])
 ```
 
-### 3. Global Variables
+A missing file is the same:
 
 ```python
-# Setting global variables (raises on failure)
-try:
-    chuck.set_global_int("freq", 440)
-except RuntimeError as e:
-    print(f"Failed to set variable: {e}")  # Variable doesn't exist
-
-# Getting global variables (async via callback)
-def on_value(value):
-    print(f"Got value: {value}")
-
-try:
-    chuck.get_global_int("freq", on_value)
-except RuntimeError as e:
-    print(f"Failed to get variable: {e}")  # Variable doesn't exist
+success, shred_ids = chuck.compile_file("/nope/missing.ck")
+# -> (False, [])
 ```
 
-### 4. Event Listeners
+So checking the flag is not optional:
 
 ```python
-# Listen for events (returns listener ID for cleanup)
-try:
-    listener_id = chuck.listen_for_global_event("myevent", on_event)
-    print(f"Listening with ID {listener_id}")
-except RuntimeError as e:
-    print(f"Failed to listen: {e}")  # Event doesn't exist
-
-# IMPORTANT: Clean up listeners when done to prevent memory leaks
-try:
-    chuck.stop_listening_for_global_event("myevent", listener_id)
-except RuntimeError as e:
-    print(f"Failed to stop listening: {e}")
-```
-
-### 5. Shred Management
-
-```python
-# Remove shred (raises if VM not initialized)
-try:
-    chuck.remove_shred(shred_id)
-except RuntimeError as e:
-    print(f"Failed to remove shred: {e}")
-
-# Get shred info (raises if VM not initialized)
-try:
-    info = chuck.get_shred_info(shred_id)
-    print(f"Shred state: {info['state']}")
-except RuntimeError as e:
-    print(f"Failed to get shred info: {e}")
-```
-
-## Input Validation
-
-numchuck validates all inputs before calling ChucK APIs:
-
-### Strings
-
-- **Empty strings not allowed** for code, file paths, variable names
-- Raises `ValueError`
-
-```python
-# [X] Will raise ValueError
-chuck.compile_code("")  # ValueError: Code cannot be empty
-
-# [x] Correct
-chuck.compile_code("SinOsc s => dac;")
-```
-
-### Numeric Values
-
-- **Counts must be >= 1**
-- **Frames must be > 0**
-- **Sample rates, channels must be > 0**
-- Raises `ValueError`
-
-```python
-# [X] Will raise ValueError
-chuck.compile_code("...", count=0)  # ValueError: Count must be at least 1
-chuck.run(input, output, 0)         # ValueError: num_frames must be positive
-
-# [x] Correct
-chuck.compile_code("...", count=1)
-chuck.run(input, output, 512)
-```
-
-### Initialization State
-
-- **Most operations require ChucK to be initialized**
-- Raises `RuntimeError` if not initialized
-
-```python
-chuck = numchuck.ChucK()
-# [X] Will raise RuntimeError
-chuck.compile_code("...")  # RuntimeError: ChucK not initialized. Call init() first.
-
-# [x] Correct
-chuck.init(44100, 2)
-chuck.compile_code("...")
-```
-
-## Error Messages
-
-Error messages follow a consistent format:
-
-```text
-ValueError: <parameter> cannot be <invalid_value>
-RuntimeError: ChucK instance not initialized. Call init() first.
-RuntimeError: Failed to <operation> '<name>'
-RuntimeError: VM not initialized
-```
-
-## Memory Management & Cleanup
-
-### Event Listener Cleanup
-
-**CRITICAL:** Event listeners created with `listen_for_global_event` persist in memory until explicitly removed.
-
-```python
-# Store listener IDs
-listener_ids = []
-
-# Add listener
-listener_id = chuck.listen_for_global_event("myevent", callback)
-listener_ids.append(listener_id)
-
-# Clean up when done
-for lid in listener_ids:
-    chuck.stop_listening_for_global_event("myevent", lid)
-listener_ids.clear()
-```
-
-### Context Manager Pattern (Recommended for Future)
-
-```python
-# Not yet implemented, but recommended pattern:
-with numchuck.ChucK.create(44100, 2) as chuck:
-    chuck.compile_code("...")
-    # Automatic cleanup on exit
-```
-
-## Best Practices
-
-### 1. Always Handle Exceptions
-
-```python
-# [X] Bad - ignores potential errors
-success, shreds = chuck.compile_code(code)
-
-# [x] Good - handles all error cases
-try:
-    success, shreds = chuck.compile_code(code)
-    if not success:
-        handle_compilation_failure()
-except ValueError as e:
-    handle_invalid_input(e)
-except RuntimeError as e:
-    handle_runtime_error(e)
-```
-
-### 2. Check Initialization State
-
-```python
-# [X] Bad - assumes initialized
-chuck = numchuck.ChucK()
-chuck.compile_code(code)
-
-# [x] Good - ensures initialization
-chuck = numchuck.ChucK()
-if not chuck.is_init():
-    chuck.init(44100, 2)
-```
-
-### 3. Clean Up Resources
-
-```python
-# [X] Bad - leaks event listeners
-for i in range(1000):
-    chuck.listen_for_global_event("event", lambda: print(i))
-# All 1000 callbacks remain in memory!
-
-# [x] Good - tracks and cleans up
-listeners = []
-for i in range(10):
-    lid = chuck.listen_for_global_event("event", lambda: print(i))
-    listeners.append(lid)
-
-# Later:
-for lid in listeners:
-    chuck.stop_listening_for_global_event("event", lid)
-```
-
-### 4. Validate Before Passing to ChucK
-
-```python
-# [X] Bad - no validation
-code = user_input
-chuck.compile_code(code)
-
-# [x] Good - validate first
-code = user_input.strip()
-if not code:
-    print("Error: Code cannot be empty")
-    return
-
-try:
-    chuck.compile_code(code)
-except Exception as e:
-    print(f"Compilation failed: {e}")
-```
-
-## Compilation Errors
-
-Compilation errors return `(False, [])` rather than raising exceptions. This allows you to handle syntax errors gracefully:
-
-```python
-success, shred_ids = chuck.compile_code(code)
+success, shred_ids = chuck.compile(code)
 if not success:
-    # Syntax error in code - check ChucK error output
-    # Use chuck.set_cherr_callback() to capture error messages
-    print("Compilation failed - check ChucK errors")
-else:
-    print(f"Success: {shred_ids}")
+    handle_compilation_failure()      # nothing was raised
 ```
 
-## Debugging Tips
-
-### 1. Enable ChucK Error Output
+Capture the diagnostics if you need them in-process:
 
 ```python
-def on_error(msg):
-    print(f"ChucK Error: {msg}", file=sys.stderr)
+errors = []
+chuck.set_stderr_callback(errors.append)
 
-chuck.set_cherr_callback(on_error)
+success, _ = chuck.compile(code)
+if not success:
+    print("".join(errors))
 ```
 
-### 2. Check Initialization State
-
-```python
-if not chuck.is_init():
-    print("ChucK not initialized!")
-```
-
-### 3. Use Verbose Logging
+The render helpers do the opposite, because they have no partial-success state
+to report:
 
 ```python
 import numchuck
-numchuck.ChucK.set_log_level(numchuck.LOG_ALL)
+
+numchuck.render("@@@ bad", duration=1.0)     # RenderError: Failed to compile code
+numchuck.render_file("/nope.ck")             # FileNotFoundError
 ```
 
-## Summary
+## Invalid arguments
 
-- **All errors raise exceptions** - never ignore return values
-- **Check initialization** before operations
-- **Clean up event listeners** to prevent memory leaks
-- **Validate inputs** before passing to ChucK
-- **Handle compilation failures** by checking return tuple
-- **Use try/except** around all ChucK operations
+These raise before ChucK sees them:
 
-Following these patterns ensures robust, leak-free numchuck applications.
+```python
+chuck.compile("")                    # ValueError: Code cannot be empty
+chuck.run(0)                         # ValueError: num_frames must be positive
+chuck.add_tap("osc", 1, 0)           # ValueError: capacity_frames must be between 1 and 4194304
+chuck.add_tap("osc", 1, 2**30)       # ValueError: capacity_frames must be between 1 and 4194304
+```
+
+The tap capacity is bounded on purpose: it allocates a ring plus a staging
+buffer, so an unchecked large value would ask for tens of gigabytes.
+
+## Missing globals read as zero
+
+Reading a global that was never declared is **not** an error. ChucK creates it
+on demand with a zero value:
+
+```python
+chuck.get_int("never_declared")      # 0
+chuck.get_float("never_declared")    # 0.0
+chuck.get_string("never_declared")   # ""
+```
+
+Signalling an event nobody declared is equally quiet. If you need to know
+whether a name exists, ask for the list:
+
+```python
+declared = {name for _type, name in chuck.raw.get_all_globals()}
+if "frequency" not in declared:
+    ...
+```
+
+!!! note "Reads need the VM to advance"
+    A read is answered by a callback the VM invokes on its next cycle, so
+    `get_int()` runs the VM briefly to collect it. If the callback never fires
+    it raises `RuntimeError` suggesting a larger `run_frames`. During real-time
+    audio the audio thread is already advancing the VM, so the read returns
+    without help.
+
+## Shreds
+
+```python
+chuck.shred_info(9999)               # RuntimeError: Shred 9999 not found
+chuck.remove_shred(9999)             # returns None -- removing a missing shred is quiet
+```
+
+The asymmetry is intentional: asking about a shred that is not there is a
+question with no answer, whereas removing one that is already gone has achieved
+what you asked for.
+
+## Lifetime
+
+`Chuck` refuses to work after `close()` rather than crashing:
+
+```python
+chuck.close()
+chuck.compile("SinOsc s => dac;")    # RuntimeError: ChucK instance has been closed
+```
+
+Prefer the context manager, which closes for you even when the block raises:
+
+```python
+with Chuck(output_channels=2) as chuck:
+    chuck.compile(code)
+    audio = chuck.run(44100)
+```
+
+Explicit teardown matters most on Windows, where audio threads must be joined
+before their memory is released.
+
+## The low-level class
+
+`numchuck._numchuck.ChucK` requires `init()` before anything else, and says so:
+
+```python
+from numchuck._numchuck import ChucK
+
+chuck = ChucK()
+chuck.compile_code("SinOsc s => dac;")
+# RuntimeError: ChucK instance not initialized. Call init() first.
+```
+
+Its validation is otherwise the same:
+
+```python
+chuck.init()
+chuck.compile_code("")                 # ValueError: Code cannot be empty
+chuck.compile_code("...", "", 0)       # ValueError: Count must be at least 1
+```
+
+Buffers must be `float32` and correctly sized, or you get a `ValueError`
+naming the mismatch:
+
+```python
+import numpy as np
+from numchuck._numchuck import PARAM_INPUT_CHANNELS, PARAM_OUTPUT_CHANNELS
+
+frames = 1024
+chuck.run(
+    np.zeros(frames * chuck.get_param_int(PARAM_INPUT_CHANNELS), dtype=np.float32),
+    np.zeros(frames * chuck.get_param_int(PARAM_OUTPUT_CHANNELS), dtype=np.float32),
+    frames,
+)
+```
+
+A bare `ChucK` defaults to two channels each way, so an empty input buffer is a
+mismatch, not a shortcut:
+
+```python
+chuck.run(np.zeros(0, dtype=np.float32), output, 1024)
+# ValueError: input size mismatch: expected 2048 elements, got 0
+```
+
+Globals need a *running* VM, not merely an initialized one:
+
+```python
+chuck = ChucK()
+chuck.init()
+chuck.set_global_int("x", 1)
+# RuntimeError: ChucK VM is not running: call start() before accessing globals
+```
+
+`start()` fixes it, and so does a first `run()`, which starts the VM implicitly.
+`Chuck` starts it at construction, so the high-level API never sees this.
+
+!!! note "This used to be a segfault"
+    `ChucK::globals()` returns nothing until the VM is running, and the bindings
+    called straight through the returned pointer -- so skipping `start()` was a
+    null dereference that took the process down with no traceback. Every one of
+    those call sites now raises instead.
+
+## Cleaning up listeners
+
+Event listeners live until removed. Keep their ids:
+
+```python
+callback_id = chuck.on_event("trigger", handler)
+...
+chuck.stop_listening_for_event("trigger", callback_id)
+```
+
+A shred watcher is one per instance and is unsubscribed on shutdown, so no
+notification can arrive after the callable is dropped. Remove it earlier with
+`chuck.remove_shred_watcher()`.
+
+## What is not guarded
+
+ChucK code runs with the privileges of the Python process, and nothing sandboxes
+it:
+
+- **The filesystem is reachable.** ChucK's `FileIO` reads and writes anything the
+  process can.
+- **A shred that never advances time blocks the VM.** `Chuck.abort_shred()` is
+  the only way to break out of a loop that never reaches `=> now`, and it only
+  works while the VM is being driven — so call it from another thread during
+  real-time audio.
+- **There is no memory ceiling inside the VM.** A spork loop can accumulate
+  shreds faster than they retire until the VM saturates.
+
+Do not run untrusted ChucK code.
+
+## Recommended shape
+
+```python
+import numchuck
+from numchuck import Chuck
+
+def play(code: str, seconds: float = 1.0):
+    errors: list[str] = []
+    try:
+        with Chuck(input_channels=0, output_channels=2) as chuck:
+            chuck.set_stderr_callback(errors.append)
+
+            success, shred_ids = chuck.compile(code)
+            if not success:
+                raise ValueError("compilation failed:\n" + "".join(errors))
+
+            return chuck.run(int(chuck.sample_rate * seconds))
+    except RuntimeError as e:
+        # VM-level failure: not initialized, operation refused
+        raise RuntimeError(f"ChucK VM error: {e}") from e
+```
+
+Three habits carry most of the weight: check the compile flag, use the context
+manager, and register a stderr callback when you need to know *why* something
+failed.

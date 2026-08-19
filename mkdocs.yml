@@ -1,0 +1,105 @@
+site_name: numchuck
+site_description: Python bindings for the ChucK audio programming language
+site_url: https://shakfu.github.io/numchuck/
+repo_url: https://github.com/shakfu/numchuck
+repo_name: shakfu/numchuck
+copyright: Copyright &copy; 2024-2026 shakfu
+
+docs_dir: docs
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - content.code.copy
+    - content.code.annotate
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            # The core extension is compiled, so griffe cannot read it
+            # statically; inspection pulls the docstrings nanobind emits.
+            allow_inspection: true
+            docstring_style: google
+            docstring_section_style: table
+            heading_level: 3
+            inherited_members: false
+            members_order: source
+            merge_init_into_class: true
+            separate_signature: true
+            show_if_no_docstring: false
+            show_root_heading: true
+            show_root_full_path: false
+            show_signature_annotations: true
+            show_source: false
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            signature_crossrefs: true
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+nav:
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - Guide:
+      - Error handling: error_handling.md
+      - Examples: examples.md
+      - REPL commands: repl-commands.md
+      - User directory: numchuck_home.md
+  - API reference:
+      - Chuck: api/chuck.md
+      - Rendering: api/rendering.md
+      - Audio: api/audio.md
+      - Events: api/events.md
+      - Low-level ChucK: api/lowlevel.md
+      - Constants: api/constants.md
+  - Development:
+      - Architecture: architecture.md
+      - Chugins: chugins.md
+      - Static chugins: static_chugins.md
+      - ChucK lexer: chuck_lexer.md
+      - Model/view: model_view.md
+      - Fix notes:
+          - Critical fixes: critical_fixes.md
+          - Segfault fix: segfault_fix.md
+          - Windows fix: windows_fix.md
+
+watch:
+  - src/numchuck

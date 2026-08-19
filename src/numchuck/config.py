@@ -38,6 +38,7 @@ from .constants import (
     DEFAULT_SAMPLE_RATE,
     MAX_CONSOLE_LINES,
 )
+from .paths import get_config_file
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -382,8 +383,14 @@ class Config:
 
 
 def get_config_path() -> Path:
-    """Get the path to the config file."""
-    return Path.home() / ".numchuck" / "config.toml"
+    """Get the path to the config file.
+
+    Delegates to paths.get_config_file() so there is one definition of where
+    config lives. This module used to hardcode ~/.numchuck/config.toml, which
+    silently disagreed with the paths module about whether a project-local
+    .numchuck may override it.
+    """
+    return get_config_file()
 
 
 def load_config(path: Path | str | None = None) -> Config:

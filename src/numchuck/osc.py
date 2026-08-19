@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
 
 from .constants import (
+    DEFAULT_OSC_HOST,
     DEFAULT_OSC_PORT,
     OSC_ALIGNMENT,
     OSC_SOCKET_TIMEOUT,
@@ -179,7 +180,11 @@ class OSCServer:
     """
 
     port: int = DEFAULT_OSC_PORT
-    host: str = "0.0.0.0"
+    # Loopback by default: OSCController maps incoming messages straight onto
+    # global writes and event signals, so a wildcard bind hands VM control to
+    # anything on the network. Pass host="0.0.0.0" deliberately to accept
+    # messages from other machines.
+    host: str = DEFAULT_OSC_HOST
     handlers: list[OSCHandler] = field(default_factory=list)
     _socket: socket.socket | None = field(default=None, repr=False)
     _running: bool = field(default=False, repr=False)

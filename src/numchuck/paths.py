@@ -8,35 +8,68 @@ Provides centralized management of user directories and files for:
 - Logs
 - Configuration
 
-The .numchuck directory is searched in this order:
-1. Current working directory (./.numchuck)
-2. Home directory (~/.numchuck)
+The .numchuck directory resolves to ~/.numchuck. A project-local
+./.numchuck can override it, but only when the caller opts in -- see
+``enable_local_dir``.
 
-This allows project-specific configuration to override global settings.
+Why it is opt-in
+----------------
+The directory supplies config, themes, keybindings and *chugins*, and chugins
+are native shared libraries loaded into the process. Honouring ./.numchuck
+unconditionally would mean that cloning a repository and running numchuck
+inside it executes whatever native code the repository shipped, with no prompt.
+So the local directory is used only when the user asks for it (``--local``, or
+NUMCHUCK_LOCAL=1 in the environment).
 """
 
+import os
 from pathlib import Path
+
+# Whether a project-local ./.numchuck may override ~/.numchuck this session.
+_local_dir_enabled = False
+
+
+def enable_local_dir(enabled: bool = True) -> None:
+    """Allow (or forbid) a project-local ./.numchuck to take precedence.
+
+    Args:
+        enabled: True to honour ./.numchuck, False to use only ~/.numchuck
+    """
+    global _local_dir_enabled
+    _local_dir_enabled = enabled
+
+
+def local_dir_enabled() -> bool:
+    """Whether a project-local ./.numchuck is currently honoured."""
+    return _local_dir_enabled or os.environ.get("NUMCHUCK_LOCAL", "") not in ("", "0")
+
+
+def get_local_numchuck_dir() -> Path | None:
+    """The project-local ./.numchuck, if it exists and is permitted.
+
+    Returns:
+        Path to ./.numchuck, or None when absent or not opted in
+    """
+    if not local_dir_enabled():
+        return None
+    cwd_numchuck = Path.cwd() / ".numchuck"
+    return cwd_numchuck if cwd_numchuck.is_dir() else None
 
 
 def get_numchuck_dir() -> Path:
     """
     Get the active numchuck directory.
 
-    Searches for .numchuck in:
-    1. Current working directory (./.numchuck)
-    2. Home directory (~/.numchuck)
-
-    Returns the first one that exists, or ~/.numchuck if neither exists.
+    This is ~/.numchuck, unless a project-local ./.numchuck exists *and* the
+    caller opted in via ``enable_local_dir()`` or NUMCHUCK_LOCAL=1.
 
     Returns:
         Path to the active .numchuck directory
     """
-    # Check current working directory first
-    cwd_numchuck = Path.cwd() / ".numchuck"
-    if cwd_numchuck.exists():
-        return cwd_numchuck
+    local = get_local_numchuck_dir()
+    if local is not None:
+        return local
 
-    # Fall back to home directory
     return Path.home() / ".numchuck"
 
 
@@ -51,6 +84,21 @@ def get_numchuck_home() -> Path:
         Path to ~/.numchuck directory
     """
     return Path.home() / ".numchuck"
+
+
+# The standard layout of a .numchuck directory, named once so the accessors
+# below and ensure_numchuck_directories() cannot drift apart.
+NUMCHUCK_SUBDIRS = (
+    "snippets",
+    "sessions",
+    "logs",
+    "projects",
+    "recordings",
+    "examples",
+    "themes",
+    "chugins",
+    "keybindings",
+)
 
 
 def get_snippets_dir() -> Path:
@@ -135,16 +183,6 @@ def get_examples_dir() -> Path:
     return get_numchuck_dir() / "examples"
 
 
-def get_themes_dir() -> Path:
-    """
-    Get the themes directory.
-
-    Returns:
-        Path to themes directory
-    """
-    return get_numchuck_dir() / "themes"
-
-
 def get_chugins_dir() -> Path:
     """
     Get the chugins directory.
@@ -153,16 +191,6 @@ def get_chugins_dir() -> Path:
         Path to chugins directory
     """
     return get_numchuck_dir() / "chugins"
-
-
-def get_keybindings_dir() -> Path:
-    """
-    Get the keybindings directory.
-
-    Returns:
-        Path to keybindings directory
-    """
-    return get_numchuck_dir() / "keybindings"
 
 
 def ensure_numchuck_directories() -> None:
@@ -174,16 +202,8 @@ def ensure_numchuck_directories() -> None:
     numchuck_home = get_numchuck_home()
     numchuck_home.mkdir(parents=True, exist_ok=True)
 
-    # Create subdirectories
-    (numchuck_home / "snippets").mkdir(exist_ok=True)
-    (numchuck_home / "sessions").mkdir(exist_ok=True)
-    (numchuck_home / "logs").mkdir(exist_ok=True)
-    (numchuck_home / "projects").mkdir(exist_ok=True)
-    (numchuck_home / "recordings").mkdir(exist_ok=True)
-    (numchuck_home / "examples").mkdir(exist_ok=True)
-    (numchuck_home / "themes").mkdir(exist_ok=True)
-    (numchuck_home / "chugins").mkdir(exist_ok=True)
-    (numchuck_home / "keybindings").mkdir(exist_ok=True)
+    for name in NUMCHUCK_SUBDIRS:
+        (numchuck_home / name).mkdir(exist_ok=True)
 
 
 def list_snippets() -> list[str]:

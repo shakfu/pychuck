@@ -25,15 +25,13 @@
     `Chuck_UGen *` once in `add_tap()`, then read the buffer directly per block.
     `apply_patches()` in `scripts/update.sh` re-applies it after a chuck update
 
-- [ ] **Run the tap tearing regression test in CI**
+- [x] **Run the tap tearing regression test in CI**
   (`tests/test_ugen_tap.py::test_realtime_tap_reads_are_never_torn`)
-  - The test is marked `realtime`; every CI job filters with `-k "not realtime"`
-    (`.github/workflows/ci.yml:71`, `wheels.yml:72`, `pip-test.yml:47`), so the check
-    that catches spliced tap reads never runs there
-  - It is the only guard against a regression that was silent in normal use: 0.3% of
-    full-ring reads, correct-looking data with a discontinuity in the middle
-  - Options: a dummy/virtual audio device on the CI runners, or a harness that drives
-    the capture path from a worker thread without real hardware
+  - A dedicated `realtime` job in `.github/workflows/ci.yml` loads `snd-dummy`
+    and runs `pytest -m realtime` against it. The job asserts the device exists
+    before running, so the tests cannot skip themselves into a green run
+  - The other jobs still filter `-k "not realtime"`; that is now a division of
+    labour rather than a gap
 
 ### Notes
 
@@ -47,6 +45,14 @@
 ---
 
 ## REPL Issues
+
+### Resolved in the review pass
+
+- [x] **`clear` failed with no audio running** (`services/shreds.py`)
+  - `clear_vm()` posts a CLEARVM message the VM only collects while it is being
+    driven, so an offline session got a bare "Failed to clear VM"
+  - Now falls back to removing the shreds directly, and
+    `test_repl_stdin.py::test_clear_command` is no longer skipped
 
 ### High Priority
 
@@ -69,9 +75,32 @@
 
 ### Medium Priority
 
-- [ ] **Guard `get_all_globals()` against segfault** (`completer.py:65-70`, `commands.py:215-226`)
-  - Segfaults without audio running; completer silently returns empty
-  - Check audio state before attempting global queries
+- [x] **Guard `get_all_globals()` against segfault** (`completer.py:65-70`, `commands.py:215-226`)
+  - The stated cause was wrong: the trigger is not "no audio running" but "the
+    VM was never started". `get_all_globals()` on a `Chuck` that had never run
+    segfaulted; after a first `run()` it is fine, which is why `?g` in the REPL
+    appeared healthy
+  - `Chuck.__init__` now calls `start()` as well as `init()`, so every accessor
+    is safe from construction. `test_repl_stdin.py::test_globals_query` runs
+    again and `tests/test_api.py::TestGlobalsBeforeAnyRun` covers the rest
+
+- [x] **Raise instead of crashing on globals access before `start()`**
+  (`src/_numchuck.cpp`)
+  - The earlier diagnosis here was wrong in a useful way: `ChucK::globals()`
+    does *not* return non-null in this state. It checks
+    `m_carrier->vm->running()` and returns NULL, so every unguarded call site
+    was a plain null dereference -- 30 of the 33 had no check at all
+  - `require_globals()` now fetches and validates in one place, and all 33 sites
+    go through it. It distinguishes "not initialized" from "initialized but not
+    started", since the remedy differs
+  - Three sites allocated (`Chuck_Msg`, the sample buffer) before the check;
+    the check moved ahead of the allocation so a raise cannot leak
+  - `get_all_globals()` returned an empty list rather than raising, which said
+    "there are no globals" when the truth was "I cannot tell you"; it raises
+    like the rest now. Both callers (`completer.py`, `services/globals.py`)
+    already caught `RuntimeError`
+  - `tests/test_globals_preconditions.py` exercises all 27 reachable bindings in
+    both states, plus the started path to show the guard cost nothing
 
 - [ ] **Fix multiline detection for string literals/comments** (`repl.py:387-437`)
   - Substring checks (`"=>" in text`) false-trigger on string literals and comments
@@ -128,6 +157,14 @@
   - Features: syntax errors, completions, hover docs
 
 ### Documentation
+
+- [x] **Documentation build** (`mkdocs.yml`, `Makefile`, `.github/workflows/ci.yml`)
+  - The Sphinx tree had no build wiring and had drifted to documenting an API
+    that no longer existed. Replaced with MkDocs + mkdocstrings, built by
+    `make docs` under `--strict` and gated in CI
+  - Remaining: publish it. `make docs-deploy` runs `mkdocs gh-deploy`, but
+    GitHub Pages is not enabled for the repository and no workflow publishes on
+    a tag
 
 - [ ] **Interactive tutorial**
   - Step-by-step livecoding introduction

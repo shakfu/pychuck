@@ -65,6 +65,9 @@ namespace {
 constexpr size_t CK_MAX_TAPS = 8;
 constexpr size_t CK_TAP_NAME_MAX = 128;
 constexpr int CK_TAP_READ_ATTEMPTS = 64;
+// A tap allocates ring + staging, so capacity * channels * 2 floats. Bounded so
+// a mistyped capacity raises instead of asking for tens of gigabytes.
+constexpr int CK_TAP_MAX_CAPACITY = 1 << 22;   // frames, ~16 MB per channel
 constexpr t_CKUINT CK_TAP_RETRY_USEC = 200;
 
 struct TapSlot {
@@ -478,6 +481,33 @@ static void cleanup_instance_callbacks(ChucK* chuck) {
 }
 
 // Global variable callback wrappers
+// Fetch the globals manager, or raise.
+//
+// ChucK::globals() returns NULL until the VM is *running*, not merely
+// initialized -- see chuck.cpp, which checks m_carrier->vm->running() before
+// handing back the manager. Almost every binding below called straight through
+// the returned pointer, so a globals access on a VM that had been init()'d but
+// never start()'d was a plain null dereference: SIGSEGV, no traceback, no way
+// for the caller to recover. A binding must not be able to take the process
+// down, so every one of those call sites goes through here.
+//
+// Not usable from the audio thread: it throws, and capture_taps() must not.
+// That path keeps its own null check.
+static Chuck_Globals_Manager* require_globals(ChucK& chuck) {
+    Chuck_Globals_Manager* globals = chuck.globals();
+    if (globals != nullptr) return globals;
+
+    // Distinguish the two ways to get here, since the fix differs.
+    if (!chuck.isInit()) {
+        throw std::runtime_error(
+            "ChucK instance not initialized. Call init() first.");
+    }
+    throw std::runtime_error(
+        "ChucK VM is not running: call start() before accessing globals "
+        "(run() starts it implicitly, and the high-level Chuck class starts "
+        "it for you)");
+}
+
 static void cb_get_int_wrapper(t_CKINT callback_id, t_CKINT value) {
     nb::callable callback = get_callback(callback_id);
     if (callback.is_valid()) {
@@ -925,7 +955,7 @@ NB_MODULE(_numchuck, m) {
         // Global variable management - primitives
         .def("set_global_int",
             [](ChucK& self, const std::string& name, t_CKINT value) {
-                if (!self.globals()->setGlobalInt(name.c_str(), value)) {
+                if (!require_globals(self)->setGlobalInt(name.c_str(), value)) {
                     throw std::runtime_error("Failed to set global int '" + name + "'");
                 }
             },
@@ -933,7 +963,7 @@ NB_MODULE(_numchuck, m) {
             "Set a global int variable")
         .def("set_global_float",
             [](ChucK& self, const std::string& name, t_CKFLOAT value) {
-                if (!self.globals()->setGlobalFloat(name.c_str(), value)) {
+                if (!require_globals(self)->setGlobalFloat(name.c_str(), value)) {
                     throw std::runtime_error("Failed to set global float '" + name + "'");
                 }
             },
@@ -941,7 +971,7 @@ NB_MODULE(_numchuck, m) {
             "Set a global float variable")
         .def("set_global_string",
             [](ChucK& self, const std::string& name, const std::string& value) {
-                if (!self.globals()->setGlobalString(name.c_str(), value.c_str())) {
+                if (!require_globals(self)->setGlobalString(name.c_str(), value.c_str())) {
                     throw std::runtime_error("Failed to set global string '" + name + "'");
                 }
             },
@@ -950,7 +980,7 @@ NB_MODULE(_numchuck, m) {
         .def("get_global_int",
             [](ChucK& self, const std::string& name, nb::callable callback) {
                 int id = store_callback(callback);
-                if (!self.globals()->getGlobalInt(name.c_str(), id, cb_get_int_wrapper)) {
+                if (!require_globals(self)->getGlobalInt(name.c_str(), id, cb_get_int_wrapper)) {
                     remove_callback(id);
                     throw std::runtime_error("Failed to get global int '" + name + "'");
                 }
@@ -960,7 +990,7 @@ NB_MODULE(_numchuck, m) {
         .def("get_global_float",
             [](ChucK& self, const std::string& name, nb::callable callback) {
                 int id = store_callback(callback);
-                if (!self.globals()->getGlobalFloat(name.c_str(), id, cb_get_float_wrapper)) {
+                if (!require_globals(self)->getGlobalFloat(name.c_str(), id, cb_get_float_wrapper)) {
                     remove_callback(id);
                     throw std::runtime_error("Failed to get global float '" + name + "'");
                 }
@@ -970,7 +1000,7 @@ NB_MODULE(_numchuck, m) {
         .def("get_global_string",
             [](ChucK& self, const std::string& name, nb::callable callback) {
                 int id = store_callback(callback);
-                if (!self.globals()->getGlobalString(name.c_str(), id, cb_get_string_wrapper)) {
+                if (!require_globals(self)->getGlobalString(name.c_str(), id, cb_get_string_wrapper)) {
                     remove_callback(id);
                     throw std::runtime_error("Failed to get global string '" + name + "'");
                 }
@@ -981,7 +1011,7 @@ NB_MODULE(_numchuck, m) {
         // Global variable management - arrays
         .def("set_global_int_array",
             [](ChucK& self, const std::string& name, const std::vector<t_CKINT>& values) {
-                if (!self.globals()->setGlobalIntArray(name.c_str(),
+                if (!require_globals(self)->setGlobalIntArray(name.c_str(),
                     const_cast<t_CKINT*>(values.data()), values.size())) {
                     throw std::runtime_error("Failed to set global int array '" + name + "'");
                 }
@@ -990,7 +1020,7 @@ NB_MODULE(_numchuck, m) {
             "Set a global int array variable")
         .def("set_global_float_array",
             [](ChucK& self, const std::string& name, const std::vector<t_CKFLOAT>& values) {
-                if (!self.globals()->setGlobalFloatArray(name.c_str(),
+                if (!require_globals(self)->setGlobalFloatArray(name.c_str(),
                     const_cast<t_CKFLOAT*>(values.data()), values.size())) {
                     throw std::runtime_error("Failed to set global float array '" + name + "'");
                 }
@@ -999,7 +1029,7 @@ NB_MODULE(_numchuck, m) {
             "Set a global float array variable")
         .def("set_global_int_array_value",
             [](ChucK& self, const std::string& name, t_CKUINT index, t_CKINT value) {
-                if (!self.globals()->setGlobalIntArrayValue(name.c_str(), index, value)) {
+                if (!require_globals(self)->setGlobalIntArrayValue(name.c_str(), index, value)) {
                     throw std::runtime_error("Failed to set global int array value '" + name + "[" + std::to_string(index) + "]'");
                 }
             },
@@ -1007,7 +1037,7 @@ NB_MODULE(_numchuck, m) {
             "Set a global int array element by index")
         .def("set_global_float_array_value",
             [](ChucK& self, const std::string& name, t_CKUINT index, t_CKFLOAT value) {
-                if (!self.globals()->setGlobalFloatArrayValue(name.c_str(), index, value)) {
+                if (!require_globals(self)->setGlobalFloatArrayValue(name.c_str(), index, value)) {
                     throw std::runtime_error("Failed to set global float array value '" + name + "[" + std::to_string(index) + "]'");
                 }
             },
@@ -1015,7 +1045,7 @@ NB_MODULE(_numchuck, m) {
             "Set a global float array element by index")
         .def("set_global_associative_int_array_value",
             [](ChucK& self, const std::string& name, const std::string& key, t_CKINT value) {
-                if (!self.globals()->setGlobalAssociativeIntArrayValue(name.c_str(), key.c_str(), value)) {
+                if (!require_globals(self)->setGlobalAssociativeIntArrayValue(name.c_str(), key.c_str(), value)) {
                     throw std::runtime_error("Failed to set global associative int array value '" + name + "[\"" + key + "\"]'");
                 }
             },
@@ -1023,7 +1053,7 @@ NB_MODULE(_numchuck, m) {
             "Set a global associative int array element by key")
         .def("set_global_associative_float_array_value",
             [](ChucK& self, const std::string& name, const std::string& key, t_CKFLOAT value) {
-                if (!self.globals()->setGlobalAssociativeFloatArrayValue(name.c_str(), key.c_str(), value)) {
+                if (!require_globals(self)->setGlobalAssociativeFloatArrayValue(name.c_str(), key.c_str(), value)) {
                     throw std::runtime_error("Failed to set global associative float array value '" + name + "[\"" + key + "\"]'");
                 }
             },
@@ -1032,7 +1062,7 @@ NB_MODULE(_numchuck, m) {
         .def("get_global_int_array",
             [](ChucK& self, const std::string& name, nb::callable callback) {
                 int id = store_callback(callback);
-                if (!self.globals()->getGlobalIntArray(name.c_str(), id, cb_get_int_array_wrapper)) {
+                if (!require_globals(self)->getGlobalIntArray(name.c_str(), id, cb_get_int_array_wrapper)) {
                     remove_callback(id);
                     throw std::runtime_error("Failed to get global int array '" + name + "'");
                 }
@@ -1042,7 +1072,7 @@ NB_MODULE(_numchuck, m) {
         .def("get_global_float_array",
             [](ChucK& self, const std::string& name, nb::callable callback) {
                 int id = store_callback(callback);
-                if (!self.globals()->getGlobalFloatArray(name.c_str(), id, cb_get_float_array_wrapper)) {
+                if (!require_globals(self)->getGlobalFloatArray(name.c_str(), id, cb_get_float_array_wrapper)) {
                     remove_callback(id);
                     throw std::runtime_error("Failed to get global float array '" + name + "'");
                 }
@@ -1052,7 +1082,7 @@ NB_MODULE(_numchuck, m) {
         .def("get_global_int_array_value",
             [](ChucK& self, const std::string& name, t_CKUINT index, nb::callable callback) {
                 int id = store_callback(callback);
-                if (!self.globals()->getGlobalIntArrayValue(name.c_str(), id, index, cb_get_int_wrapper)) {
+                if (!require_globals(self)->getGlobalIntArrayValue(name.c_str(), id, index, cb_get_int_wrapper)) {
                     remove_callback(id);
                     throw std::runtime_error("Failed to get global int array value '" + name + "[" + std::to_string(index) + "]'");
                 }
@@ -1062,7 +1092,7 @@ NB_MODULE(_numchuck, m) {
         .def("get_global_float_array_value",
             [](ChucK& self, const std::string& name, t_CKUINT index, nb::callable callback) {
                 int id = store_callback(callback);
-                if (!self.globals()->getGlobalFloatArrayValue(name.c_str(), id, index, cb_get_float_wrapper)) {
+                if (!require_globals(self)->getGlobalFloatArrayValue(name.c_str(), id, index, cb_get_float_wrapper)) {
                     remove_callback(id);
                     throw std::runtime_error("Failed to get global float array value '" + name + "[" + std::to_string(index) + "]'");
                 }
@@ -1072,7 +1102,7 @@ NB_MODULE(_numchuck, m) {
         .def("get_global_associative_int_array_value",
             [](ChucK& self, const std::string& name, const std::string& key, nb::callable callback) {
                 int id = store_callback(callback);
-                if (!self.globals()->getGlobalAssociativeIntArrayValue(name.c_str(), id, key.c_str(), cb_get_int_wrapper)) {
+                if (!require_globals(self)->getGlobalAssociativeIntArrayValue(name.c_str(), id, key.c_str(), cb_get_int_wrapper)) {
                     remove_callback(id);
                     throw std::runtime_error("Failed to get global associative int array value '" + name + "[\"" + key + "\"]'");
                 }
@@ -1082,7 +1112,7 @@ NB_MODULE(_numchuck, m) {
         .def("get_global_associative_float_array_value",
             [](ChucK& self, const std::string& name, const std::string& key, nb::callable callback) {
                 int id = store_callback(callback);
-                if (!self.globals()->getGlobalAssociativeFloatArrayValue(name.c_str(), id, key.c_str(), cb_get_float_wrapper)) {
+                if (!require_globals(self)->getGlobalAssociativeFloatArrayValue(name.c_str(), id, key.c_str(), cb_get_float_wrapper)) {
                     remove_callback(id);
                     throw std::runtime_error("Failed to get global associative float array value '" + name + "[\"" + key + "\"]'");
                 }
@@ -1093,15 +1123,15 @@ NB_MODULE(_numchuck, m) {
         // Global UGen sample access
         .def("get_ugen_samples",
             [](ChucK& self, const std::string& name, int num_frames, int num_channels) {
-                if (!self.globals()) {
-                    throw std::runtime_error("Globals manager not initialized");
-                }
                 if (num_frames <= 0) {
                     throw std::invalid_argument("num_frames must be positive");
                 }
                 if (num_channels <= 0) {
                     throw std::invalid_argument("num_channels must be positive");
                 }
+                // Checked before anything is allocated: every throw past this
+                // point has to free `data` by hand, and require_globals throws.
+                Chuck_Globals_Manager* globals = require_globals(self);
 
                 size_t total = static_cast<size_t>(num_frames) * static_cast<size_t>(num_channels);
                 SAMPLE* data = new SAMPLE[total]();
@@ -1161,8 +1191,8 @@ NB_MODULE(_numchuck, m) {
                 // the multichannel variant requires an exact channel match, so
                 // mono goes through the single-channel call
                 bool ok = (num_channels == 1)
-                    ? self.globals()->getGlobalUGenSamples(name.c_str(), data, num_frames)
-                    : self.globals()->getGlobalUGenSamplesMulti(name.c_str(), data, num_frames, num_channels);
+                    ? globals->getGlobalUGenSamples(name.c_str(), data, num_frames)
+                    : globals->getGlobalUGenSamplesMulti(name.c_str(), data, num_frames, num_channels);
 
                 if (!ok) {
                     delete[] data;
@@ -1199,8 +1229,10 @@ NB_MODULE(_numchuck, m) {
                 if (num_channels <= 0) {
                     throw std::invalid_argument("num_channels must be positive");
                 }
-                if (capacity_frames <= 0) {
-                    throw std::invalid_argument("capacity_frames must be positive");
+                if (capacity_frames <= 0 || capacity_frames > CK_TAP_MAX_CAPACITY) {
+                    throw std::invalid_argument(
+                        "capacity_frames must be between 1 and " +
+                        std::to_string(CK_TAP_MAX_CAPACITY));
                 }
 
                 std::lock_guard<std::mutex> lock(g_tap_mutex);
@@ -1267,7 +1299,7 @@ NB_MODULE(_numchuck, m) {
         // Global event management
         .def("signal_global_event",
             [](ChucK& self, const std::string& name) {
-                if (!self.globals()->signalGlobalEvent(name.c_str())) {
+                if (!require_globals(self)->signalGlobalEvent(name.c_str())) {
                     throw std::runtime_error("Failed to signal global event '" + name + "'");
                 }
             },
@@ -1275,7 +1307,7 @@ NB_MODULE(_numchuck, m) {
             "Signal a global event (wakes one waiting shred)")
         .def("broadcast_global_event",
             [](ChucK& self, const std::string& name) {
-                if (!self.globals()->broadcastGlobalEvent(name.c_str())) {
+                if (!require_globals(self)->broadcastGlobalEvent(name.c_str())) {
                     throw std::runtime_error("Failed to broadcast global event '" + name + "'");
                 }
             },
@@ -1284,7 +1316,7 @@ NB_MODULE(_numchuck, m) {
         .def("listen_for_global_event",
             [](ChucK& self, const std::string& name, nb::callable callback, bool listen_forever = true) {
                 int id = store_callback(callback);
-                if (!self.globals()->listenForGlobalEvent(name.c_str(), id, cb_event_wrapper, listen_forever)) {
+                if (!require_globals(self)->listenForGlobalEvent(name.c_str(), id, cb_event_wrapper, listen_forever)) {
                     remove_callback(id);
                     throw std::runtime_error("Failed to listen for global event '" + name + "'");
                 }
@@ -1294,7 +1326,7 @@ NB_MODULE(_numchuck, m) {
             "Listen for a global event and call Python callback when triggered (returns listener ID)")
         .def("stop_listening_for_global_event",
             [](ChucK& self, const std::string& name, int callback_id) {
-                if (!self.globals()->stopListeningForGlobalEvent(name.c_str(), callback_id, cb_event_wrapper)) {
+                if (!require_globals(self)->stopListeningForGlobalEvent(name.c_str(), callback_id, cb_event_wrapper)) {
                     throw std::runtime_error("Failed to stop listening for global event '" + name + "'");
                 }
                 remove_callback(callback_id);
@@ -1307,13 +1339,8 @@ NB_MODULE(_numchuck, m) {
             [](ChucK& self) {
                 std::vector<std::pair<std::string, std::string>> result;
 
-                // Check if globals manager is available
-                if (!self.globals()) {
-                    return result;  // Return empty list
-                }
-
                 std::vector<Chuck_Globals_TypeValue> globals_list;
-                self.globals()->get_all_global_variables(globals_list);
+                require_globals(self)->get_all_global_variables(globals_list);
 
                 for (const auto& gv : globals_list) {
                     result.push_back({gv.type, gv.name});
@@ -1509,39 +1536,42 @@ NB_MODULE(_numchuck, m) {
         // VM control messages
         .def("clear_vm",
             [](ChucK& self) {
-                if (!self.globals()) {
-                    throw std::runtime_error("Globals manager not initialized");
-                }
+                // before the allocation: require_globals throws, and the
+                // message would otherwise leak on the way out
+                Chuck_Globals_Manager* globals = require_globals(self);
+
                 Chuck_Msg* msg = new Chuck_Msg();
                 msg->type = CK_MSG_CLEARVM;
                 msg->reply_cb = nullptr;
-                if (!self.globals()->execute_chuck_msg_with_globals(msg)) {
+                if (!globals->execute_chuck_msg_with_globals(msg)) {
                     throw std::runtime_error("Failed to clear VM");
                 }
             },
             "Clear the VM (remove all shreds)")
         .def("clear_globals",
             [](ChucK& self) {
-                if (!self.globals()) {
-                    throw std::runtime_error("Globals manager not initialized");
-                }
+                // before the allocation: require_globals throws, and the
+                // message would otherwise leak on the way out
+                Chuck_Globals_Manager* globals = require_globals(self);
+
                 Chuck_Msg* msg = new Chuck_Msg();
                 msg->type = CK_MSG_CLEARGLOBALS;
                 msg->reply_cb = nullptr;
-                if (!self.globals()->execute_chuck_msg_with_globals(msg)) {
+                if (!globals->execute_chuck_msg_with_globals(msg)) {
                     throw std::runtime_error("Failed to clear globals");
                 }
             },
             "Clear global variables without clearing the VM")
         .def("reset_shred_id",
             [](ChucK& self) {
-                if (!self.globals()) {
-                    throw std::runtime_error("Globals manager not initialized");
-                }
+                // before the allocation: require_globals throws, and the
+                // message would otherwise leak on the way out
+                Chuck_Globals_Manager* globals = require_globals(self);
+
                 Chuck_Msg* msg = new Chuck_Msg();
                 msg->type = CK_MSG_RESET_ID;
                 msg->reply_cb = nullptr;
-                if (!self.globals()->execute_chuck_msg_with_globals(msg)) {
+                if (!globals->execute_chuck_msg_with_globals(msg)) {
                     throw std::runtime_error("Failed to reset shred ID");
                 }
             },
@@ -1703,6 +1733,9 @@ NB_MODULE(_numchuck, m) {
         "adc_device"_a = numchuck::DEFAULT_ADC_DEVICE,
         "buffer_size"_a = numchuck::DEFAULT_BUFFER_SIZE,
         "num_buffers"_a = numchuck::DEFAULT_NUM_BUFFERS,
+        // RtAudio device setup blocks; the GIL must not be held across it or a
+        // slow device stalls every other Python thread
+        nb::call_guard<nb::gil_scoped_release>(),
         "Start real-time audio playback with ChucK instance");
 
     m.def("stop_audio",
@@ -1715,6 +1748,12 @@ NB_MODULE(_numchuck, m) {
             g_audio_chuck.store(nullptr, std::memory_order_release);
             return true;
         },
+        // ChuckAudio::stop() waits for the audio callback to return. With the
+        // GIL held that wait blocks every Python thread, so a callback that is
+        // slow to finish deadlocks the interpreter outright -- no other thread
+        // can run, KeyboardInterrupt cannot be delivered, and nothing here
+        // touches Python state anyway.
+        nb::call_guard<nb::gil_scoped_release>(),
         "Stop real-time audio playback");
 
     m.def("shutdown_audio",
@@ -1727,6 +1766,8 @@ NB_MODULE(_numchuck, m) {
             g_audio_chuck.store(nullptr, std::memory_order_release);
         },
         "msWait"_a = 0,
+        // same blocking teardown as stop_audio
+        nb::call_guard<nb::gil_scoped_release>(),
         "Shutdown audio system");
 
     m.def("audio_info",

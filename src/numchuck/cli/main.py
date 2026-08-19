@@ -13,6 +13,8 @@ Provides subcommands for different numchuck modes:
 import sys
 import argparse
 
+from ..constants import DEFAULT_WEB_HOST, DEFAULT_WEB_PORT
+
 
 def create_parser() -> argparse.ArgumentParser:
     """Create the argument parser with all subcommands."""
@@ -218,8 +220,26 @@ def create_parser() -> argparse.ArgumentParser:
         "--port",
         "-p",
         type=int,
-        default=8080,
-        help="HTTP port to listen on (default: 8080)",
+        default=DEFAULT_WEB_PORT,
+        help=f"HTTP port to listen on (default: {DEFAULT_WEB_PORT})",
+    )
+    web_parser.add_argument(
+        "--host",
+        default=DEFAULT_WEB_HOST,
+        help=(
+            f"Address to bind (default: {DEFAULT_WEB_HOST}). The IDE runs "
+            "arbitrary ChucK, so anything other than loopback exposes the VM "
+            "to the network and is issued an auth token automatically"
+        ),
+    )
+    web_parser.add_argument(
+        "--token",
+        default=None,
+        help=(
+            "Auth token clients must present. Generated automatically and "
+            "included in the URL opened in the browser; pass an empty string "
+            "to disable auth entirely"
+        ),
     )
     web_parser.add_argument(
         "--srate",
@@ -244,6 +264,20 @@ def create_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Don't open browser automatically",
     )
+
+    # Opting into a project-local ./.numchuck. Off by default because that
+    # directory can supply chugins, which are native libraries loaded into this
+    # process -- see numchuck.paths for the reasoning.
+    for subparser in (edit_parser, repl_parser, run_parser, web_parser, watch_parser):
+        subparser.add_argument(
+            "--local",
+            action="store_true",
+            help=(
+                "use ./.numchuck (snippets, themes, chugins, config) in "
+                "preference to ~/.numchuck; off by default because chugins are "
+                "native code"
+            ),
+        )
 
     return parser
 
@@ -387,7 +421,7 @@ def cmd_web(args: argparse.Namespace) -> None:
     import webbrowser
 
     try:
-        from ..web import WEB_AVAILABLE, WebChuckServer
+        from ..web import WEB_AVAILABLE, WebChuckServer, is_loopback_host
     except ImportError:
         print("Error: Web module not available.")
         print("Rebuild numchuck with -DNUMCHUCK_ENABLE_WEB=ON")
@@ -408,7 +442,9 @@ def cmd_web(args: argparse.Namespace) -> None:
     )
 
     # Create and start web server
-    server = WebChuckServer(chuck, port=args.port)
+    server = WebChuckServer(
+        chuck, port=args.port, host=args.host, auth_token=args.token
+    )
 
     # Track if audio was started
     audio_started = False
@@ -426,7 +462,21 @@ def cmd_web(args: argparse.Namespace) -> None:
 
     try:
         server.start()
-        print(f"numchuck Web IDE running at {server.url}")
+        print("numchuck Web IDE running. Open this URL:")
+        print(f"    {server.url}")
+        if server.auth_token:
+            # The token is in the URL above; say so, because a bare
+            # http://host:port typed from memory will be refused.
+            print("  (the token in that URL is required -- a plain "
+                  f"http://{args.host}:{args.port} will not authenticate)")
+        else:
+            print("  WARNING: auth disabled -- any process on this machine can "
+                  "run code through this server")
+        if not is_loopback_host(args.host):
+            print(
+                f"  WARNING: bound to {args.host} -- anyone who can reach this "
+                "port and token can run code on this machine"
+            )
         print("Press Ctrl+C to stop")
 
         # Load any initial files
@@ -444,9 +494,12 @@ def cmd_web(args: argparse.Namespace) -> None:
             audio_started = True
             print("  Audio started")
 
-        # Open browser
+        # Open the browser on the tokenized URL, which is the only form that
+        # authenticates. The page lifts the token out of the query string,
+        # keeps it for the session and scrubs it from the address bar.
         if not args.no_browser:
-            webbrowser.open(server.url)
+            if not webbrowser.open(server.url):
+                print("  (could not open a browser -- visit the URL above)")
 
         # Keep running until interrupted
         from ..constants import SHUTDOWN_DELAY
@@ -472,6 +525,12 @@ def main() -> None:
     """Main CLI entry point."""
     parser = create_parser()
     args = parser.parse_args()
+
+    if getattr(args, "local", False):
+        from ..paths import enable_local_dir
+
+        enable_local_dir()
+        print("using ./.numchuck (local chugins are native code)", file=sys.stderr)
 
     # Map commands to handlers
     command_handlers = {

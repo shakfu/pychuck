@@ -189,7 +189,6 @@ class TestChuckREPLStdinCommands:
         exit_code = repl.run(input_stream=stdin)
         assert exit_code == 0
 
-    @pytest.mark.skip(reason="clear_vm may fail without audio running")
     def test_clear_command(self):
         """Test clear VM command."""
         # Note: After clear, session.shreds is cleared so ? shows empty
@@ -198,7 +197,6 @@ class TestChuckREPLStdinCommands:
         exit_code = repl.run(input_stream=stdin)
         assert exit_code == 0
 
-    @pytest.mark.skip(reason="get_all_globals segfaults without audio running")
     def test_globals_query(self):
         """Test globals query command."""
         stdin = StringIO("?g\n")

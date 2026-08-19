@@ -40,7 +40,14 @@ class TestWebServer:
 
             assert server.port == 8082
             assert server.is_running is False
-            assert server.url == "http://localhost:8082"
+            # url reports the address actually bound, which defaults to
+            # loopback; it used to say "localhost" whatever the bind was
+            assert server.host == "127.0.0.1"
+            assert server.url.startswith("http://127.0.0.1:8082/")
+            # Loopback is tokenized too: the origin check only constrains
+            # browsers, and a local process sends no Origin.
+            assert server.auth_token
+            assert f"token={server.auth_token}" in server.url
         finally:
             if server is not None:
                 server.stop()  # Break reference cycles
@@ -124,6 +131,7 @@ class TestWebServer:
 
                 req = urllib.request.Request(
                     "http://localhost:8086/api/status",
+                    headers={"Authorization": f"Bearer {server.auth_token}"},
                     method="GET",
                 )
                 response = urllib.request.urlopen(req)
@@ -154,7 +162,10 @@ class TestWebServer:
                 req = urllib.request.Request(
                     "http://localhost:8087/api/compile",
                     data=json.dumps({"code": code}).encode("utf-8"),
-                    headers={"Content-Type": "application/json"},
+                    headers={
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {server.auth_token}",
+                    },
                     method="POST",
                 )
                 response = urllib.request.urlopen(req)
@@ -289,7 +300,10 @@ class TestGlobalsSync:
                 req = urllib.request.Request(
                     "http://localhost:8089/api/compile",
                     data=json.dumps({"code": code}).encode("utf-8"),
-                    headers={"Content-Type": "application/json"},
+                    headers={
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {server.auth_token}",
+                    },
                     method="POST",
                 )
                 urllib.request.urlopen(req)
@@ -300,6 +314,7 @@ class TestGlobalsSync:
                 # Now fetch globals
                 req = urllib.request.Request(
                     "http://localhost:8089/api/globals",
+                    headers={"Authorization": f"Bearer {server.auth_token}"},
                     method="GET",
                 )
                 response = urllib.request.urlopen(req)

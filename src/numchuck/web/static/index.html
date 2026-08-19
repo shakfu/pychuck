@@ -589,9 +589,96 @@
             header.querySelector('.toggle').textContent = panel.classList.contains('collapsed') ? '+' : '-';
         }
 
+        // navigator.clipboard exists only in a secure context, which http on a
+        // LAN address is not, and Safari additionally requires a user gesture
+        // for readText. Feature-detect rather than assume; xterm's own handling
+        // takes over when the API is unavailable.
+        function clipboardWrite(text) {
+            if (!text) return;
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(text).catch(function() {});
+                    return;
+                }
+            } catch (e) { /* fall through */ }
+            // execCommand is deprecated but is the only route left on an
+            // insecure origin, and it is what the browser fallback expects.
+            try {
+                var ta = document.createElement('textarea');
+                ta.value = text;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+            } catch (e) { /* nothing more to try */ }
+        }
+
+        function clipboardRead(onText) {
+            try {
+                if (navigator.clipboard && navigator.clipboard.readText) {
+                    navigator.clipboard.readText().then(function(text) {
+                        if (text) onText(text);
+                    }).catch(function() {
+                        // Denied or unavailable: the terminal's own paste
+                        // handling (onData) still delivers the text.
+                    });
+                    return;
+                }
+            } catch (e) { /* fall through */ }
+            // No readable clipboard: rely on the browser's native paste, which
+            // reaches the terminal through onData.
+        }
+
+        // Auth token. The server requires one whenever it is bound to anything
+        // but loopback, and the CLI opens the IDE with ?token=... in the URL.
+        // Keep it for the session, then scrub it from the address bar so it does
+        // not linger in history, bookmarks or a screenshot.
+        var TOKEN_KEY = 'numchuck-token';
+
+        function storeToken(value) {
+            // localStorage, not sessionStorage: the latter is per-tab, so
+            // opening the IDE in a second tab left it with no token and every
+            // request failing. A stale token from an earlier run is harmless --
+            // it simply will not match, and forgetToken() clears it on the 401.
+            try {
+                if (value) localStorage.setItem(TOKEN_KEY, value);
+                else localStorage.removeItem(TOKEN_KEY);
+            } catch (e) { /* private mode, or storage disabled */ }
+        }
+
+        function forgetToken() {
+            authToken = '';
+            storeToken('');
+        }
+
+        var authToken = (function() {
+            var fromUrl = null;
+            try {
+                fromUrl = new URLSearchParams(location.search).get('token');
+            } catch (e) { /* no URLSearchParams: fall through to storage */ }
+
+            if (fromUrl) {
+                storeToken(fromUrl);
+                // Keep it out of the address bar so it does not linger in
+                // history, bookmarks or a screenshot.
+                try { history.replaceState(null, '', location.pathname); } catch (e) {}
+                return fromUrl;
+            }
+            try { return localStorage.getItem(TOKEN_KEY) || ''; }
+            catch (e) { return ''; }
+        })();
+
         // WebSocket
         function connect() {
-            ws = new WebSocket('ws://' + location.host + '/ws');
+            // Browsers give no way to set headers on a WebSocket handshake, so
+            // the token has to travel in the query string here.
+            var scheme = location.protocol === 'https:' ? 'wss://' : 'ws://';
+            var url = scheme + location.host + '/ws';
+            if (authToken) url += '?token=' + encodeURIComponent(authToken);
+
+            ws = new WebSocket(url);
             ws.onopen = function() { log('Connected to server', 'info'); };
             ws.onclose = function() { log('Disconnected', 'error'); setTimeout(connect, 2000); };
             ws.onmessage = function(e) { handleMessage(JSON.parse(e.data)); };
@@ -722,8 +809,22 @@
         // API calls
         function apiCall(method, endpoint, body) {
             var opts = { method: method, headers: { 'Content-Type': 'application/json' } };
+            if (authToken) opts.headers['Authorization'] = 'Bearer ' + authToken;
             if (body) opts.body = JSON.stringify(body);
-            return fetch('/api' + endpoint, opts).then(function(res) { return res.json(); });
+            return fetch('/api' + endpoint, opts).then(function(res) {
+                // An auth or origin failure is otherwise indistinguishable from
+                // an empty result, and silently doing nothing is the worst way
+                // for the IDE to report that it cannot reach its own server.
+                if (res.status === 401) {
+                    forgetToken();
+                    log('Not authorized: reopen the IDE using the URL numchuck '
+                        + 'printed, which carries the access token', 'error');
+                } else if (res.status === 403) {
+                    log('Request refused: this page was not served by the '
+                        + 'numchuck server it is talking to', 'error');
+                }
+                return res.json();
+            });
         }
 
         function sporkCode() {
@@ -957,7 +1058,7 @@
                     // If there's a selection, copy it
                     var selection = term.getSelection();
                     if (selection) {
-                        navigator.clipboard.writeText(selection);
+                        clipboardWrite(selection);
                     } else {
                         // No selection - cancel input
                         term.writeln('^C');
@@ -967,19 +1068,13 @@
                 } else if ((ev.ctrlKey || ev.metaKey) && code === 88) { // Ctrl+X or Cmd+X (Cut)
                     var selection = term.getSelection();
                     if (selection) {
-                        navigator.clipboard.writeText(selection);
+                        clipboardWrite(selection);
                         term.clearSelection();
                     }
                 } else if ((ev.ctrlKey || ev.metaKey) && code === 86) { // Ctrl+V or Cmd+V
                     // Handle paste via clipboard API
                     ev.preventDefault();
-                    navigator.clipboard.readText().then(function(text) {
-                        if (text) {
-                            pasteText(text);
-                        }
-                    }).catch(function() {
-                        // Clipboard API failed, fallback handled by onData
-                    });
+                    clipboardRead(pasteText);
                 } else if (ev.ctrlKey && code === 76) { // Ctrl+L - clear
                     term.clear();
                     writePrompt();

@@ -11,8 +11,30 @@ numchuck uses `~/.numchuck/` as its home directory for storing user data, config
 ├── projects/         # Livecoding session versioning (--project <name>)
 ├── sessions/         # Saved REPL sessions (future)
 ├── logs/             # ChucK VM and audio logs (future)
-└── config.toml       # User configuration (future)
+└── config.toml       # User configuration
 ```
+
+## Global and project-local directories
+
+`~/.numchuck/` is always consulted. A project-local `./.numchuck/` in the
+current working directory can take precedence over it, which is useful for
+per-project snippets and settings -- but only when you ask for it:
+
+```bash
+numchuck repl --local           # use ./.numchuck for this run
+export NUMCHUCK_LOCAL=1         # or for the whole shell session
+```
+
+It is opt-in rather than automatic because the directory can supply *chugins*,
+and chugins are native shared libraries loaded into the process. Honouring
+`./.numchuck` wherever it happened to exist would mean that cloning a repository
+and running numchuck inside it executes whatever native code that repository
+shipped, with no prompt.
+
+`get_numchuck_home()` always returns `~/.numchuck`. `get_numchuck_dir()` returns
+the active one, which is the local directory only when the opt-in is on;
+`get_local_numchuck_dir()` returns it or `None`, and `enable_local_dir()` is
+what `--local` calls.
 
 ## Current Features
 
@@ -55,7 +77,7 @@ chuck> @sine
 - `@bass` - Bass line pattern
 - `@reverb` - Reverb effect chain
 
-**Managed by:** `src/numchuck/tui/commands.py`, `src/numchuck/tui/paths.py`
+**Managed by:** `src/numchuck/tui/commands.py`, `src/numchuck/paths.py`
 
 ### Projects (`~/.numchuck/projects/`)
 
@@ -124,7 +146,8 @@ Potential logs:
 
 ### Configuration (`~/.numchuck/config.toml`)
 
-**Planned feature:** User preferences and defaults
+Loaded by `numchuck.config`; see `load_config()`, `get_config()` and
+`save_config()`, which are re-exported from the package.
 
 Example configuration:
 
@@ -155,7 +178,7 @@ favorite = ["sine", "reverb", "kick"]
 
 ## API Reference
 
-The `src/numchuck/tui/paths.py` module provides utilities for managing the numchuck home directory:
+The `src/numchuck/paths.py` module provides utilities for managing the numchuck home directory:
 
 ### Functions
 
@@ -175,10 +198,10 @@ The `src/numchuck/tui/paths.py` module provides utilities for managing the numch
   Returns `~/.numchuck/logs` (future)
 
 - **`get_config_file() -> Path`**
-  Returns `~/.numchuck/config.toml` (future)
+  Returns `~/.numchuck/config.toml`
 
 - **`get_projects_dir() -> Path`**
-  Returns `~/.numchuck/projects` (future)
+  Returns `~/.numchuck/projects`
 
 - **`ensure_numchuck_directories()`**
   Creates all standard directories if they don't exist
@@ -192,7 +215,7 @@ The `src/numchuck/tui/paths.py` module provides utilities for managing the numch
 ### Usage Example
 
 ```python
-from numchuck.cli.paths import get_snippets_dir, list_snippets
+from numchuck.paths import get_snippets_dir, list_snippets
 
 # Get snippets directory
 snippets = get_snippets_dir()
@@ -278,7 +301,7 @@ Consider subdirectories for complex setups (requires code changes):
 
 ```bash
 # Manually create directories
-python3 -c "from numchuck.cli.paths import ensure_numchuck_directories; ensure_numchuck_directories()"
+python3 -c "from numchuck.paths import ensure_numchuck_directories; ensure_numchuck_directories()"
 ```
 
 ### Snippet not found
@@ -320,4 +343,5 @@ The `~/.numchuck/` directory may contain:
 ## See Also
 
 - [ChucK Language Specification](https://chuck.stanford.edu/doc/language/)
-- [Path Management API](../src/numchuck/cli/paths.py)
+- [Path management source](https://github.com/shakfu/numchuck/blob/main/src/numchuck/paths.py) -- `numchuck.paths`, which resolves every location above
+- [Quickstart](quickstart.md) and [Error handling](error_handling.md)

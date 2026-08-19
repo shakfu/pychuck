@@ -26,6 +26,13 @@ DEFAULT_WEB_PORT = 8080  # Web IDE server port
 DEFAULT_OTF_PORT = 8888  # On-the-fly programming port
 DEFAULT_OSC_PORT = 9000  # OSC (Open Sound Control) server port
 
+# Listen addresses. Both servers accept arbitrary control of the VM, so they
+# bind loopback unless the caller explicitly widens them -- and the web server
+# demands an auth token whenever they do.
+DEFAULT_WEB_HOST = "127.0.0.1"
+DEFAULT_OSC_HOST = "127.0.0.1"
+WEB_TOKEN_BYTES = 24  # Entropy in the generated web auth token
+
 # =============================================================================
 # Timeouts and Intervals (seconds unless noted)
 # =============================================================================

@@ -599,3 +599,50 @@ class TestStreamIterator:
 
         total_frames = sum(len(a) for a in all_audio)
         assert total_frames == frames_per_chunk * chunks_needed
+
+
+class TestGlobalsBeforeAnyRun:
+    """Global access on a freshly constructed instance must not crash.
+
+    Every global accessor reaches into the VM's globals manager, which
+    segfaults if the VM has never been started -- and only run() started one
+    implicitly, so `Chuck().set_int("x", 1)` took the process down. Chuck now
+    starts the VM at construction. These run in-process, so a regression is a
+    hard crash of the test session rather than a failure; that is the nature of
+    the bug being guarded.
+    """
+
+    def test_set_int_before_any_run(self):
+        with Chuck(input_channels=0) as chuck:
+            chuck.set_int("counter", 1)
+
+    def test_get_int_before_any_run(self):
+        with Chuck(input_channels=0) as chuck:
+            assert chuck.get_int("counter") == 0
+
+    def test_get_float_before_any_run(self):
+        with Chuck(input_channels=0) as chuck:
+            assert chuck.get_float("freq") == 0.0
+
+    def test_get_string_before_any_run(self):
+        with Chuck(input_channels=0) as chuck:
+            assert chuck.get_string("label") == ""
+
+    def test_list_globals_before_any_run(self):
+        with Chuck(input_channels=0) as chuck:
+            assert chuck.raw.get_all_globals() == []
+
+    def test_signal_event_before_any_run(self):
+        with Chuck(input_channels=0) as chuck:
+            chuck.signal_event("trigger")
+
+    def test_shreds_before_any_run(self):
+        with Chuck(input_channels=0) as chuck:
+            assert chuck.shreds == []
+
+    def test_round_trip_still_works_after_compiling(self):
+        """The eager start must not disturb the normal path."""
+        with Chuck(input_channels=0) as chuck:
+            chuck.compile("global int x; 7 => x; while (true) { 1::samp => now; }")
+            chuck.run(256)
+            assert chuck.get_int("x") == 7

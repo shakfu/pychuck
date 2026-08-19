@@ -10,7 +10,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Callable, Protocol
 
 from ..constants import AUDIO_SHUTDOWN_TIMEOUT_MS
-from .._numchuck import start_audio, stop_audio, shutdown_audio
+from .._numchuck import (
+    is_audio_running,
+    shutdown_audio,
+    start_audio,
+    stop_audio,
+)
 
 if TYPE_CHECKING:
     from .._numchuck import ChucK
@@ -84,6 +89,21 @@ class AudioService:
     def chuck(self) -> ChucK:
         """Get the managed ChucK instance."""
         return self._chuck
+
+    def sync_state(self) -> bool:
+        """Reconcile the tracked flag with the audio system's real state.
+
+        Audio can be started or stopped without going through this service --
+        the REPL command executor calls start_audio()/stop_audio() directly --
+        so ``is_running`` can go stale for anything that mixes the two paths.
+        Call this first and the subsequent start()/stop() acts on what is
+        actually happening rather than on what this object last did.
+
+        Returns:
+            True if real-time audio is running right now
+        """
+        self._running = is_audio_running()
+        return self._running
 
     def set_callbacks(
         self,

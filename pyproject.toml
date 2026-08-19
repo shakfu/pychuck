@@ -31,6 +31,11 @@ dependencies = [
 ]
 
 [dependency-groups]
+docs = [
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.27",
+]
 dev = [
     "mypy>=1.14.1",
     "pytest>=8.3.5",
@@ -78,8 +83,9 @@ build-dir = "build/{wheel_tag}"
 # Necessary to see build output from the actual compilation
 build-verbosity = 1
 
-# Build for Python 3.9-3.13
-build = "cp39-* cp310-* cp311-* cp312-* cp313-*"
+# Match requires-python (>=3.10). cp39 wheels were being built and would then
+# be rejected at install time.
+build = "cp310-* cp311-* cp312-* cp313-*"
 
 # Skip 32-bit and musllinux builds
 skip = "*-win32 *-manylinux_i686 *-musllinux_*"

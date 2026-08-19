@@ -9,46 +9,73 @@ numchuck is a Python wrapper for ChucK that uses nanobind to create efficient C+
 ```text
 numchuck/
 ├── src/
-│   ├── _numchuck.cpp              # C++ nanobind extension
+│   ├── _numchuck.cpp             # C++ nanobind extension (VM, audio, taps)
+│   ├── _web.cpp                  # Mongoose HTTP/WebSocket server binding
+│   ├── constants.h               # Shared C++ constants
 │   ├── CMakeLists.txt            # Extension build configuration
 │   └── numchuck/
 │       ├── __init__.py           # Public Python API
-│       ├── _numchuck.pyi          # Type stubs
+│       ├── _version.py           # Single source of the version string
+│       ├── _numchuck.pyi         # Type stubs for the core extension
+│       ├── _web.pyi              # Type stubs for the web extension
+│       ├── api.py                # Chuck class: the high-level wrapper
+│       ├── config.py             # ~/.numchuck/config.toml loading
+│       ├── constants.py          # Shared Python constants
+│       ├── paths.py              # .numchuck directory resolution
+│       ├── render.py             # Offline rendering helpers
+│       ├── recorder.py           # Session recording and playback
+│       ├── watcher.py            # Filesystem watching (watchdog)
+│       ├── midi.py               # MIDI mapping and code generation
+│       ├── osc.py                # OSC server, client and VM controller
 │       ├── cli/
 │       │   ├── main.py           # CLI argument parser & dispatcher
-│       │   └── executor.py       # Non-interactive execution
-│       └── tui/
-│           ├── editor.py         # Multi-tab editor
-│           ├── repl.py           # REPL implementation
-│           ├── tui.py            # REPL main entry
-│           ├── session.py        # Shred tracking & metadata
-│           ├── project.py        # File versioning system
-│           ├── commands.py       # REPL commands (@, :)
-│           ├── chuck_lexer.py    # Pygments syntax highlighter
-│           ├── parser.py         # ChucK code parsing
-│           ├── paths.py          # ~/.numchuck/ management
-│           └── common.py         # Shared UI components
-├── thirdparty/
-│   ├── chuck/                    # ChucK core (git submodule)
+│       │   ├── executor.py       # Non-interactive execution
+│       │   ├── snippets.py       # Snippet subcommand
+│       │   └── watcher.py        # Watch subcommand
+│       ├── services/             # Shared business logic (CLI + TUI + web)
+│       │   ├── audio.py          # AudioService: audio lifecycle
+│       │   ├── shreds.py         # ShredService: compile/spork/remove
+│       │   ├── globals.py        # GlobalsService: globals and events
+│       │   └── files.py          # FileService: snippets and projects
+│       ├── lang/
+│       │   ├── lexer.py          # Pygments syntax highlighter
+│       │   └── constants.py      # ChucK keywords, ugens, stdlib names
+│       ├── tui/
+│       │   ├── editor.py         # Multi-tab editor
+│       │   ├── repl.py           # REPL implementation
+│       │   ├── tui.py            # REPL main entry
+│       │   ├── session.py        # Shred tracking & metadata
+│       │   ├── project.py        # File versioning system
+│       │   ├── commands.py       # CommandExecutor: the command handlers
+│       │   ├── parser.py         # CommandParser: REPL syntax -> Command
+│       │   ├── completer.py      # Tab completion
+│       │   ├── themes.py         # Colour themes
+│       │   ├── waveform.py       # Waveform display
+│       │   ├── widgets.py        # Shared prompt_toolkit widgets
+│       │   ├── logging.py        # TUI logger
+│       │   └── common.py         # Shared UI components
+│       └── web/
+│           ├── __init__.py       # WebChuckServer: REST + WebSocket IDE
+│           └── static/           # Browser IDE assets
+├── thirdparty/                   # Vendored, NOT submodules -- see VERSIONS.md
+│   ├── VERSIONS.md               # Upstream provenance of each tree
+│   ├── chuck/                    # ChucK core
 │   │   ├── core/                 # VM, compiler, UGens
 │   │   ├── host/                 # Standalone ChucK + RtAudio
 │   │   └── CMakeLists.txt
-│   ├── chugins/                  # ChucK plugins (git submodule)
-│   └── nanobind/                 # Python binding library (git submodule)
+│   ├── chugins/                  # ChucK plugins (49 bundled)
+│   ├── mongoose/                 # Embedded HTTP/WebSocket server
+│   └── nanobind/                 # Python binding library
 ├── tests/                        # pytest test suite
-│   ├── test_basic.py
-│   ├── test_realtime_audio.py
-│   ├── test_project_versioning.py
-│   ├── test_chuck_lexer.py
-│   └── ...
 ├── docs/
-│   ├── dev/
-│   │   └── architecture.md       # This file
-│   └── numchuck_home.md           # ~/.numchuck/ documentation
+│   ├── architecture.md           # This file
+│   └── numchuck_home.md          # ~/.numchuck/ documentation
 ├── examples/                     # ChucK example files
 ├── scripts/
-│   ├── update.sh                 # Update ChucK core from upstream
-│   └── lowercase_docs.py         # Normalize documentation filenames
+│   ├── update.sh                 # Refresh the vendored upstream trees
+│   ├── patches/                  # Re-applied after every update
+│   ├── check_wheel_record.py     # Wheel RECORD validation
+│   └── repair_wheel.py           # Wheel repair helper
 ├── pyproject.toml                # Python package configuration
 ├── CMakeLists.txt                # Root CMake configuration
 ├── Makefile                      # Convenience wrapper for CMake
@@ -848,12 +875,12 @@ CMakeLists.txt (root)
 
 - CMake 3.15+
 - C++17 compiler
-- Python 3.8+ (headers)
-- nanobind (submodule)
+- Python 3.10+ (headers)
+- nanobind (vendored under thirdparty/, see thirdparty/VERSIONS.md)
 
 **Runtime:**
 
-- Python 3.8+
+- Python 3.10+
 - numpy
 - Platform audio frameworks (CoreAudio/WASAPI/ALSA)
 
@@ -1059,35 +1086,77 @@ static std::unique_ptr<AudioContext> g_audio_context;
 
 ## Security Considerations
 
+### The core fact
+
+Compiling ChucK is executing arbitrary code. ChucK's standard library includes
+`FileIO`, so anything that can compile can read and write the filesystem with
+the privileges of the Python process. There is no sandbox. Every network
+surface below is therefore designed around one question: who can reach it.
+
 ### Input Validation
 
 **Validated:**
 
 - Numpy array dimensions, sizes, dtypes
 - Parameter value ranges (positive integers)
+- Tap capacity (bounded, so a mistyped size raises instead of allocating tens
+  of gigabytes)
 - Initialization state checks
 - File path non-empty checks
 
 **Not Validated:**
 
-- File system access (ChucK can read arbitrary files)
-- Network access (OSC can bind to arbitrary ports)
-- System command execution (not exposed but ChucK core has shell access)
-- Memory limits (no guard against excessive allocations)
+- File system access (ChucK can read and write arbitrary files)
+- Memory limits within the VM (no guard against excessive allocations)
+- Shred count (a spork loop can saturate the VM; see Thread Safety)
 
-### ChucK Code Execution
+### Web IDE trust model
 
-**Security Model:**
+`numchuck web` exposes compilation, so it is a remote code execution service
+by construction. Three mechanisms keep it reachable only by its operator:
 
-- ChucK code runs with same privileges as Python process
-- No sandboxing
-- Can access file system via ChucK I/O
-- Can open network sockets via OSC
-- Infinite loops possible (can hang process)
+1. **Bind address.** Defaults to `127.0.0.1`. `--host` widens it deliberately.
+2. **Auth token.** Every bind is issued one automatically if the caller did not
+   supply it, loopback included; the token is embedded in the URL the CLI
+   prints and opens. Every `/api/` request and the WebSocket upgrade require it,
+   checked with a constant-time comparison.
 
-**Recommendations:**
+   Loopback is tokenized because it is not a private channel: any other process
+   or user on the machine can connect to `127.0.0.1`, and the origin check below
+   does not constrain them, since a non-browser client sends no `Origin` at all.
+   The token is what makes the IDE the operator's rather than the host's.
+3. **Origin/Host check.** Requests carrying an `Origin` that disagrees with
+   their `Host` are refused with 403. This is what stops a page on an unrelated
+   site from driving the IDE: WebSocket connections are not covered by the
+   same-origin policy on their own, so a loopback bind alone would not be
+   enough. Requests with no `Origin` (curl and other non-browser clients) are
+   allowed.
+
+Commands that would start a process on the server host (`shell`, the external
+editor commands) or that only terminate at a terminal (`watch`) are refused by
+the web front-end. `numchuck.web._DENIED_COMMANDS` holds the list, and a test
+asserts it stays complete as commands are added.
+
+### Project-local `.numchuck`
+
+A `./.numchuck` directory can supply chugins, which are **native shared
+libraries loaded into the process**. It is therefore ignored unless the user
+opts in with `--local` or `NUMCHUCK_LOCAL=1`; otherwise running numchuck inside
+a checked-out repository would execute whatever native code it shipped.
+
+### OSC
+
+`OSCServer` binds `127.0.0.1` by default. `OSCController` maps incoming
+messages straight onto global writes and event signals, so a wildcard bind
+hands VM control to anything on the network; pass `host="0.0.0.0"`
+deliberately. The message decoder is hardened against malformed datagrams
+(`ValueError`, `IndexError` and `struct.error` are caught and the packet
+dropped).
+
+### Recommendations
 
 - Do not execute untrusted ChucK code
+- Keep the web IDE on loopback unless you have a reason not to
 - Validate user-provided ChucK code paths
 - Consider resource limits for production use
 

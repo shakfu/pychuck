@@ -289,6 +289,13 @@ class ShredService:
     def clear_vm(self) -> bool:
         """Clear the VM (remove all shreds).
 
+        clear_vm() posts a CLEARVM message for the VM to pick up, which only
+        happens while the VM is being driven -- during real-time audio, or
+        between run() calls. With no audio running the message is never
+        collected and the call fails, which used to surface as a bare
+        "Failed to clear VM" for what is a perfectly ordinary offline session.
+        In that case fall back to removing the shreds directly.
+
         Returns:
             True if successful
         """
@@ -299,8 +306,18 @@ class ShredService:
             self._logger.info("VM cleared")
             return True
         except RuntimeError as e:
-            self._logger.error(f"Failed to clear VM: {e}")
-            return False
+            self._logger.debug(
+                f"clear_vm message not accepted ({e}); removing shreds directly"
+            )
+            try:
+                self._chuck.remove_all_shreds()
+            except RuntimeError as fallback_error:
+                self._logger.error(f"Failed to clear VM: {fallback_error}")
+                return False
+            if self._session:
+                self._session.clear_shreds()
+            self._logger.info("VM cleared (shreds removed; VM was not running)")
+            return True
 
     def reset_shred_id(self) -> bool:
         """Reset the shred ID counter.

@@ -32,7 +32,7 @@ The numchuck library provides interactive control over ChucK, enabling live codi
 
 - **Automatic Versioning** — Keeps track of live coding sessions (`file.ck → file-1.ck → file-1-1.ck`).
 
-- **Web IDE** — Browser-based editor and REPL with real-time audio meters, globals panel, and WebSocket updates.
+- **Web IDE** — Browser-based editor and REPL with real-time audio meters, globals panel, and WebSocket updates. Binds loopback by default; see [Web IDE](#7-web-ide-browser-based) for the trust model.
 
 ## Installation
 
@@ -260,7 +260,7 @@ numchuck export output.wav --files sine.ck --duration 10
 #### 7. Web IDE (Browser-Based)
 
 ```sh
-# Launch browser-based ChucK IDE
+# Launch browser-based ChucK IDE (binds 127.0.0.1)
 numchuck web
 
 # Specify port
@@ -271,7 +271,27 @@ numchuck web --start-audio bass.ck melody.ck
 
 # Don't auto-open browser
 numchuck web --no-browser
+
+# Reachable from another machine (issues an auth token automatically)
+numchuck web --host 0.0.0.0
 ```
+
+**Security:** the IDE compiles ChucK, and ChucK can read and write files, so
+anyone who can reach the server can run code as you. It binds `127.0.0.1` by
+default for that reason, and always issues an auth token.
+
+* Every run gets a random token, included in the URL numchuck prints and opens.
+  Every API request and the WebSocket handshake require it. Loopback is no
+  exception: it keeps other *sites* out via the origin check below, but any
+  other process or user on the machine can reach `127.0.0.1` directly, and a
+  non-browser client sends no `Origin` to check. Supply your own token with
+  `--token`, or `--token ""` to turn auth off deliberately.
+* `--host` widens the bind beyond loopback, and warns when you do.
+* Requests whose `Origin` disagrees with their `Host` are refused, so a page on
+  another site cannot drive the IDE over a WebSocket even while it is running on
+  your own machine.
+* Commands that would start a process on the host (`shell`, the external editor)
+  or that only end at a terminal (`watch`) are refused in the browser.
 
 **Web IDE Features:**
 
@@ -386,10 +406,22 @@ numchuck uses a `.numchuck` directory for user configuration, snippets, and cust
 
 **Search Order:**
 
-1. Local: `./.numchuck` (current working directory)
-2. Global: `~/.numchuck` (home directory)
+1. Global: `~/.numchuck` (home directory) — always used
+2. Local: `./.numchuck` (current working directory) — **only with `--local`**
 
-Local configuration takes precedence over global. This allows project-specific settings.
+A project-local `.numchuck` takes precedence over the global one, which allows
+project-specific settings. It is opt-in because the directory can supply
+*chugins*, and chugins are native shared libraries loaded into the process:
+honouring it automatically would mean that running numchuck inside a
+checked-out repository executes whatever native code that repository shipped.
+
+```sh
+# Use ./.numchuck for this run
+numchuck repl --local
+
+# Or for the whole shell session
+export NUMCHUCK_LOCAL=1
+```
 
 **Directory Structure:**
 
@@ -1020,12 +1052,17 @@ from numchuck.web import WebChuckServer, WEB_AVAILABLE
 ```
 
 - **`WEB_AVAILABLE`** - Boolean indicating if web module is available
-- **`WebChuckServer(chuck, port=8080, static_dir=None)`** - Browser-based ChucK IDE server
+- **`is_loopback_host(host) -> bool`** - Whether a bind address stays off the network
+- **`WebChuckServer(chuck, port=8080, host="127.0.0.1", auth_token=None, static_dir=None)`** - Browser-based ChucK IDE server
+  * `host` - Address to bind; defaults to loopback
+  * `auth_token` - Token required on `/api/` and `/ws`. `None` generates one
+    (loopback included); pass `""` to disable auth explicitly, or a string to
+    set your own
   * `start() -> None` - Start the web server in background thread
   * `stop() -> None` - Stop the web server
   * `broadcast(msg: str) -> None` - Broadcast message to all WebSocket clients
   * `port` - Server port (read-only)
-  * `url` - Server URL (e.g., "<http://localhost:8080>")
+  * `url` - Server URL, carrying `?token=` when auth is on
   * `is_running` - Check if server is running
   * `client_count` - Number of connected WebSocket clients
 

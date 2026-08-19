@@ -46,7 +46,7 @@ from .constants import (
     DEFAULT_SAMPLE_RATE,
     DEFAULT_TAP_CAPACITY_FRAMES,
 )
-from .paths import get_numchuck_home
+from .paths import get_local_numchuck_dir, get_numchuck_home
 
 if TYPE_CHECKING:
     from types import TracebackType
@@ -143,12 +143,17 @@ class Chuck:
         if global_chugins_str not in chugin_dirs:
             chugin_dirs.append(global_chugins_str)
 
-        # Include local .numchuck/chugins if it exists and is different from global
-        local_chugins_dir = Path.cwd() / ".numchuck" / "chugins"
-        if local_chugins_dir.exists():
-            local_chugins_str = str(local_chugins_dir)
-            if local_chugins_str not in chugin_dirs:
-                chugin_dirs.append(local_chugins_str)
+        # Include ./.numchuck/chugins only when the user opted into the local
+        # directory. Chugins are native libraries loaded into this process, so
+        # picking them up from whatever directory happens to be current would
+        # let any checked-out repository run code here. See paths.enable_local_dir.
+        local_numchuck = get_local_numchuck_dir()
+        if local_numchuck is not None:
+            local_chugins_dir = local_numchuck / "chugins"
+            if local_chugins_dir.is_dir():
+                local_chugins_str = str(local_chugins_dir)
+                if local_chugins_str not in chugin_dirs:
+                    chugin_dirs.append(local_chugins_str)
 
         # Set search directories (for .chug discovery)
         if chugin_dirs:
@@ -180,6 +185,11 @@ class Chuck:
 
         if auto_init:
             self._chuck.init()
+            # Start the VM as well as initialize it. Every global accessor
+            # reaches into the globals manager, which segfaults on a VM that has
+            # never started -- and only run() starts one implicitly, so
+            # `Chuck().set_int("x", 1)` used to crash the process outright.
+            self._chuck.start()
 
         # Internal buffers for run_reuse() - lazily allocated
         self._reuse_input_buf: NDArray[np.float32] | None = None
