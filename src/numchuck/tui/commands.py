@@ -8,20 +8,20 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
+from .._numchuck import audio_info, shutdown_audio, start_audio, stop_audio
 from ..constants import POLL_INTERVAL, SHELL_COMMAND_TIMEOUT
-from .._numchuck import start_audio, stop_audio, shutdown_audio, audio_info
 from ..midi import MIDIMapping, generate_midi_listener_code, generate_midi_monitor_code
-from ..osc import OSCServer, OSCController
+from ..osc import OSCController, OSCServer
 from ..paths import get_recordings_dir
-from ..recorder import RecordedSession, list_recordings, get_recording_path
-from ..services import ShredService, GlobalsService, FileService
-from .logging import get_logger, TUILogger
+from ..recorder import RecordedSession, get_recording_path, list_recordings
+from ..services import FileService, GlobalsService, ShredService
+from .logging import TUILogger, get_logger
 
 if TYPE_CHECKING:
     from .._numchuck import ChucK
+    from ..watcher import FileWatcher
     from .parser import Command
     from .session import ChuckSession
-    from ..watcher import FileWatcher
 
 
 class CommandExecutor:

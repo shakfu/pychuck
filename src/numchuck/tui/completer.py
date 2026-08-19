@@ -23,8 +23,9 @@ from ..paths import list_all_snippets
 
 if TYPE_CHECKING:
     from prompt_toolkit.completion import CompleteEvent
-    from .session import ChuckSession
+
     from .._numchuck import ChucK
+    from .session import ChuckSession
 
 
 class ChuckCompleter(Completer):

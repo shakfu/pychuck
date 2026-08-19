@@ -31,11 +31,6 @@ Error Handling:
     - FileNotFoundError: ChucK file not found
 """
 
-from ._version import __version__, __version_info__
-
-# Core API
-from .api import Chuck, GlobalFloat, GlobalInt, GlobalString, Shred
-
 # Shred watcher flags, for Chuck.on_shred(options=...)
 from ._numchuck import (
     SHRED_WATCH_ACTIVATE,
@@ -45,12 +40,16 @@ from ._numchuck import (
     SHRED_WATCH_SPORK,
     SHRED_WATCH_SUSPEND,
 )
+from ._version import __version__, __version_info__
 
-# Rendering
-from .render import RenderError, render, render_file, to_wav
+# Core API
+from .api import Chuck, GlobalFloat, GlobalInt, GlobalString, Shred
 
 # Configuration
 from .config import Config, get_config, load_config, save_config
+
+# Rendering
+from .render import RenderError, render, render_file, to_wav
 
 __all__ = [
     # Version

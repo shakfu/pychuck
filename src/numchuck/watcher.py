@@ -20,8 +20,8 @@ from watchdog.observers.api import BaseObserver
 from .constants import FILE_DEBOUNCE_MS, FILE_OBSERVER_SHUTDOWN_TIMEOUT
 
 if TYPE_CHECKING:
-    from .tui.session import ChuckSession
     from .api import Chuck
+    from .tui.session import ChuckSession
 
 
 @dataclass

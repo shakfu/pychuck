@@ -9,13 +9,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Callable, Protocol
 
-from ..constants import AUDIO_SHUTDOWN_TIMEOUT_MS
 from .._numchuck import (
     is_audio_running,
     shutdown_audio,
     start_audio,
     stop_audio,
 )
+from ..constants import AUDIO_SHUTDOWN_TIMEOUT_MS
 
 if TYPE_CHECKING:
     from .._numchuck import ChucK

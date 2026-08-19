@@ -37,7 +37,8 @@ ZIP = $(DIST_NAME).zip
 
 
 .PHONY: all build clean test coverage install repl snap typecheck lint format \
-		qa check publish publish-test test-review docs docs-serve docs-deploy
+		qa check publish publish-test test-review docs docs-serve docs-deploy \
+		lint-check
 
 all: build
 
@@ -76,8 +77,15 @@ snap:
 typecheck:
 	@uv run mypy --strict src/
 
+# Rules come from [tool.ruff.lint] in pyproject.toml, which is also what CI
+# runs -- keep them out of the command line so the two cannot drift.
 lint:
 	@uv run ruff check --fix src/
+
+# What CI checks, without writing to the tree.
+lint-check:
+	@uv run ruff check src/
+	@uv run ruff format --check src/
 
 format:
 	@uv run ruff format src/

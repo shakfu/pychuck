@@ -16,11 +16,11 @@ from typing import TYPE_CHECKING, Any, cast
 
 from prompt_toolkit import Application
 from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.layout import Layout, HSplit, Window
+from prompt_toolkit.layout import HSplit, Layout, Window
 from prompt_toolkit.layout.containers import FloatContainer
 from prompt_toolkit.layout.controls import FormattedTextControl
-from prompt_toolkit.widgets import TextArea
 from prompt_toolkit.lexers import PygmentsLexer
+from prompt_toolkit.widgets import TextArea
 
 from .common import ChuckApplication
 
@@ -272,11 +272,11 @@ class ChuckEditor:
 
     def _show_open_file_dialog(self) -> None:
         """Show a dialog to open a file with tab completion."""
+        from prompt_toolkit.buffer import Buffer
         from prompt_toolkit.completion import PathCompleter
         from prompt_toolkit.layout.containers import Float, HSplit, Window
         from prompt_toolkit.layout.controls import BufferControl
         from prompt_toolkit.widgets import Button, Dialog, Label
-        from prompt_toolkit.buffer import Buffer
 
         # Create buffer with path completion
         input_buffer = Buffer(
@@ -357,8 +357,8 @@ class ChuckEditor:
             cancel_handler()
 
         # Create window with buffer control and completions menu
-        from prompt_toolkit.layout.menus import CompletionsMenu
         from prompt_toolkit.layout.containers import FloatContainer
+        from prompt_toolkit.layout.menus import CompletionsMenu
 
         input_control = BufferControl(
             buffer=input_buffer, key_bindings=input_kb, focus_on_click=True

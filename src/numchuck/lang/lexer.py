@@ -19,7 +19,8 @@ from pygments.token import (
     String,
     Whitespace,
 )
-from .constants import KEYWORDS, TYPES, UGENS, STD_CLASSES, TIME_UNITS
+
+from .constants import KEYWORDS, STD_CLASSES, TIME_UNITS, TYPES, UGENS
 
 __all__ = ["ChuckLexer"]
 

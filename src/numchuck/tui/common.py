@@ -19,25 +19,26 @@ from prompt_toolkit.layout.containers import ConditionalContainer, Window
 from prompt_toolkit.widgets import TextArea
 
 from .._numchuck import (
-    ChucK,
-    PARAM_SAMPLE_RATE,
-    PARAM_OUTPUT_CHANNELS,
-    PARAM_INPUT_CHANNELS,
     PARAM_CHUGIN_ENABLE,
     PARAM_IMPORT_PATH_SYSTEM,
+    PARAM_INPUT_CHANNELS,
     PARAM_OTF_ENABLE,
     PARAM_OTF_PORT,
+    PARAM_OUTPUT_CHANNELS,
+    PARAM_SAMPLE_RATE,
+    ChucK,
 )
-from ..services.audio import AudioService
-from .session import ChuckSession
-from .logging import TUILogger, get_logger
-from ..config import get_config, KeybindingsConfig
+from ..config import KeybindingsConfig, get_config
 from ..paths import get_numchuck_home
+from ..services.audio import AudioService
 from . import widgets
+from .logging import TUILogger, get_logger
+from .session import ChuckSession
 
 if TYPE_CHECKING:
     from prompt_toolkit.key_binding.key_processor import KeyPressEvent
-    from ..services import ShredService, GlobalsService, FileService
+
+    from ..services import FileService, GlobalsService, ShredService
 
 
 def format_elapsed_time(elapsed_sec: float) -> str:

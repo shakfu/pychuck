@@ -9,9 +9,9 @@ Provides business logic services that can be used by both CLI and TUI:
 """
 
 from .audio import AudioService
-from .shreds import ShredService, ShredResult, ShredInfo
-from .globals import GlobalsService, GlobalInfo
 from .files import FileService, SnippetInfo
+from .globals import GlobalInfo, GlobalsService
+from .shreds import ShredInfo, ShredResult, ShredService
 
 __all__ = [
     "AudioService",

@@ -9,10 +9,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Callable
 
+from prompt_toolkit.filters import Condition
 from prompt_toolkit.layout.containers import ConditionalContainer, Window
 from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.layout.dimension import Dimension as D
-from prompt_toolkit.filters import Condition
 from prompt_toolkit.widgets import TextArea
 
 if TYPE_CHECKING:

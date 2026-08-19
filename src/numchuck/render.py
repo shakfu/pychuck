@@ -14,6 +14,7 @@ import numpy as np
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
     from numpy.typing import NDArray
 
 

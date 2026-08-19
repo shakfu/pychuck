@@ -1,6 +1,7 @@
 """Type stubs for numchuck module."""
 
-from typing import Callable, Dict, List, Tuple, Any, TypedDict
+from typing import Any, Callable, Dict, List, Tuple, TypedDict
+
 import numpy as np
 from numpy.typing import NDArray
 

@@ -39,8 +39,8 @@ from ..constants import (
     WEB_TOKEN_BYTES,
 )
 from ..services import AudioService, GlobalsService, ShredService
-from ..tui.parser import Command, CommandParser
 from ..tui.commands import CommandExecutor
+from ..tui.parser import Command, CommandParser
 from ..tui.session import ChuckSession
 
 # Broadcast interval for meters and globals (seconds)

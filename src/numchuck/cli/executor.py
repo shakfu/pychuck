@@ -7,9 +7,9 @@ Provides non-interactive execution of ChucK files with options for:
 - Timed execution
 """
 
+import signal
 import sys
 import time
-import signal
 from pathlib import Path
 from types import FrameType
 from typing import List, Optional

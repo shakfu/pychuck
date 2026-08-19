@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from ..paths import get_projects_dir
-from ..recorder import SessionRecorder, SessionPlayer
 from ..midi import MIDIMappings
+from ..paths import get_projects_dir
+from ..recorder import SessionPlayer, SessionRecorder
+from .logging import TUILogger, get_logger
 from .project import Project
-from .logging import get_logger, TUILogger
 
 if TYPE_CHECKING:
     from .._numchuck import ChucK
-    from ..osc import OSCServer, OSCController
+    from ..osc import OSCController, OSCServer
     from ..watcher import FileWatcher
 
 

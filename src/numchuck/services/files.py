@@ -12,9 +12,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 from ..paths import (
+    ensure_numchuck_directories,
     get_snippet_path_with_source,
     get_snippets_dir,
-    ensure_numchuck_directories,
     list_all_snippets,
 )
 

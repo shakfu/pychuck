@@ -10,8 +10,8 @@ Provides subcommands for different numchuck modes:
     info    - Show ChucK and numchuck info
 """
 
-import sys
 import argparse
+import sys
 
 from ..constants import DEFAULT_WEB_HOST, DEFAULT_WEB_PORT
 
@@ -467,11 +467,15 @@ def cmd_web(args: argparse.Namespace) -> None:
         if server.auth_token:
             # The token is in the URL above; say so, because a bare
             # http://host:port typed from memory will be refused.
-            print("  (the token in that URL is required -- a plain "
-                  f"http://{args.host}:{args.port} will not authenticate)")
+            print(
+                "  (the token in that URL is required -- a plain "
+                f"http://{args.host}:{args.port} will not authenticate)"
+            )
         else:
-            print("  WARNING: auth disabled -- any process on this machine can "
-                  "run code through this server")
+            print(
+                "  WARNING: auth disabled -- any process on this machine can "
+                "run code through this server"
+            )
         if not is_loopback_host(args.host):
             print(
                 f"  WARNING: bound to {args.host} -- anyone who can reach this "
@@ -502,8 +506,9 @@ def cmd_web(args: argparse.Namespace) -> None:
                 print("  (could not open a browser -- visit the URL above)")
 
         # Keep running until interrupted
-        from ..constants import SHUTDOWN_DELAY
         import time
+
+        from ..constants import SHUTDOWN_DELAY
 
         while server.is_running and not shutdown_requested:
             time.sleep(SHUTDOWN_DELAY)

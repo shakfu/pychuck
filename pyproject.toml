@@ -105,6 +105,21 @@ MACOSX_DEPLOYMENT_TARGET = "11.0"
 [tool.cibuildwheel.linux]
 before-build = "yum install -y alsa-lib-devel libsndfile-devel bison flex || (apt-get update && apt-get install -y libasound2-dev libsndfile1-dev bison flex)"
 
+# One definition of the lint rules, so `make lint` and CI cannot disagree.
+# They did: CI passed --select E,F,W,I on the command line while the Makefile
+# ran bare `ruff check`, which uses ruff's smaller default set. Import sorting
+# was therefore enforced only on the runner, where it is expensive to discover.
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "F",  # pyflakes
+    "W",  # pycodestyle warnings
+    "I",  # import sorting
+]
+ignore = [
+    "E501",  # line length -- left to the formatter
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 norecursedirs = ["thirdparty", "build", "dist", ".git", ".venv", "venv", "__pycache__"]

@@ -49,9 +49,9 @@ def watch_files(
         KeyboardInterrupt: When user presses Ctrl+C to exit
     """
     from ..api import Chuck
+    from ..services import AudioService
     from ..tui.session import ChuckSession
     from ..watcher import FileWatcher
-    from ..services import AudioService
 
     if not files:
         raise WatchError("No files provided to watch")
