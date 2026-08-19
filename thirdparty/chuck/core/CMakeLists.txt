@@ -1,16 +1,41 @@
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
-# Generate parser files on macOS or Linux (if bison/flex available)
+# Generate parser files on macOS or Linux (if bison/flex available).
+#
+# These are generated into the build tree, never into core/. Generating in
+# place rewrote the committed chuck.tab.c, chuck.tab.h, chuck.yy.c and
+# chuck.output on every configure, which left the vendored tree permanently
+# dirty in git and made scripts/update.sh refuse to update it (it declines to
+# overwrite uncommitted changes to upstream-owned files). The committed copies
+# stay in core/ as the fallback for hosts without bison/flex.
+set(CHUCK_PARSER_DIR ${CMAKE_CURRENT_BINARY_DIR}/parser)
+set(CHUCK_PARSER_GENERATED FALSE)
+
 if(NOT WIN32)
 	find_program(BISON_EXECUTABLE bison)
 	find_program(FLEX_EXECUTABLE flex)
 	if(BISON_EXECUTABLE AND FLEX_EXECUTABLE)
+		file(MAKE_DIRECTORY ${CHUCK_PARSER_DIR})
+		# one execute_process per tool: multiple COMMANDs in a single call are
+		# piped together, which hides each tool's exit status
 		execute_process(
-			COMMAND ${BISON_EXECUTABLE} -dv -b chuck chuck.y
-			COMMAND ${FLEX_EXECUTABLE} -ochuck.yy.c chuck.lex
-			WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+			COMMAND ${BISON_EXECUTABLE} -dv -b chuck ${CMAKE_CURRENT_SOURCE_DIR}/chuck.y
+			WORKING_DIRECTORY ${CHUCK_PARSER_DIR}
+			RESULT_VARIABLE BISON_RESULT
 		)
+		execute_process(
+			COMMAND ${FLEX_EXECUTABLE} -ochuck.yy.c ${CMAKE_CURRENT_SOURCE_DIR}/chuck.lex
+			WORKING_DIRECTORY ${CHUCK_PARSER_DIR}
+			RESULT_VARIABLE FLEX_RESULT
+		)
+		if(BISON_RESULT EQUAL 0 AND FLEX_RESULT EQUAL 0)
+			set(CHUCK_PARSER_GENERATED TRUE)
+		else()
+			message(WARNING
+				"bison/flex failed (${BISON_RESULT}/${FLEX_RESULT}); "
+				"falling back to the committed parser sources")
+		endif()
 	endif()
 endif()
 
@@ -22,10 +47,18 @@ if(WIN32)
 		util_xforms.c
 	)
 else()
-	# macOS and Linux use bison/flex generated files
+	# macOS and Linux use bison/flex generated files: the fresh ones from the
+	# build tree when bison/flex ran, otherwise the copies committed under core/
+	if(CHUCK_PARSER_GENERATED)
+		set(CHUCK_TAB_C ${CHUCK_PARSER_DIR}/chuck.tab.c)
+		set(CHUCK_YY_C ${CHUCK_PARSER_DIR}/chuck.yy.c)
+	else()
+		set(CHUCK_TAB_C chuck.tab.c)
+		set(CHUCK_YY_C chuck.yy.c)
+	endif()
 	set(C_CORE
-		chuck.tab.c
-		chuck.yy.c
+		${CHUCK_TAB_C}
+		${CHUCK_YY_C}
 		util_network.c
 		util_raw.c
 		util_xforms.c
@@ -137,7 +170,7 @@ if (CMAKE_HOST_APPLE)
 		ulib_opsc.cpp
 		ulib_doc.cpp
 		ugen_stk.cpp
-		chuck.yy.c
+		${CHUCK_YY_C}
 		PROPERTIES
 		COMPILE_OPTIONS "-Wno-shorten-64-to-32"
 	)
@@ -166,6 +199,12 @@ target_include_directories(chuck_lib
 	PUBLIC
 	${CMAKE_SOURCE_DIR}
 	${CMAKE_SOURCE_DIR}/lo
+	PRIVATE
+	# the generated parser sources sit in the build tree and still include
+	# "chuck_absyn.h" / "chuck_errmsg.h", which no longer resolve relative to
+	# the including file
+	${CMAKE_CURRENT_SOURCE_DIR}
+	${CHUCK_PARSER_DIR}
 )
 
 target_link_libraries(chuck_lib

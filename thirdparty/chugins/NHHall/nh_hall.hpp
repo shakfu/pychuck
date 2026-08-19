@@ -157,6 +157,10 @@ occasionally.
 */
 
 #pragma once
+// numchuck local patch: libstdc++ 15 no longer pulls <cstdint> in
+// transitively via <cstdlib>/<memory>, so the uint16_t/uint32_t uses
+// below fail to compile on GCC 15. Re-applied after chugins updates.
+#include <cstdint>
 #include <cstdlib> // malloc / free
 #include <cstring> // memset
 #include <memory> // std::unique_ptr

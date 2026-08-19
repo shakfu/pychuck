@@ -281,7 +281,14 @@ ck_socket ck_accept( ck_socket sock )
 {
     ck_socket client;
     int nd = 1;
-    
+
+    // numchuck local patch: ChucK::shutdown() sets carrier->otf_socket to NULL
+    // without joining the OTF listener thread, so otf_recv_cb() can reach this
+    // call with a NULL socket and crash on sock->prot. Returning NULL routes it
+    // into the caller's existing !client path, which then observes the cleared
+    // carrier->otf_thread and exits the loop. ck_close() already guards this way.
+    if( !sock ) return NULL;
+
     if( sock->prot != SOCK_STREAM ) return NULL;
     client = (ck_socket)checked_malloc( sizeof( struct ck_socket_ ) );
     client->len = sizeof( client->sock_in );
