@@ -32,6 +32,28 @@ def make_chuck(output_channels=2):
     return chuck
 
 
+def require_audible_tap(chuck, name, timeout=3.0):
+    """Skip unless the audio thread is actually producing samples.
+
+    start_audio() returning True only means a device opened. On CI that device
+    is a PulseAudio null sink, which opens and then delivers silence -- and
+    silence is indistinguishable from a working tap for any assertion phrased
+    as "no discontinuities", because np.diff of an all-zero buffer is all
+    zeros. Rather than let these tests pass vacuously, wait for real signal and
+    skip loudly if none arrives.
+    """
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        samples = chuck.get_ugen_samples(name, 1024)
+        if np.any(samples != 0.0):
+            return
+        time.sleep(0.05)
+    pytest.skip(
+        f"audio device opened but produced no samples within {timeout}s "
+        f"(tap '{name}' is all zeros); the tap tests cannot be verified here"
+    )
+
+
 def run_frames(chuck, frames=512, cycles=2):
     channels = chuck.get_param_int(numchuck.PARAM_OUTPUT_CHANNELS)
     input_buf = np.zeros(0, dtype=np.float32)
@@ -320,7 +342,7 @@ def test_realtime_reads_require_a_tap():
             chuck.get_ugen_samples("osc", 1024)
 
         chuck.add_tap("osc", 1, 8192)
-        time.sleep(0.2)
+        require_audible_tap(chuck, "osc")
         assert np.any(chuck.get_ugen_samples("osc", 1024) != 0.0)
 
         # and once unregistered it is refused again
@@ -349,17 +371,22 @@ def test_realtime_tap_reads_are_never_torn():
         pytest.skip("no real-time audio device")
 
     try:
-        time.sleep(0.3)  # let the tap fill
+        require_audible_tap(chuck, "osc")
 
         reads = 0
         worst = 0.0
+        loudest = 0.0
         deadline = time.time() + 1.5
         while time.time() < deadline:
             samples = chuck.get_ugen_samples("osc", 8192).astype(np.float64)
             worst = max(worst, float(np.max(np.abs(np.diff(samples)))))
+            loudest = max(loudest, float(np.max(np.abs(samples))))
             reads += 1
 
         assert reads > 100  # a meaningful number of chances to catch a tear
+        # Silence has no discontinuities either, so the tear check only means
+        # something once there is a signal to tear.
+        assert loudest > 0.1, f"tap carried no audible signal (peak {loudest})"
         assert worst <= MAX_SINE_STEP * 1.05
     finally:
         numchuck.stop_audio()
@@ -397,6 +424,7 @@ def test_tap_keeps_more_history_than_one_block():
         pytest.skip("no real-time audio device")
 
     try:
+        require_audible_tap(chuck, "osc")
         time.sleep(0.5)  # >> 8192 frames at 44100
         samples = chuck.get_ugen_samples("osc", 8192).astype(np.float64)
 

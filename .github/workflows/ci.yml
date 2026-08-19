@@ -86,20 +86,26 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
 
+      # From the lockfile, not `uv pip install ruff`: an unpinned install
+      # picked up whatever ruff had released that day, and the formatter is not
+      # stable across minor versions -- 0.16 rewrapped a lambda that 0.14.10,
+      # the locked version, leaves alone. That is a failure no contributor can
+      # reproduce. --no-install-project skips building the extension, which
+      # this job does not need.
       - name: Install linting tools
         run: |
-          uv pip install --system ruff
+          uv sync --only-group dev --no-install-project
 
       # No --select here on purpose: the rules live in pyproject.toml so this
       # job and `make lint` check the same thing. They did not, and import
       # sorting was enforced only on the runner.
       - name: Run ruff check
         run: |
-          ruff check src/
+          uv run --no-sync ruff check src/
 
       - name: Run ruff format check
         run: |
-          ruff format --check src/
+          uv run --no-sync ruff format --check src/
 
   realtime:
     name: Real-time Audio Tests
@@ -146,6 +152,9 @@ jobs:
           elif sudo apt-get install -y pulseaudio libasound2-plugins \
                && pulseaudio --start --exit-idle-time=-1 \
                && pactl load-module module-null-sink sink_name=numchuck; then
+            # Make it the default so the ALSA-to-PulseAudio bridge routes to it
+            # rather than to a card that does not exist.
+            pactl set-default-sink numchuck || true
             echo "method=pulseaudio-null-sink" >> "$GITHUB_OUTPUT"
           else
             echo "method=none" >> "$GITHUB_OUTPUT"
@@ -158,7 +167,10 @@ jobs:
           uv sync --reinstall-package numchuck
 
       # -rs prints the reason for every skip, so a run that tested nothing says
-      # so in the log rather than passing quietly.
+      # so in the log rather than passing quietly. Note that a device opening
+      # is not the same as a device producing audio: the null sink does the
+      # former and, so far, not the latter, so the tap tests skip themselves
+      # here with an explicit reason rather than passing on silence.
       - name: Run real-time tests
         if: steps.audio.outputs.method != 'none'
         run: |
