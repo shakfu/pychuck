@@ -13,24 +13,24 @@
 
 ### High Priority
 
-- [ ] **Intermittent SIGSEGV on a background thread during ConvRev playback**
-  (`tests/test_examples.py::test_chugin_convrev_example`)
-  - Roughly 3-5 runs in 100 of `pytest tests/test_api.py tests/test_examples.py`
-    die with SIGSEGV, always while the ConvRev test is executing. It does not
-    reproduce with `test_examples.py` alone (0/25), so it needs state left behind
-    by the earlier VMs in `test_api.py`
-  - An AddressSanitizer build caught the signal itself -- `SEGV on unknown address
-    0x03e80002964c ... T107`, a read through a corrupted pointer on a *background*
-    thread, not the main one -- but ASAN's reporter died before printing frames
-    (`nested bug in the same thread, aborting`), and the race does not reproduce
-    under gdb, which perturbs the timing enough to hide it
-  - Ruled out: the OTF listener thread (fixed separately, and it no longer appears
-    in any traceback); the `new[]`/`delete` mismatch in `ChuckAudio::shutdown()`
-    (fixed, crash rate unchanged at 3/100 before and 5/100 after); ChucK's watchdog
-    thread, which has the same delete-without-join shape but never starts because
-    nothing enables `g_do_watchdog`
-  - Next step: `ASAN_OPTIONS=abort_on_error=1` with a core dump, to recover T107's
-    stack past ASAN's own failed reporter
+- [x] **Intermittent SIGSEGV on a background thread during ConvRev playback**
+  (`tests/test_examples.py::test_chugin_convrev_example`) -- FIXED
+  - Root cause: chugins were `dlopen`ed without `RTLD_NODELETE`, so
+    `~Chuck_DLL()` unmapped `ConvRev.chug` while the `std::thread` that
+    `ConvRev::tick()` spawns per FFT block was still inside
+    `FFTConvolver::process()`. See the CHANGELOG entry and
+    `scripts/patches/0004-chugin-rtld-nodelete.patch`
+  - Measured 7/152 before the fix, 0/400 after
+  - Two notes for future crash hunts, both of which cost time here:
+    - The `0x03e80002964c` address in the old ASAN report was never a corrupted
+      pointer. `faulthandler` re-raises fatal signals with `raise()`, which glibc
+      implements as `tgkill()`, so downstream handlers see `si_code == SI_TKILL`
+      and an `si_addr` that is really the `si_pid`/`si_uid` pair sharing that
+      union -- `0x3e8` is uid 1000, `0x2964c` is pid 169548. Run with
+      `-p no:faulthandler` to see the actual fault
+    - "Does not reproduce with `test_examples.py` alone (0/25)" did not support
+      the conclusion that state from `test_api.py` was required: at the measured
+      rate, 0/25 has ~43% probability. It was never an ordering dependency
 
 - [ ] **Stack over-read in the GVerb chugin** (`thirdparty/chugins/GVerb/gverbdefs.h:114`)
   - AddressSanitizer reports `stack-buffer-overflow`, an 8-byte READ of the 4-byte
@@ -39,6 +39,45 @@
   - Real undefined behaviour, but a read of adjacent stack within the same frame, so
     it is not a plausible cause of a segfault and was left alone rather than guessed at
   - Fixing it needs a `scripts/patches/chugins/` patch, as GVerb is vendored upstream
+
+---
+
+## Memory Leaks
+
+### High Priority
+
+- [ ] **Chugin objects are never destroyed when a VM is shut down with live shreds**
+  (`thirdparty/chuck/core/chuck_vm.cpp`, `Chuck_VM::shutdown()` / `removeAll()`)
+  - A chugin's `CK_DLL_DTOR` runs when its shred *ends on its own* while the VM is
+    running, but not when the shred is still alive at teardown. `remove_all_shreds()`
+    followed by `shutdown()` never invokes it, so the C++ object the chugin's ctor
+    allocated is leaked along with everything it owns
+  - Measured with an instrumented ConvRev (an `fprintf` in `convrev_ctor`,
+    `convrev_dtor` and `~ConvRev`), creating and tearing down VMs in a loop:
+
+    | teardown path | `convrev_dtor` | RSS per VM |
+    | --- | --- | --- |
+    | shred ends naturally | fires | ~4.2 MB |
+    | shred live at shutdown | never fires | ~23.6 MB |
+
+    so ~19 MB per VM is the un-destroyed ConvRev -- mostly its 5513 FFT partition
+    segments. The ~4.2 MB that remains when the dtor *does* run is a separate
+    residual leak, not yet chased
+  - General to every chugin, not specific to ConvRev; ConvRev is only where it was
+    also a crash, because it is the sole bundled chugin that owns a thread, and the
+    abandoned object means its `~ConvRev()` join never happens. That crash is fixed
+    separately by `scripts/patches/0004-chugin-rtld-nodelete.patch`, which makes the
+    orphaned thread survivable -- it does not address this leak
+  - Not a use-after-free: because nothing is ever freed, the orphaned worker only
+    ever writes to memory that stays allocated. This is why patching ConvRev's
+    threading was considered and rejected
+  - Ruled out as a workaround: calling `run()` again after `remove_all_shreds()` so
+    the VM can process the removal message. The dtor still never fires and the leak
+    is unchanged, so removal is not merely deferred
+  - Matters for a long-lived host that creates and destroys VMs; harmless for the
+    test suite, which exits. `tests/test_examples.py::test_chugin_convrev_example`
+    hits it because `examples/convrev/ConvRev.ck` ends in `while(true)`, so its
+    shred is always live at teardown
 
 ---
 
