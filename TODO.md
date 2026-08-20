@@ -9,6 +9,39 @@
 
 ---
 
+## Known Crashes
+
+### High Priority
+
+- [ ] **Intermittent SIGSEGV on a background thread during ConvRev playback**
+  (`tests/test_examples.py::test_chugin_convrev_example`)
+  - Roughly 3-5 runs in 100 of `pytest tests/test_api.py tests/test_examples.py`
+    die with SIGSEGV, always while the ConvRev test is executing. It does not
+    reproduce with `test_examples.py` alone (0/25), so it needs state left behind
+    by the earlier VMs in `test_api.py`
+  - An AddressSanitizer build caught the signal itself -- `SEGV on unknown address
+    0x03e80002964c ... T107`, a read through a corrupted pointer on a *background*
+    thread, not the main one -- but ASAN's reporter died before printing frames
+    (`nested bug in the same thread, aborting`), and the race does not reproduce
+    under gdb, which perturbs the timing enough to hide it
+  - Ruled out: the OTF listener thread (fixed separately, and it no longer appears
+    in any traceback); the `new[]`/`delete` mismatch in `ChuckAudio::shutdown()`
+    (fixed, crash rate unchanged at 3/100 before and 5/100 after); ChucK's watchdog
+    thread, which has the same delete-without-join shape but never starts because
+    nothing enables `g_do_watchdog`
+  - Next step: `ASAN_OPTIONS=abort_on_error=1` with a core dump, to recover T107's
+    stack past ASAN's own failed reporter
+
+- [ ] **Stack over-read in the GVerb chugin** (`thirdparty/chugins/GVerb/gverbdefs.h:114`)
+  - AddressSanitizer reports `stack-buffer-overflow`, an 8-byte READ of the 4-byte
+    stack float `x` in `gverb_do()` (inlined into `GVerb::tick`), ten occurrences per
+    run of the suite
+  - Real undefined behaviour, but a read of adjacent stack within the same frame, so
+    it is not a plausible cause of a segfault and was left alone rather than guessed at
+  - Fixing it needs a `scripts/patches/chugins/` patch, as GVerb is vendored upstream
+
+---
+
 ## Real-time Audio: Global UGen Taps
 
 ### High Priority

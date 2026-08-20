@@ -281,7 +281,7 @@ ck_socket ck_accept( ck_socket sock )
 {
     ck_socket client;
     int nd = 1;
-
+    
     // numchuck local patch: ChucK::shutdown() sets carrier->otf_socket to NULL
     // without joining the OTF listener thread, so otf_recv_cb() can reach this
     // call with a NULL socket and crash on sock->prot. Returning NULL routes it

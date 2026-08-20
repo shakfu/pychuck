@@ -1,0 +1,56 @@
+diff --git a/thirdparty/chuck/core/chuck.cpp b/thirdparty/chuck/core/chuck.cpp
+index 82aed76..54b806f 100644
+--- a/thirdparty/chuck/core/chuck.cpp
++++ b/thirdparty/chuck/core/chuck.cpp
+@@ -1053,12 +1053,30 @@ t_CKBOOL ChucK::shutdown()
+         // stop otf thread
+         if( m_carrier->otf_thread )
+         {
++            // numchuck local patch: the OTF listener was cancelled and then
++            // abandoned. pthread_cancel() only takes effect at a cancellation
++            // point, so otf_recv_cb() kept running while the code below freed
++            // otf_socket and the teardown that follows freed the VM, the
++            // compiler and the carrier -- all of which that thread
++            // dereferences. Observed as an intermittent SIGSEGV in ck_accept()
++            // (carrier->otf_socket read back as NULL) and as heap corruption
++            // surfacing on the main thread in a later, unrelated test.
++            CHUCK_THREAD thread = m_carrier->otf_thread;
++            // signal shutdown before waking the thread, so otf_recv_cb() sees
++            // the cleared flag on its next loop check and leaves the loop
++            m_carrier->otf_thread = 0;
++
+ #if !defined(__PLATFORM_WINDOWS__) || defined(__WINDOWS_PTHREAD__)
+-            pthread_cancel( m_carrier->otf_thread );
++            // accept() is a POSIX cancellation point, so this unblocks the
++            // thread whether it is waiting for a connection or between calls
++            pthread_cancel( thread );
++            // then wait for it to actually be gone before freeing anything it
++            // can still reach; the thread is joinable (created with a NULL
++            // attr), and joining one that already exited returns immediately
++            pthread_join( thread, NULL );
+ #else
+-            CloseHandle( m_carrier->otf_thread ); // doesn't cancel thread
++            CloseHandle( thread ); // doesn't cancel thread
+ #endif
+-            m_carrier->otf_thread = 0; // signals thread shutdown
+         }
+ 
+         // close otf socket
+diff --git a/thirdparty/chuck/core/util_network.c b/thirdparty/chuck/core/util_network.c
+index 553c4c3..493a0c2 100644
+--- a/thirdparty/chuck/core/util_network.c
++++ b/thirdparty/chuck/core/util_network.c
+@@ -282,6 +282,13 @@ ck_socket ck_accept( ck_socket sock )
+     ck_socket client;
+     int nd = 1;
+     
++    // numchuck local patch: ChucK::shutdown() sets carrier->otf_socket to NULL
++    // without joining the OTF listener thread, so otf_recv_cb() can reach this
++    // call with a NULL socket and crash on sock->prot. Returning NULL routes it
++    // into the caller's existing !client path, which then observes the cleared
++    // carrier->otf_thread and exits the loop. ck_close() already guards this way.
++    if( !sock ) return NULL;
++
+     if( sock->prot != SOCK_STREAM ) return NULL;
+     client = (ck_socket)checked_malloc( sizeof( struct ck_socket_ ) );
+     client->len = sizeof( client->sock_in );

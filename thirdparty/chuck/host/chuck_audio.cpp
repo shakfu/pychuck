@@ -1310,8 +1310,13 @@ void ChuckAudio::shutdown( t_CKUINT msWait )
     CK_SAFE_DELETE( m_rtaudio );
 
     // deallocate | 1.5.0.0 (ge) added
-    CK_SAFE_DELETE( m_buffer_in );
-    CK_SAFE_DELETE( m_buffer_out );
+    // numchuck local patch: these are allocated with new SAMPLE[] above, so
+    // they must be released with delete[]. Scalar delete on an array
+    // allocation is undefined behaviour; AddressSanitizer reports it as
+    // alloc-dealloc-mismatch, and in practice it corrupted the heap and
+    // surfaced as an intermittent SIGSEGV in a later, unrelated test.
+    CK_SAFE_DELETE_ARRAY( m_buffer_in );
+    CK_SAFE_DELETE_ARRAY( m_buffer_out );
 
     // unflag
     m_init = FALSE;
