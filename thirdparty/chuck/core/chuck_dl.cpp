@@ -1031,7 +1031,22 @@ t_CKBOOL Chuck_DLL::load( const char * filename, const char * func, t_CKBOOL laz
     t_CKBOOL ret = TRUE;
 
     // open
-    m_handle = dlopen( filename, lazy ? RTLD_LAZY : RTLD_NOW );
+    // numchuck local patch: RTLD_NODELETE keeps the chugin's text mapped after
+    // dlclose(). ~Chuck_DLL() unloads every chugin from
+    // Chuck_ImportRegistry::shutdown(), which ChucK::shutdown() reaches via
+    // CK_SAFE_DELETE(compiler) -- but nothing guarantees that every object a
+    // chugin created is already gone by then, and a chugin may have started a
+    // thread of its own. ConvRev does exactly that: ConvRev::tick() spawns a
+    // std::thread per FFT block whose only joins are the next block boundary
+    // and ~ConvRev(), so the final block's worker can still be inside
+    // FFTConvolver::process() when the unmap happens, and the next instruction
+    // fetch faults. Observed as an intermittent SIGSEGV on a background thread
+    // (SEGV_MAPERR with si_addr == RIP, RIP in the hole ConvRev.chug left in
+    // /proc/self/maps, its return addresses in that same hole) in whatever test
+    // was running -- ~4 full-suite runs in 100. Unloading plugin code that can
+    // outlive its own unload is unsafe in general, which is why CPython never
+    // dlcloses extension modules either; not unmapping costs only address space.
+    m_handle = dlopen( filename, ( lazy ? RTLD_LAZY : RTLD_NOW ) | RTLD_NODELETE );
 
     // still not there
     if( !m_handle )
@@ -3132,6 +3147,21 @@ void * dlopen( const char * path, int mode )
     // undo the AddDllDirectory()
     if( cookie_path ) RemoveDllDirectory( cookie_path );
     if( cookie_deps_path ) RemoveDllDirectory( cookie_deps_path );
+
+    // numchuck local patch: honor RTLD_NODELETE, which this shim previously
+    // ignored along with the rest of `mode`. Pinning takes a reference the
+    // matching FreeLibrary() in dlclose() cannot drop, so the module stays
+    // mapped -- the Windows equivalent of RTLD_NODELETE. See the load() call
+    // site for why unmapping a chugin is unsafe.
+#ifndef __CHUNREAL_ENGINE__
+    if( retval && ( mode & RTLD_NODELETE ) )
+    {
+        HMODULE pinned = NULL;
+        GetModuleHandleExA( GET_MODULE_HANDLE_EX_FLAG_PIN
+                            | GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                            (LPCSTR)retval, &pinned );
+    }
+#endif
 
     // return
     return retval;
