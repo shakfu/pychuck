@@ -15,6 +15,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ## [Unreleased]
 
+## [0.3.0]
+
 ### Security
 
 - **The web IDE bound every interface with no authentication** (`src/_web.cpp`, `web/__init__.py`, `cli/main.py`): `mg_http_listen` was called with a hardcoded `http://0.0.0.0:<port>`, and there was no token, no origin check and no `--host` flag -- while the CLI printed `http://localhost:<port>`, understating the exposure. Since `POST /api/compile` runs arbitrary ChucK, and ChucK's standard library includes `FileIO`, anyone who could reach the port could read and write files as the user; the WebSocket REPL additionally exposed `spork_file` and `replace_shred_file` against arbitrary paths. Confirmed against a running instance. The listen address is now a property defaulting to `127.0.0.1`, `numchuck web` gained `--host`, and any non-loopback bind is issued a random token automatically (`secrets.token_urlsafe`, 24 bytes) unless the caller passes one or explicitly waives it with `--token ""`. The token is required on every `/api/` request and on the WebSocket upgrade, accepted as `Authorization: Bearer` or `?token=` (browsers cannot set headers on a WebSocket handshake), and compared without an early exit on the first differing byte so response latency does not leak it a character at a time. `WebChuckServer.url` carries the token, and the CLI warns when bound wide.
