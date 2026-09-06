@@ -27,12 +27,12 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
       with:
         submodules: true
 
     - name: Setup Python ${{ matrix.python }}
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v7
       with:
         python-version: ${{ matrix.python }}
         cache: 'pip'
@@ -86,7 +86,7 @@ jobs:
     - name: Install dependencies
       run: apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -y cmake git python3-dev python3-pytest python3-pip libeigen3-dev python3-typing-extensions python3-numpy
 
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
       with:
         submodules: true
 
@@ -144,7 +144,7 @@ jobs:
         apt-get install -y python3-numpy python3-pip python3-pytest libeigen3-dev cmake git ${{matrix.apt}}
         python3 -m pip install typing_extensions
 
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
       with:
         submodules: true
 
@@ -169,7 +169,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
       with:
         submodules: true
 

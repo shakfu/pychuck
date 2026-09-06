@@ -9,7 +9,7 @@ jobs:
     name: "Python 3.12.7 / NVCC (CUDA 12.5.0) / windows-latest"
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
       with:
         submodules: true
 
@@ -19,7 +19,7 @@ jobs:
         cuda: '12.5.0'
 
     - name: Setup Python 3.12.5
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v7
       with:
         python-version: 3.12.5
         cache: 'pip'
